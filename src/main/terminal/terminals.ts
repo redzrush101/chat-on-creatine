@@ -28,7 +28,8 @@ export class TerminalManager {
     const shell = defaultShell();
     const id = randomUUID();
     const env = childEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor' });
-    for (const key of ['NO_COLOR', 'PAGER', 'GIT_PAGER', 'GH_PAGER']) delete env[key];
+    // A prompt exported by the launching shell (e.g. `nix develop`) is in another shell's syntax; the login shell sets its own.
+    for (const key of ['NO_COLOR', 'PAGER', 'GIT_PAGER', 'GH_PAGER', 'PS1']) delete env[key];
 
     const pty = spawn(shell.path, shell.type === 'powershell' ? ['-NoLogo'] : shell.type === 'cmd' ? [] : ['-l'], {
       name: 'xterm-256color',
