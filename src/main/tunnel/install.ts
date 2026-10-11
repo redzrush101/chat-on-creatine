@@ -31,8 +31,7 @@ export async function installTunnelClient(binDir: string): Promise<string> {
 
     const out = path.join(work, 'out');
     await mkdir(out);
-    if (process.platform === 'win32') await run('tar.exe', ['-xf', zip, '-C', out]);
-    else await run('unzip', ['-q', '-o', zip, '-d', out]);
+    await extractZip(zip, out);
     const root = await unwrapSingleDirectory(out);
 
     for (const name of ['tunnel-client', 'cloudflared']) {
@@ -48,6 +47,20 @@ export async function installTunnelClient(binDir: string): Promise<string> {
     return path.join(binDir, `tunnel-client${suffix}`);
   } finally {
     await rm(work, { recursive: true, force: true });
+  }
+}
+
+async function extractZip(zip: string, out: string): Promise<void> {
+  if (process.platform === 'win32') {
+    // Windows' own bsdtar reads zips; a Git Bash PATH would find GNU tar, which takes C: for a remote host.
+    await run(path.join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', out]);
+    return;
+  }
+  try {
+    await run('unzip', ['-q', '-o', zip, '-d', out]);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    throw new Error('Installing tunnel-client needs the unzip command. Install unzip with your package manager, then try again.');
   }
 }
 
