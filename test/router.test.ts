@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultConfig } from '@shared/config';
-import { conversationIdFromUrl, type PageCommand, type PageResult } from '@shared/page-protocol';
+import { conversationIdFromUrl, type ChatMessage, type PageCommand, type PageResult } from '@shared/page-protocol';
+import type { HostEvents } from '../src/main/chatgpt/host';
 import type { ChatHost } from '../src/main/chatgpt/host';
 import { ChatRouter } from '../src/main/chatgpt/router';
 import { flushWrites } from '../src/main/core/durable';
@@ -15,6 +16,7 @@ let dir: string;
 let store: SessionStore;
 let outbox: Outbox;
 let router: ChatRouter;
+let page: HostEvents;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'router-test-'));
@@ -44,7 +46,7 @@ function setup(selection: PageResult = { ok: true }) {
       return tabId;
     }),
     navigate: async () => {}, closeTab: async () => {},
-    command, reveal: () => {}, hide: () => {}, setListener: () => {}
+    command, reveal: () => {}, hide: () => {}, setListener: (events) => { page = events; }
   };
   router = new ChatRouter({ host, store, outbox,
     recorder: new Recorder({ store, isOwnConnectorPath: () => false }),
@@ -101,3 +103,25 @@ describe('model selection before delivery', () => {
   });
 });
 
+describe('turn end', () => {
+  const answer: ChatMessage = {
+    id: 'answer', conversationId: 'conversation', role: 'assistant', authorName: null, recipient: 'all', channel: 'final',
+    contentType: 'text', text: 'Done.', status: 'finished_successfully', endTurn: true, model: null, requestId: null,
+    turnId: null, parentId: null, createTime: null, hidden: false, sources: [], citations: []
+  };
+
+  it('ends the turn at the final answer and ignores the stream end that follows', async () => {
+    setup();
+    const session = store.create({ kind: 'chat', conversationId: 'conversation' });
+    const first = outbox.enqueue({ sessionId: session.id, text: 'first', attachments: [], delivery: 'now', source: 'app' });
+    await vi.waitFor(() => expect(outbox.get(first.id)?.state).toBe('sent'));
+    page.page('tab0', { type: 'turn-start', streamId: 's1', conversationId: 'conversation', requestId: null });
+    const next = outbox.enqueue({ sessionId: session.id, text: 'next', attachments: [], delivery: 'after-turn', source: 'app' });
+    page.page('tab0', { type: 'message', streamId: 's1', message: answer });
+    expect(router.turnOf(session.id)).not.toBe('generating');
+    await vi.waitFor(() => expect(outbox.get(next.id)?.state).toBe('sent'));
+    page.page('tab0', { type: 'turn-start', streamId: 's2', conversationId: 'conversation', requestId: null });
+    page.page('tab0', { type: 'turn-end', streamId: 's1', conversationId: 'conversation', outcome: 'complete', error: null });
+    expect(router.turnOf(session.id)).toBe('generating');
+  });
+});

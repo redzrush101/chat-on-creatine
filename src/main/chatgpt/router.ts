@@ -56,6 +56,8 @@ export class ChatRouter {
   private readonly userStopped = new Set<string>();
   /** Conversation streams that started and have not ended, per session. */
   private readonly openStreams = new Map<string, Set<string>>();
+  /** Streams whose turn already ended at the final answer; their late stream end is ignored. */
+  private readonly answeredStreams = new Set<string>();
   /** Inputs steered into tool results during the running turn. */
   private readonly steeredThisTurn = new Map<string, InputItem[]>();
 
@@ -260,8 +262,13 @@ export class ChatRouter {
         if (event.message.turnId) this.currentTurnIds.set(sessionId, event.message.turnId);
         if (event.message.role === 'assistant' && /partial|incomplete/.test(event.message.status)) this.incompleteTurns.add(sessionId);
         this.patchLive(sessionId, { lastActivityAt: Date.now() });
-        break;
+        this.deps.recorder.handle(sessionId, event);
+        if (event.streamId && isFinalAnswer(event.message) && this.streamsOf(sessionId).has(event.streamId)) {
+          this.answerEndsTurn(sessionId, event.streamId, event.message.conversationId);
+        }
+        return;
       case 'turn-end':
+        if (this.answeredStreams.delete(event.streamId)) return;
         this.streamsOf(sessionId).delete(event.streamId);
         this.deps.recorder.handle(sessionId, event);
         this.finishTurn(sessionId, event.outcome === 'complete' ? 'done' : event.outcome === 'aborted' ? 'stopped' : 'error');
@@ -276,6 +283,17 @@ export class ChatRouter {
         break;
     }
     this.deps.recorder.handle(sessionId, event);
+  }
+
+  /**
+   * ChatGPT keeps the stream open for seconds after the final answer (titles, metadata). The turn is
+   * over once the answer is, so queued messages, worker reports and Goal steps need not wait.
+   */
+  private answerEndsTurn(sessionId: string, streamId: string, conversationId: string | null): void {
+    this.streamsOf(sessionId).delete(streamId);
+    this.answeredStreams.add(streamId);
+    this.deps.recorder.handle(sessionId, { type: 'turn-end', streamId, conversationId, outcome: 'complete', error: null });
+    this.finishTurn(sessionId, 'done');
   }
 
   private onGenerating(sessionId: string, value: boolean): void {
@@ -469,3 +487,13 @@ export class ChatRouter {
   }
 }
 
+/** The model's last message of a turn: a finished answer to the user that ends the turn. */
+function isFinalAnswer(message: ChatMessage): boolean {
+  return (
+    message.role === 'assistant' &&
+    message.recipient === 'all' &&
+    (message.channel === null || message.channel === 'final') &&
+    message.status === 'finished_successfully' &&
+    message.endTurn === true
+  );
+}
