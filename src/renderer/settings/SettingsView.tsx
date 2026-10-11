@@ -94,6 +94,18 @@ export function SettingsView({ onClose, section }: { onClose(): void; section?: 
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
+          <select
+            className="st-nav-select"
+            aria-label="Settings section"
+            value={current.id}
+            onChange={(event) => setActive(toSection(event.target.value))}
+          >
+            {visible.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
+          </select>
           <ul className="st-nav-list">
             {visible.map((item) => {
               const Icon = item.icon;

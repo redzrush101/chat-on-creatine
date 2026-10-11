@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ArrowDown, ChevronRight, Wrench } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { openExternal } from '../../lib/actions';
@@ -35,6 +35,18 @@ export function Timeline({ sessionId, events, busy, followNonce, onOpenSession }
     const node = scroller.current;
     if (node && stuck.current) node.scrollTop = node.scrollHeight;
   }, [blocks]);
+
+  // Resizing the window re-wraps text and can fire a scroll that unpins the view; keep it at the bottom while pinned.
+  useEffect(() => {
+    const node = scroller.current;
+    const inner = node?.firstElementChild;
+    if (!node || !inner) return;
+    const observer = new ResizeObserver(() => {
+      if (stuck.current) node.scrollTop = node.scrollHeight;
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   const onScroll = () => {
     const node = scroller.current;

@@ -876,3 +876,9 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+@media (max-height: 720px) {
+  .timeline {
+    padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+}

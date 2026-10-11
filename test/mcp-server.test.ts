@@ -115,7 +115,8 @@ describe('McpHttpServer', () => {
     expect(seenRequestIds).toContain('wfr_abc');
     const texts = (result.content as Array<{ type: string; text: string }>).map((block) => block.text);
     expect(texts[0]).toBe('echo:hi:s1');
-    expect(texts[1]).toContain('read it and adjust: stop after the next step');
+    expect(texts[1]).toContain('NEW MESSAGE FROM THE USER');
+    expect(texts[1]).toContain('stop after the next step');
     expect(result.isError).toBeFalsy();
     expect(calls.at(-1)?.caller?.sessionId).toBe('s1');
     await client.close();

@@ -930,3 +930,50 @@ select.st-input {
   padding: 0;
 }
 
+
+/* Narrow windows: the section list becomes a select and the nav a single compact row. */
+.st-nav-select {
+  display: none;
+  flex: 1 1 200px;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 860px) {
+  .st-root {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .st-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .st-search {
+    flex: 1 1 160px;
+  }
+
+  .st-nav-list {
+    display: none;
+  }
+
+  .st-nav-select {
+    display: block;
+  }
+
+  .st-main-head {
+    padding: var(--space-3) var(--space-4) var(--space-2);
+  }
+}

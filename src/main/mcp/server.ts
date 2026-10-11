@@ -311,7 +311,7 @@ export class McpHttpServer {
       ...boundContent(result.content),
       ...steering.map((message): ToolContent => ({
         type: 'text',
-        text: `The user sent this message while you were working; read it and adjust: ${message}`
+        text: `NEW MESSAGE FROM THE USER (sent while you were working). Treat it as part of the task and act on it before you finish:\n${message}`
       }))
     ];
     return this.toCallResult({ ...result, content });

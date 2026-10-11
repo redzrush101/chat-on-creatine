@@ -230,3 +230,28 @@
 .pending-item.is-sending {
   opacity: 0.7;
 }
+
+/* Short windows: the composer and its banners shrink so the timeline keeps the room. */
+@media (max-height: 720px) {
+  .composer-wrap {
+    padding: var(--space-1) var(--space-3) var(--space-2);
+  }
+
+  .composer {
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-2) var(--space-1);
+  }
+
+  .composer-input {
+    max-height: 120px;
+  }
+
+  .composer-hint {
+    display: none;
+  }
+
+  .composer-wrap .banner {
+    margin-bottom: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+  }
+}

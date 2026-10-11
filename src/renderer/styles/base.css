@@ -283,26 +283,20 @@ kbd {
   display: inline-flex;
 }
 
+/* Position comes from Popover (inline left/top or bottom, plus max-height); the panel scrolls when it is short on room. */
 .popover-panel {
-  position: absolute;
-  top: calc(100% + 6px);
+  position: fixed;
   z-index: 50;
   min-width: 200px;
-  max-width: 320px;
+  max-width: min(320px, calc(100vw - 16px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
   animation: pop-in var(--dur-fast) var(--ease);
-}
-
-.popover-panel.is-start {
-  left: 0;
-}
-
-.popover-panel.is-end {
-  right: 0;
 }
 
 .popover-panel.is-picker {

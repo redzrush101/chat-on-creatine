@@ -11,12 +11,15 @@ import { SettingsView } from './settings/SettingsView';
 import { WorkPanel } from './workpanel/WorkPanel';
 import { useAppState } from './lib/store';
 import { useResize, useStoredState, useSystemDark, useViewportWidth } from './lib/hooks';
+import { cx } from './lib/format';
 
 const DEFAULT_SIDEBAR_WIDTH = 272;
 const DEFAULT_PANEL_WIDTH = 420;
+/** Below this window width the sidebar floats over the chat instead of taking its own column. */
+const NARROW_WIDTH = 900;
 /** The chat column keeps at least this much width; the work panel gives way before it does. */
-const MIN_MAIN_WIDTH = 480;
-const MIN_PANEL_WIDTH = 280;
+const MIN_MAIN_WIDTH = 560;
+const MIN_PANEL_WIDTH = 320;
 
 /** New-chat choices; `model` stays null until the user picks one, so config defaults apply. */
 interface DraftChoices {
@@ -31,6 +34,7 @@ export function App() {
   const viewport = useViewportWidth();
   const [selectedId, setSelectedId] = useStoredState<string | null>('creatine.selected', null);
   const [sidebarOpen, setSidebarOpen] = useStoredState('creatine.sidebarOpen', true);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const [settings, setSettings] = useState<{ section?: string } | null>(null);
   const [draft, setDraft] = useState<DraftChoices>({ projectId: null, model: null, mode: 'off' });
   const [focusNonce, setFocusNonce] = useState(0);
@@ -66,15 +70,27 @@ export function App() {
     invoke('config:update', { ui: { workPanelOpen: open } }).catch(reportError);
   };
 
+  const narrow = viewport < NARROW_WIDTH;
+  // Narrow windows start with the sidebar hidden; the toggle floats it over the chat.
+  const sidebarShown = narrow ? overlayOpen : sidebarOpen;
+  const sidebarInFlow = sidebarShown && !narrow;
+  const toggleSidebar = () => (narrow ? setOverlayOpen(!overlayOpen) : setSidebarOpen(!sidebarOpen));
+  const showSidebar = () => (narrow ? setOverlayOpen(true) : setSidebarOpen(true));
+
   const openNewChat = () => {
     setSelectedId(null);
     setSettings(null);
+    setOverlayOpen(false);
     setFocusNonce((value) => value + 1);
   };
 
   const onKeyDown = (event: globalThis.KeyboardEvent) => {
     if (event.key === 'Escape' && settings) {
       setSettings(null);
+      return;
+    }
+    if (event.key === 'Escape' && narrow && overlayOpen) {
+      setOverlayOpen(false);
       return;
     }
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
@@ -84,14 +100,14 @@ export function App() {
       openNewChat();
     } else if (key === 'k') {
       event.preventDefault();
-      setSidebarOpen(true);
+      showSidebar();
       setSearchNonce((value) => value + 1);
     } else if (key === ',') {
       event.preventDefault();
       setSettings({});
     } else if (key === 'b') {
       event.preventDefault();
-      setSidebarOpen(!sidebarOpen);
+      toggleSidebar();
     } else if (key === 'j' && app && !settings) {
       event.preventDefault();
       setWorkPanel(!workPanelOpen);
@@ -122,18 +138,19 @@ export function App() {
   const onNewChatChange = (patch: Partial<NewChatDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const openSession = (sessionId: string) => {
     setSettings(null);
+    setOverlayOpen(false);
     setSelectedId(sessionId);
   };
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const toggleWorkPanel = () => setWorkPanel(!workPanelOpen);
   // The panel only shows beside a chat, and only when the chat column keeps its minimum width.
-  const panelWidth = Math.min(panel.width, viewport - (sidebarOpen ? sidebar.width : 0) - MIN_MAIN_WIDTH);
+  const panelWidth = Math.min(panel.width, viewport - (sidebarInFlow ? sidebar.width : 0) - MIN_MAIN_WIDTH);
   const panelVisible = workPanelOpen && !settings && session !== null && panelWidth >= MIN_PANEL_WIDTH;
 
   return (
     <div className="shell">
-      {sidebarOpen && (
-        <aside className="sidebar" style={{ width: sidebar.width }} aria-label="Sidebar">
+      {narrow && overlayOpen && <button type="button" className="sidebar-scrim" aria-label="Close sidebar" onClick={() => setOverlayOpen(false)} />}
+      {sidebarShown && (
+        <aside className={cx('sidebar', narrow && 'is-overlay')} style={{ width: sidebar.width }} aria-label="Sidebar">
           <Sidebar
             app={app}
             selectedId={session?.id ?? null}
@@ -169,7 +186,7 @@ export function App() {
             key={session.id}
             app={app}
             session={session}
-            sidebarOpen={sidebarOpen}
+            sidebarOpen={sidebarShown}
             workPanelOpen={workPanelOpen}
             newChat={newChat}
             onNewChatChange={onNewChatChange}
@@ -182,7 +199,7 @@ export function App() {
           <Home
             app={app}
             newChat={newChat}
-            sidebarOpen={sidebarOpen}
+            sidebarOpen={sidebarShown}
             workPanelOpen={workPanelOpen}
             focusNonce={focusNonce}
             onNewChatChange={onNewChatChange}

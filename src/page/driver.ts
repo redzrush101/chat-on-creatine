@@ -316,7 +316,8 @@ export function startDriver(transport: DriverTransport, tapChannel: string): voi
       const button = dom.findSendButton();
       return button !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
     };
-    if (!(await waitFor(sendable, 5_000))) return fail('not-ready', 'send button is not available');
+    // With attachments the button may not be identifiable; clickSend then submits with Enter.
+    if (!(await waitFor(sendable, files.length > 0 ? 1_500 : 5_000)) && files.length === 0) return fail('not-ready', 'send button is not available');
     // Register before clicking: the stream can start before the click returns.
     const started = waitForStart(20_000);
     if (!dom.clickSend()) return fail('failed', 'send button could not be clicked');

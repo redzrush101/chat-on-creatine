@@ -1,5 +1,6 @@
 /* App shell: sidebar, main column, work panel, top bar, empty state. */
 .shell {
+  position: relative;
   display: flex;
   height: 100vh;
   width: 100vw;
@@ -22,6 +23,26 @@
   min-width: 0;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
+}
+
+/* Narrow windows: the sidebar floats over the chat column and closes on pick, Escape or the scrim. */
+.sidebar.is-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  max-width: calc(100% - 48px);
+  box-shadow: var(--shadow-pop);
+}
+
+.sidebar-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  border: 0;
+  background: rgba(0, 0, 0, 0.28);
+  cursor: default;
 }
 
 .sidebar-inner {
@@ -721,5 +742,21 @@
 @media (max-width: 760px) {
   .starters {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Short windows: a shorter top bar, and the empty state tightens so it scrolls less. */
+@media (max-height: 720px) {
+  :root {
+    --topbar-h: 40px;
+  }
+
+  .home-body {
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .home-title {
+    font-size: 18px;
   }
 }

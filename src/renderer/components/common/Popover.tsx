@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { Check, type LucideIcon } from 'lucide-react';
 import { cx } from '../../lib/format';
 
@@ -16,11 +16,88 @@ interface PopoverProps {
   label?: string;
 }
 
-/** A trigger with a floating panel. Closes on outside click, Escape and close actions. */
+/** Gap between the trigger and the panel, and the least space kept from any viewport edge. */
+const GAP = 6;
+const MARGIN = 8;
+
+interface Placement {
+  left: number;
+  /** Set when the panel opens below the trigger. */
+  top?: number;
+  /** Set when the panel opens above the trigger, so it grows upward from the trigger. */
+  bottom?: number;
+  maxHeight: number;
+}
+
+interface Box {
+  width: number;
+  height: number;
+}
+
+/**
+ * Places a panel of `panel` size next to `anchor` inside a viewport. It opens downward when that fits,
+ * upward otherwise, and shrinks to the larger side (scrolling internally) when neither side fits.
+ */
+export function placeFloating(anchor: DOMRect, panel: Box, align: 'start' | 'end', viewport: Box): Placement {
+  const spaceBelow = viewport.height - anchor.bottom - GAP - MARGIN;
+  const spaceAbove = anchor.top - GAP - MARGIN;
+  const fitsBelow = panel.height <= spaceBelow;
+  const fitsAbove = panel.height <= spaceAbove;
+  const down = fitsBelow || (!fitsAbove && spaceBelow >= spaceAbove);
+  const unclamped = align === 'end' ? anchor.right - panel.width : anchor.left;
+  const left = Math.min(Math.max(unclamped, MARGIN), viewport.width - MARGIN - panel.width);
+  const maxHeight = Math.max(0, down ? spaceBelow : spaceAbove);
+  return down
+    ? { left, top: anchor.bottom + GAP, maxHeight }
+    : { left, bottom: viewport.height - anchor.top + GAP, maxHeight };
+}
+
+/** Height the panel content needs, even while the panel is clipped by its max height. */
+function naturalHeight(element: HTMLElement): number {
+  return element.scrollHeight + element.offsetHeight - element.clientHeight;
+}
+
+const samePlacement = (a: Placement | null, b: Placement) =>
+  a !== null && a.left === b.left && a.top === b.top && a.bottom === b.bottom && a.maxHeight === b.maxHeight;
+
+/** A trigger with a floating panel. Closes on outside click, Escape and close actions. The panel stays inside the viewport. */
 export function Popover({ trigger, children, align = 'start', panelClassName, label }: PopoverProps) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<Placement | null>(null);
   const anchor = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+
+  const reposition = useCallback(() => {
+    const panelElement = panel.current;
+    const anchorElement = anchor.current;
+    if (!panelElement || !anchorElement) return;
+    const next = placeFloating(
+      anchorElement.getBoundingClientRect(),
+      { width: panelElement.offsetWidth, height: naturalHeight(panelElement) },
+      align,
+      { width: window.innerWidth, height: window.innerHeight }
+    );
+    setPlacement((current) => (samePlacement(current, next) ? current : next));
+  }, [align]);
+
+  useLayoutEffect(() => {
+    if (open) reposition();
+    else setPlacement(null);
+  }, [open, reposition]);
+
+  useEffect(() => {
+    if (!open) return;
+    const panelElement = panel.current;
+    const resizeObserver = panelElement ? new ResizeObserver(reposition) : null;
+    if (panelElement) resizeObserver?.observe(panelElement);
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
+  }, [open, reposition]);
 
   useEffect(() => {
     if (!open) return;
@@ -29,11 +106,14 @@ export function Popover({ trigger, children, align = 'start', panelClassName, la
     };
     document.addEventListener('pointerdown', onPointerDown);
     const first = panel.current?.querySelector<HTMLElement>('button:not(:disabled), input, select, textarea');
-    first?.focus();
+    first?.focus({ preventScroll: true });
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
   const close = () => setOpen(false);
+  const style: CSSProperties = placement
+    ? { left: placement.left, top: placement.top, bottom: placement.bottom, maxHeight: placement.maxHeight }
+    : { left: 0, top: 0, visibility: 'hidden' };
   return (
     <div
       className="popover-anchor"
@@ -50,6 +130,7 @@ export function Popover({ trigger, children, align = 'start', panelClassName, la
         <div
           ref={panel}
           className={cx('popover-panel', `is-${align}`, panelClassName)}
+          style={style}
           role="dialog"
           aria-label={label}
         >

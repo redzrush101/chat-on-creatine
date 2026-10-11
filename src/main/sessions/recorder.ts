@@ -60,7 +60,14 @@ export class Recorder {
           { id: `turn:${event.streamId}:start`, at: Date.now(), kind: 'turn', phase: 'start', outcome: null, error: null }
         ]);
         return;
-      case 'turn-end':
+      case 'turn-end': {
+        // ChatGPT-side tools (its own code runner, web search…) have no result once the turn is over.
+        const now = Date.now();
+        const settled = this.store
+          .events(sessionId)
+          .filter((e): e is Extract<SessionEvent, { kind: 'tool' }> => e.kind === 'tool' && e.surface === 'chatgpt' && e.status === 'running')
+          .map((e) => ({ ...e, status: 'ok' as const, endedAt: now }));
+        if (settled.length) this.store.append(sessionId, settled);
         this.store.append(sessionId, [
           {
             id: `turn:${event.streamId}:end`,
@@ -72,6 +79,7 @@ export class Recorder {
           }
         ]);
         return;
+      }
       case 'title': {
         const title = event.title.trim().slice(0, 120);
         if (title && this.store.get(sessionId)?.title === DEFAULT_TITLE) this.store.update(sessionId, { title });

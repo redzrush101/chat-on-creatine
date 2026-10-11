@@ -82,6 +82,8 @@ export class ChatRouter {
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
   private readonly autoContinues = new Map<string, number>();
   private readonly incompleteTurns = new Set<string>();
+  /** Sessions whose running turn the user stopped; that turn ends as `stopped` whatever the page says. */
+  private readonly userStopped = new Set<string>();
   /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
   private readonly currentTurnIds = new Map<string, string>();
   private gcTimer: NodeJS.Timeout | null = null;
@@ -131,6 +133,7 @@ export class ChatRouter {
   async stopTurn(sessionId: string): Promise<void> {
     const tabId = this.sessionTab.get(sessionId);
     if (!tabId) return;
+    if (this.turnOf(sessionId) !== 'idle') this.userStopped.add(sessionId);
     const result = await this.deps.host.command(tabId, { type: 'stop' }, 10_000);
     if (!result.ok) log.warn(`stop failed: ${result.error}`);
   }
@@ -345,7 +348,8 @@ export class ChatRouter {
     clearTimeout(this.settleTimers.get(sessionId));
     this.settleTimers.delete(sessionId);
     const incomplete = this.incompleteTurns.delete(sessionId);
-    const finalOutcome: TurnOutcome = outcome === 'done' && incomplete ? 'incomplete' : outcome;
+    const stoppedByUser = this.userStopped.delete(sessionId);
+    const finalOutcome: TurnOutcome = stoppedByUser ? 'stopped' : outcome === 'done' && incomplete ? 'incomplete' : outcome;
     this.patchLive(sessionId, { turn: 'idle', lastActivityAt: Date.now() });
 
     const session = this.deps.store.get(sessionId);

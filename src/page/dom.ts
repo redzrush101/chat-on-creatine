@@ -169,10 +169,17 @@ function enabled(button: HTMLButtonElement | null): button is HTMLButtonElement 
   return !!button && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
 }
 
+/** Clicks Send, or submits with Enter in the composer when the button cannot be identified. */
 export function clickSend(): boolean {
   const button = findSendButton();
-  if (!enabled(button)) return false;
-  button.click();
+  if (enabled(button)) {
+    button.click();
+    return true;
+  }
+  const box = findComposer();
+  if (!box || composerText(box).trim() === '' || isGenerating()) return false;
+  box.focus();
+  box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }));
   return true;
 }
 
@@ -200,12 +207,16 @@ export async function attachFiles(files: File[], timeoutMs = 120_000): Promise<b
   input.files = transfer.files;
   input.dispatchEvent(new Event('change', { bubbles: true }));
 
+  // Done when every file has a tile and nothing in the composer is still uploading. The send
+  // button is no evidence here: with tiles present it is not reliably identifiable.
   const deadline = Date.now() + timeoutMs;
   await new Promise((resolve) => setTimeout(resolve, 300));
   while (Date.now() < deadline) {
     const current = composerForm();
+    const labels = [...(current?.querySelectorAll<HTMLElement>('button[aria-label]') ?? [])].map((b) => b.getAttribute('aria-label') ?? '');
+    const tiled = files.every((file) => labels.some((label) => label.includes(file.name)));
     const busy = current?.querySelector(SELECTORS.uploadBusy) != null;
-    if (!busy && enabled(findSendButton())) return true;
+    if (tiled && !busy) return true;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   return false;

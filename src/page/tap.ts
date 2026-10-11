@@ -33,6 +33,11 @@ export function installFetchTap(channel: string): void {
       post({ kind: 'chunk', streamId, requestId, chunk: decoder.decode() });
       post({ kind: 'end', streamId, requestId });
     } catch (error) {
+      // The page cancelling its own request (the Stop button) is an end, not a failure.
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        post({ kind: 'end', streamId, requestId });
+        return;
+      }
       post({
         kind: 'error',
         streamId,
