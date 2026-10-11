@@ -306,7 +306,6 @@ export function startDriver(transport: DriverTransport, tapChannel: string): voi
   }
 
   async function send(text: string, files: PageFile[]): Promise<PageResult> {
-    if ((await getSession())?.signedIn === false) return fail('signed-out', 'ChatGPT is signed out');
     if (!(await waitFor(() => dom.findComposer() !== null, 15_000))) return fail('not-ready', 'composer not found');
     if (dom.isGenerating()) return fail('busy', 'a response is still generating');
     if (!dom.setComposerText(text)) return fail('failed', 'could not type into the composer');

@@ -52,6 +52,8 @@ async function start(): Promise<void> {
     terminalExit: (terminalId, code) => send('terminal:exit', { terminalId, code })
   });
   services.store.onEvents((sessionId, events) => hub.events(sessionId, events));
+  // Test harnesses drive the running app through the main-process inspector.
+  if (process.env.CREATINE_DEBUG_GLOBAL) (globalThis as { creatine?: Services }).creatine = services;
 
   registerIpc(() => services, () => hub.snapshot(), (contents) => contents === window?.webContents);
 
