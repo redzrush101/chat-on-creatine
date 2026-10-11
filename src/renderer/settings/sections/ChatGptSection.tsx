@@ -1,28 +1,14 @@
 import type { JSX } from 'react';
-import type { ReasoningEffort } from '@shared/config';
-import { findModel, modelSelection } from '@shared/model-selection';
+import { effortLabel } from '@shared/model-selection';
 import type { AppState } from '@shared/types';
 import { invoke } from '../../lib/bridge';
-import { Button, Group, NumberField, Pill, Row, SelectField, Segmented, Toggle, useRun, useSave } from '../controls';
-
-const REASONING_LABEL: Record<ReasoningEffort, string> = {
-  none: 'None',
-  minimal: 'Minimal',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-  pro: 'Pro'
-};
+import { ModelDefaults } from '../ModelDefaults';
+import { Button, Group, NumberField, Pill, Row, Segmented, Toggle, useRun, useSave } from '../controls';
 
 export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
   const { config, browser, models, usage } = state;
   const save = useSave();
   const run = useRun();
-  const selectedModel = findModel(models.models, config.ui.defaultModel ?? models.defaultModel);
-  const reasoningOptions = selectedModel?.efforts ?? [];
-  const reasoningLabel = (effort: ReasoningEffort) => selectedModel?.presets?.find((preset) => preset.reasoning === effort)?.label ?? REASONING_LABEL[effort];
 
   return (
     <div className="st-stack">
@@ -117,41 +103,24 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
               <li key={model.id}>
                 <span>{model.label}</span>
                 <span className="st-mono st-muted">{model.id}</span>
-                <span className="st-muted">{model.presets?.map((preset) => preset.label).join(', ') || model.efforts.map((effort) => REASONING_LABEL[effort]).join(', ') || 'No reasoning levels'}</span>
+                <span className="st-muted">{model.presets?.map((preset) => preset.label).join(', ') || model.efforts.map((effort) => effortLabel(model, effort)).join(', ') || 'No reasoning levels'}</span>
               </li>
             ))}
           </ul>
         )}
-        <Row label="Default model" hint="Used for new chats unless a chat picks its own.">
-          <SelectField
-            label="Default model"
-            value={config.ui.defaultModel ? selectedModel?.id ?? config.ui.defaultModel : ''}
-            options={[
-              { value: '', label: 'Account default' },
-              ...models.models.map((model) => ({ value: model.id, label: model.label })),
-              ...(config.ui.defaultModel && !selectedModel ? [{ value: config.ui.defaultModel, label: config.ui.defaultModel }] : [])
-            ]}
-            onChange={(value) => {
-              const option = findModel(models.models, value);
-              const selection = option ? modelSelection(option, config.ui.defaultReasoning) : null;
-              save({ ui: { defaultModel: selection?.model ?? null, defaultReasoning: selection?.reasoning ?? null } });
-            }}
-          />
-        </Row>
-        <Row label="Default reasoning" hint="Used for new chats. Account default leaves the model's choice.">
-          <SelectField
-            label="Default reasoning"
-            value={config.ui.defaultReasoning ?? ''}
-            options={[
-              { value: '', label: 'Account default' },
-              ...reasoningOptions.map((effort) => ({ value: effort, label: reasoningLabel(effort) }))
-            ]}
-            onChange={(value) => {
-              const selection = value && selectedModel ? modelSelection(selectedModel, value as ReasoningEffort) : null;
-              save({ ui: { defaultModel: selection?.model ?? config.ui.defaultModel, defaultReasoning: selection?.reasoning ?? null } });
-            }}
-          />
-        </Row>
+        <ModelDefaults
+          catalog={models}
+          value={{ model: config.ui.defaultModel, reasoning: config.ui.defaultReasoning }}
+          inherited={models.defaultModel}
+          labels={{
+            model: 'Default model',
+            modelHint: 'Used for new chats unless a chat picks its own.',
+            reasoning: 'Default reasoning',
+            reasoningHint: "Used for new chats. Account default leaves the model's choice.",
+            unset: 'Account default'
+          }}
+          onChange={({ model, reasoning }) => save({ ui: { defaultModel: model, defaultReasoning: reasoning } })}
+        />
       </Group>
 
       <Group title="Usage">

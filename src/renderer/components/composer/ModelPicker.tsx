@@ -2,7 +2,7 @@ import { Check, ChevronDown, RotateCw } from 'lucide-react';
 import type { ReasoningEffort } from '@shared/config';
 import { REASONING_EFFORTS } from '@shared/config';
 import type { ModelCatalog } from '@shared/types';
-import { findModel, modelSelection } from '@shared/model-selection';
+import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
 import { invoke } from '../../lib/bridge';
 import { cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
@@ -20,17 +20,6 @@ interface ModelPickerProps {
   disabled?: boolean;
 }
 
-const EFFORT_LABEL: Record<ReasoningEffort, string> = {
-  none: 'None',
-  minimal: 'Minimal',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-  pro: 'Pro'
-};
-
 function labelOf(catalog: ModelCatalog, id: string): string {
   return findModel(catalog.models, id)?.label ?? id;
 }
@@ -44,7 +33,6 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
   const option = findModel(catalog.models, effective);
   const efforts = option?.efforts ?? [];
   const reasoning = value.reasoning ?? option?.presets?.find((preset) => preset.model === effective)?.reasoning ?? null;
-  const effortLabel = (effort: ReasoningEffort) => option?.presets?.find((preset) => preset.reasoning === effort)?.label ?? EFFORT_LABEL[effort];
   const modelText = value.model ? labelOf(catalog, value.model) : catalog.defaultModel ? labelOf(catalog, catalog.defaultModel) : 'Default model';
 
   return (
@@ -102,7 +90,7 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
           panelClassName="is-picker"
           trigger={({ open, toggle }) => (
             <button type="button" className="quiet-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title="Reasoning effort" onClick={toggle}>
-              <span className="chip-text">{reasoning ? effortLabel(reasoning) : 'Default'}</span>
+              <span className="chip-text">{reasoning ? effortLabel(option, reasoning) : 'Default'}</span>
             </button>
           )}
         >
@@ -121,7 +109,7 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
                   if (option) onChange(modelSelection(option, effort));
                   close();
                 }}>
-                  <span className="menu-text">{effortLabel(effort)}</span>
+                  <span className="menu-text">{effortLabel(option, effort)}</span>
                   {reasoning === effort && <Check size={14} className="menu-check" aria-hidden="true" />}
                 </button>
               ))}

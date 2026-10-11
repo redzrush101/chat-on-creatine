@@ -1,9 +1,8 @@
 import type { JSX } from 'react';
-import type { ReasoningEffort } from '@shared/config';
-import { findModel, modelSelection } from '@shared/model-selection';
 import type { AppState } from '@shared/types';
+import { ModelDefaults } from '../ModelDefaults';
 import { ApiKeyField } from '../TunnelFields';
-import { Group, NumberField, Row, SelectField, Segmented, TextField, Toggle, useSave } from '../controls';
+import { Group, NumberField, Row, Segmented, TextField, Toggle, useSave } from '../controls';
 
 export function AgentsSection({ state }: { state: AppState }): JSX.Element {
   const { config, models, secretsSet } = state;
@@ -11,7 +10,6 @@ export function AgentsSection({ state }: { state: AppState }): JSX.Element {
   const agents = config.agents;
   const automation = config.automation;
   const isApi = automation.backend === 'api';
-  const selectedModel = findModel(models.models, agents.defaultModel ?? config.ui.defaultModel ?? models.defaultModel);
 
   return (
     <div className="st-stack">
@@ -22,39 +20,13 @@ export function AgentsSection({ state }: { state: AppState }): JSX.Element {
         <Row label="Simultaneous workers" hint="Per prime chat. Extra workers wait in the queue.">
           <NumberField label="Max concurrent workers" min={1} max={8} value={agents.maxConcurrent} onCommit={(maxConcurrent) => save({ agents: { maxConcurrent } })} />
         </Row>
-        <Row label="Default worker model" hint="Used when a worker does not name a model.">
-          <SelectField
-            label="Default worker model"
-            value={agents.defaultModel ? selectedModel?.id ?? agents.defaultModel : ''}
-            options={[
-              { value: '', label: 'Same as the chat' },
-              ...models.models.map((model) => ({ value: model.id, label: model.label })),
-              ...(agents.defaultModel && !selectedModel
-                ? [{ value: agents.defaultModel, label: agents.defaultModel }]
-                : [])
-            ]}
-            onChange={(value) => {
-              const option = findModel(models.models, value);
-              const selection = option ? modelSelection(option, agents.defaultReasoning) : null;
-              save({ agents: { defaultModel: selection?.model ?? null, defaultReasoning: selection?.reasoning ?? null } });
-            }}
-          />
-        </Row>
-        <Row label="Default worker reasoning">
-          <SelectField
-            label="Default worker reasoning"
-            value={agents.defaultReasoning ?? ''}
-            options={[
-              { value: '', label: 'Same as the chat' },
-              ...(selectedModel?.efforts ?? []).map((effort) => ({ value: effort,
-                label: selectedModel?.presets?.find((preset) => preset.reasoning === effort)?.label ?? effort }))
-            ]}
-            onChange={(value) => {
-              const selection = value && selectedModel ? modelSelection(selectedModel, value as ReasoningEffort) : null;
-              save({ agents: { defaultModel: selection?.model ?? agents.defaultModel, defaultReasoning: selection?.reasoning ?? null } });
-            }}
-          />
-        </Row>
+        <ModelDefaults
+          catalog={models}
+          value={{ model: agents.defaultModel, reasoning: agents.defaultReasoning }}
+          inherited={config.ui.defaultModel ?? models.defaultModel}
+          labels={{ model: 'Default worker model', modelHint: 'Used when a worker does not name a model.', reasoning: 'Default worker reasoning', unset: 'Same as the chat' }}
+          onChange={({ model, reasoning }) => save({ agents: { defaultModel: model, defaultReasoning: reasoning } })}
+        />
         <Row label="Wait for workers" hint="Goal and Loop wait for a chat's workers before deciding the next step.">
           <Toggle label="Wait for workers" checked={agents.waitForWorkers} onChange={(waitForWorkers) => save({ agents: { waitForWorkers } })} />
         </Row>
