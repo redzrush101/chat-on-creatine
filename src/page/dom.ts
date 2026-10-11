@@ -3,6 +3,7 @@
  * (chatgpt-dom.js) and kept in one place: ChatGPT changes them often.
  */
 import type { ReasoningEffort } from '@shared/config';
+import { wait, waitFor } from './wait';
 
 const SELECTORS = {
   composer: [
@@ -286,17 +287,4 @@ export async function selectModel(model: string, effort: ReasoningEffort | null,
   } finally {
     menu()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate: () => boolean): Promise<boolean> {
-  const deadline = Date.now() + 3_000;
-  while (!predicate()) {
-    if (Date.now() >= deadline) return false;
-    await wait(100);
-  }
-  return true;
 }

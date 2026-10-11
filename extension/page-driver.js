@@ -402,6 +402,19 @@
     return path.reverse();
   }
 
+  // src/page/wait.ts
+  function wait(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  async function waitFor(predicate, ms = 3e3) {
+    const deadline = Date.now() + ms;
+    while (!predicate()) {
+      if (Date.now() >= deadline) return false;
+      await wait(100);
+    }
+    return true;
+  }
+
   // src/page/dom.ts
   var SELECTORS = {
     composer: [
@@ -644,17 +657,6 @@
       menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     }
   }
-  function wait(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  async function waitFor(predicate) {
-    const deadline = Date.now() + 3e3;
-    while (!predicate()) {
-      if (Date.now() >= deadline) return false;
-      await wait(100);
-    }
-    return true;
-  }
 
   // src/shared/model-selection.ts
   function findModel(models, id) {
@@ -756,17 +758,6 @@
     const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0));
     return new File([bytes], file.name, { type: file.mime });
   }
-  function wait2(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  async function waitFor2(predicate, ms) {
-    const deadline = Date.now() + ms;
-    while (!predicate()) {
-      if (Date.now() >= deadline) return false;
-      await wait2(100);
-    }
-    return true;
-  }
   var PageCommands = class {
     constructor(backend, streams) {
       this.backend = backend;
@@ -797,8 +788,8 @@
       };
     }
     async send(text, files) {
-      if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
-      if (!await waitFor2(() => !isGenerating() && this.streams.idle(), 6e4)) return fail("busy", "a response is still generating");
+      if (!await waitFor(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
+      if (!await waitFor(() => !isGenerating() && this.streams.idle(), 6e4)) return fail("busy", "a response is still generating");
       if (!setComposerText(text)) return fail("failed", "could not type into the composer");
       if (files.length > 0 && !await attachFiles(files.map(toFile))) {
         return fail("failed", "attachments did not finish uploading");
@@ -808,7 +799,7 @@
         const button = findSendButton();
         return button !== null && !button.disabled && button.getAttribute("aria-disabled") !== "true";
       };
-      if (!await waitFor2(sendable, files.length > 0 ? 1500 : 15e3) && files.length === 0) return fail("not-ready", "send button is not available");
+      if (!await waitFor(sendable, files.length > 0 ? 1500 : 15e3) && files.length === 0) return fail("not-ready", "send button is not available");
       const started = this.streams.waitForStart(2e4);
       if (!clickSend()) return fail("failed", "send button could not be clicked");
       const value = await started;
@@ -826,7 +817,7 @@
       const reasoning = preset?.reasoning ?? effort;
       const key = `${option.label}|${reasoning ?? ""}|${preset?.index ?? ""}`;
       if (this.selection === key) return DONE;
-      if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
+      if (!await waitFor(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
       this.selection = await selectModel(option.label, reasoning, preset?.index) ? key : null;
       return this.selection ? DONE : fail("not-found", `Could not confirm ${option.label}${effort ? ` (${effort})` : ""} in ChatGPT's picker. Open ChatGPT and try again.`);
     }

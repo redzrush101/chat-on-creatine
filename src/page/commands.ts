@@ -9,6 +9,7 @@ import { parseModels } from './models';
 import { findModel } from '@shared/model-selection';
 import { attachFiles } from './attachments';
 import type { StreamRelay } from './streams';
+import { waitFor } from './wait';
 
 const MODELS_PATH = '/backend-api/models?iim=false&include_icons=false&is_gizmo=false';
 
@@ -17,19 +18,6 @@ const DONE: PageResult = { ok: true };
 function toFile(file: PageFile): File {
   const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0));
   return new File([bytes], file.name, { type: file.mime });
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate: () => boolean, ms: number): Promise<boolean> {
-  const deadline = Date.now() + ms;
-  while (!predicate()) {
-    if (Date.now() >= deadline) return false;
-    await wait(100);
-  }
-  return true;
 }
 
 export class PageCommands {
