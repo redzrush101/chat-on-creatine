@@ -45,12 +45,24 @@ function directOnlyRefusal(name: string, args: unknown): ToolResult | null {
   };
 }
 
-export function codeModeTool(surface: SurfaceId): ToolSpec {
+/** `name(required, optional?)` per tool, so a script can call tools without first listing them. */
+function toolSignatures(tools: readonly ToolSpec[]): string {
+  return tools
+    .map((tool) => {
+      const schema = (tool.jsonSchema ?? z.toJSONSchema(z.object(tool.input))) as { properties?: object; required?: string[] };
+      const required = new Set(schema.required ?? []);
+      const args = Object.keys(schema.properties ?? {}).map((name) => (required.has(name) ? name : `${name}?`));
+      return `${tool.name}({${args.join(', ')}})`;
+    })
+    .join(', ');
+}
+
+export function codeModeTool(surface: SurfaceId, tools: readonly ToolSpec[]): ToolSpec {
   return defineTool({
     name: 'exec',
     surface,
     title: 'Run JavaScript',
-    description: CODE_MODE_DESCRIPTION,
+    description: `${CODE_MODE_DESCRIPTION} Tools here: ${toolSignatures(tools)}.`,
     input: {
       code: z.string().min(1).max(CODE_MODE_LIMITS.codeChars).describe('Raw JavaScript source with top-level await. Emit results with text(...) or image(...).')
     },

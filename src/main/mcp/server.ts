@@ -272,7 +272,7 @@ export class McpHttpServer {
     const config = this.options.getConfig();
     const exposed = this.toolsFor(surface, config);
     const codeMode = canAddCodeMode(exposed);
-    const tools = codeMode ? [...exposed, codeModeTool(surface)] : exposed;
+    const tools = codeMode ? [...exposed, codeModeTool(surface, exposed)] : exposed;
     const server = new McpServer(
       { name: SURFACES[surface].serverName, version: SERVER_VERSION },
       { instructions: serverInstructions(surface, config, codeMode) }

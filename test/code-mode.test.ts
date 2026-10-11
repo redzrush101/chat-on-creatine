@@ -90,8 +90,8 @@ describe('code mode (exec)', () => {
   });
 
   it('is added to a surface with tools and lists them in ALL_TOOLS', async () => {
-    const names = (await client.listTools()).tools.map((tool) => tool.name);
-    expect(names).toContain('exec');
+    const listedTools = (await client.listTools()).tools;
+    expect(listedTools.find((tool) => tool.name === 'exec')?.description).toContain('Tools here: echo({value})');
     const { texts, isError } = await run(client, 'text(ALL_TOOLS)');
     expect(isError).toBe(false);
     const listed = (JSON.parse(texts[0]!) as Array<{ name: string }>).map((tool) => tool.name);
