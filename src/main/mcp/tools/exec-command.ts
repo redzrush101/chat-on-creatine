@@ -67,7 +67,7 @@ export function execToolResult(result: ExecResult): ToolResult {
       chunk_id: chunkId,
       wall_time_seconds: result.wallTimeMs / 1000,
       ...(result.exitCode === null ? {} : { exit_code: result.exitCode }),
-      ...(result.sessionId === null ? {} : { session_id: result.sessionId }),
+      ...(result.sessionId === null ? {} : { session_id: Number(result.sessionId) }),
       ...(result.originalTokenCount === null ? {} : { original_token_count: result.originalTokenCount }),
       output: result.output
     },

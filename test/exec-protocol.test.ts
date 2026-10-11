@@ -1,0 +1,52 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import { join } from 'node:path';
+import { expect, it } from 'vitest';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { z } from 'zod';
+import { defaultConfig } from '@shared/config';
+import { ProcessManager } from '../src/main/exec/process-manager';
+import { RootGuard } from '../src/main/fs/roots';
+import { McpHttpServer, generateToken } from '../src/main/mcp/server';
+import { execCommandTool } from '../src/main/mcp/tools/exec-command';
+import { writeStdinTool } from '../src/main/mcp/tools/write-stdin';
+
+it('passes a running command ID directly from exec_command to write_stdin over MCP', async () => {
+  const root = await mkdtemp(join(os.tmpdir(), 'creatine-exec-'));
+  const config = defaultConfig();
+  config.roots = [{ id: 'test', path: root, label: 'Test' }];
+  const processes = new ProcessManager();
+  const server = new McpHttpServer({
+    getConfig: () => config,
+    tools: [execCommandTool, writeStdinTool],
+    services: { paths: new RootGuard(() => config), processes, setPlan: () => {}, agents: null, finish: null },
+    tokens: { core: generateToken(), desktop: generateToken(), plugins: generateToken() },
+    resolveCaller: async () => null,
+    steering: () => []
+  });
+  const client = new Client({ name: 'test', version: '1' });
+  try {
+    await server.start(0);
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.localUrl('core')!)));
+    const started = await client.callTool({ name: 'exec_command', arguments: {
+      cmd: 'read answer; printf "received:%s\\n" "$answer"', workdir: root, yield_time_ms: 250
+    } });
+    expect(started.isError).toBe(false);
+    const { session_id: sessionId } = z.object({ session_id: z.number().int().nonnegative() }).parse(started.structuredContent);
+    const finished = await client.callTool({ name: 'write_stdin', arguments: {
+      session_id: sessionId, chars: 'roundtrip\n', yield_time_ms: 2000
+    } });
+    expect(finished.isError).toBe(false);
+    const data = z.object({ output: z.string(), exit_code: z.number().optional() }).parse(finished.structuredContent);
+    expect(data.output).toBe('received:roundtrip\n');
+    const exit = data.exit_code === undefined
+      ? await client.callTool({ name: 'write_stdin', arguments: { session_id: sessionId, yield_time_ms: 2000 } })
+      : finished;
+    expect(exit.structuredContent).toMatchObject({ exit_code: 0 });
+  } finally {
+    await client.close();
+    await server.stop();
+    await processes.dispose();
+    await rm(root, { recursive: true, force: true });
+  }
+});
