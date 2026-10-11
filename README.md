@@ -7,6 +7,17 @@ A desktop workspace that lets ChatGPT work on your computer: it reads and edits 
 shell, plans, spawns worker chats, and keeps going on long tasks — while ChatGPT itself (your account, your plan)
 does the thinking. A clean rewrite of Chat On Steroids.
 
+![A turn in progress: ChatGPT runs commands, edits a file and streams its answer](docs/screenshots/live-turn.gif)
+
+Tool calls fold into one line per run that opens into the exact commands, output and line-numbered diffs. Agents,
+commands, changes, files and a terminal sit in the side panel; the composer shows the branch and its change totals.
+
+| Dark | Light |
+| --- | --- |
+| ![Chat with an expanded edit and the background tasks panel](docs/screenshots/chat-dark.png) | ![The finished answer, plan and agent with the Changes panel](docs/screenshots/chat-light.png) |
+
+![New chat](docs/screenshots/new-chat.png)
+
 ## How it works
 
 ```
