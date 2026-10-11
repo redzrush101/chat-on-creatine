@@ -4,7 +4,7 @@ import type { JSX } from 'react';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import type { GitFileChange, GitStatus } from '@shared/types';
 import { invoke } from '../lib/bridge';
-import { Empty, Notice, relativeTo } from './common';
+import { Empty, Notice } from './common';
 
 export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -57,7 +57,7 @@ export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element
             <li key={change.path}>
               <button type="button" className="wp-change" onClick={() => setSelected(change)} title={change.path}>
                 <span className={`wp-status is-${statusLetter(change.status).toLowerCase()}`}>{statusLetter(change.status)}</span>
-                <span className="wp-change-path">{relativeTo(rootDir, change.path)}</span>
+                <span className="wp-change-path">{change.path}</span>
               </button>
             </li>
           ))}
@@ -101,7 +101,7 @@ function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFil
           <ArrowLeft size={14} aria-hidden /> Changes
         </button>
         <span className="wp-path" title={change.path}>
-          {relativeTo(rootDir, change.path)}
+          {change.path}
         </span>
       </div>
       {error && <Notice tone="error">{error}</Notice>}

@@ -61,6 +61,13 @@ export function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+/** The path below `root` (either separator, so Windows paths work), or the full path when it is outside. */
+export function relativeTo(root: string, path: string): string {
+  const base = root.replace(/[\\/]+$/, '');
+  const separator = path.charAt(base.length);
+  return path.startsWith(base) && (separator === '/' || separator === '\\') ? path.slice(base.length + 1) : path;
+}
+
 /** Electron prefixes IPC rejections with the channel name; the user only needs the reason. */
 export function errorMessage(error: unknown): string {
   const raw = rawErrorMessage(error);

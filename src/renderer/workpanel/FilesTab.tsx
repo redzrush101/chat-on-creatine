@@ -1,4 +1,4 @@
-import { basename, errorMessage } from '../lib/format';
+import { basename, errorMessage, relativeTo } from '../lib/format';
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';
@@ -7,7 +7,7 @@ import type { FileContent } from '@shared/ipc';
 import { invoke } from '../lib/bridge';
 import { useCopy } from '../lib/hooks';
 import { CodeViewer } from './CodeViewer';
-import { Empty, formatBytes, Notice, relativeTo, useAction } from './common';
+import { Empty, formatBytes, Notice, useAction } from './common';
 
 export function FilesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null);
