@@ -4,6 +4,7 @@
  * Chrome extension (WebSocket), so the driver never knows which host it runs in.
  */
 import type { ReasoningEffort } from './config';
+import type { ModelOption } from './types';
 
 /** A ChatGPT message normalized from the conversation stream or the conversation API. */
 export interface ChatMessage {
@@ -96,7 +97,7 @@ export interface SendValue {
 
 export interface ModelsValue {
   defaultModel: string | null;
-  models: { id: string; label: string; efforts: ReasoningEffort[] }[];
+  models: ModelOption[];
 }
 
 /** Builds the URL a fresh chat opens with; ChatGPT honours `?model=` on `/`. */

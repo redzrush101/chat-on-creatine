@@ -1,5 +1,71 @@
 "use strict";
 (() => {
+  // src/shared/page-protocol.ts
+  function conversationIdFromUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (!/(^|\.)chatgpt\.com$/.test(parsed.hostname)) return null;
+      const match = /\/c\/([0-9a-f-]{8,})/i.exec(parsed.pathname);
+      return match ? match[1].toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  }
+  var DRIVER_VERSION = 1;
+
+  // src/page/errors.ts
+  var DriverError = class extends Error {
+    code;
+    constructor(message, code) {
+      super(message);
+      this.code = code;
+    }
+  };
+  function fail(code, error) {
+    return { ok: false, error, code };
+  }
+
+  // src/page/backend.ts
+  var SESSION_TTL_MS = 5 * 6e4;
+  function createBackend() {
+    let session = null;
+    async function getSession(force = false) {
+      if (!force && session && Date.now() - session.at < SESSION_TTL_MS) return session;
+      try {
+        const response = await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
+        if (!response.ok) return session;
+        const body = await response.json();
+        const accessToken = typeof body.accessToken === "string" && body.accessToken ? body.accessToken : null;
+        session = {
+          signedIn: accessToken !== null,
+          accessToken,
+          email: typeof body.user?.email === "string" ? body.user.email : null,
+          at: Date.now()
+        };
+        return session;
+      } catch {
+        return session;
+      }
+    }
+    async function request(path) {
+      const current = await getSession();
+      const headers = {};
+      if (current?.accessToken) headers.Authorization = `Bearer ${current.accessToken}`;
+      const response = await fetch(path, { headers, credentials: "same-origin", cache: "no-store" });
+      if (response.status === 401 || response.status === 403) {
+        throw new DriverError(`ChatGPT refused ${path.split("?")[0]} (HTTP ${response.status})`, "signed-out");
+      }
+      if (!response.ok) throw new DriverError(`${path.split("?")[0]} failed (HTTP ${response.status})`, "failed");
+      return response.json();
+    }
+    return { getSession, request };
+  }
+
+  // src/shared/errors.ts
+  function errorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   // src/shared/chatgpt-stream.ts
   var ROLES = /* @__PURE__ */ new Set(["user", "assistant", "tool", "system"]);
   function isObj(value) {
@@ -248,7 +314,12 @@
     }
     delta(event) {
       if (typeof event.p === "string") this.lastPath = event.p;
+      else if (typeof event.o === "string") this.lastPath = "";
       if (typeof event.o === "string") this.lastOp = event.o;
+      if (event.p === void 0 && event.o === void 0 && isObj(event.v) && isObj(event.v.message)) {
+        this.lastPath = "";
+        this.lastOp = "add";
+      }
       this.envelope = applyOp(this.envelope, this.lastPath, this.lastOp, event.v);
       if (!isObj(this.envelope)) return;
       this.noteConversation(this.envelope.conversation_id);
@@ -282,19 +353,6 @@
     return path.reverse();
   }
 
-  // src/shared/page-protocol.ts
-  function conversationIdFromUrl(url) {
-    try {
-      const parsed = new URL(url);
-      if (!/(^|\.)chatgpt\.com$/.test(parsed.hostname)) return null;
-      const match = /\/c\/([0-9a-f-]{8,})/i.exec(parsed.pathname);
-      return match ? match[1].toLowerCase() : null;
-    } catch {
-      return null;
-    }
-  }
-  var DRIVER_VERSION = 1;
-
   // src/page/dom.ts
   var SELECTORS = {
     composer: [
@@ -320,7 +378,6 @@
     uploadBusy: '[aria-busy="true"], [role="progressbar"], [data-inline-file-uploading]',
     alert: '[role="alert"]',
     dialog: '[role="dialog"], [role="alertdialog"]',
-    loginLink: '[data-testid="login-button"], a[href^="/auth/login"]',
     modelTrigger: [
       "[data-codex-intelligence-trigger]",
       '[data-composer-navigation-target="reasoning"]'
@@ -440,8 +497,14 @@
   }
   function clickSend() {
     const button = findSendButton();
-    if (!enabled(button)) return false;
-    button.click();
+    if (enabled(button)) {
+      button.click();
+      return true;
+    }
+    const box = findComposer();
+    if (!box || composerText(box).trim() === "" || isGenerating()) return false;
+    box.focus();
+    box.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
     return true;
   }
   function clickStop() {
@@ -464,8 +527,10 @@
     await new Promise((resolve) => setTimeout(resolve, 300));
     while (Date.now() < deadline) {
       const current = composerForm();
+      const labels = [...current?.querySelectorAll("button[aria-label]") ?? []].map((b) => b.getAttribute("aria-label") ?? "");
+      const tiled = files.every((file) => labels.some((label) => label.includes(file.name.replace(/\.[^.]*$/, ""))));
       const busy = current?.querySelector(SELECTORS.uploadBusy) != null;
-      if (!busy && enabled(findSendButton())) return true;
+      if (tiled && !busy) return true;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     return false;
@@ -518,12 +583,7 @@
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  // src/page/driver.ts
-  var MESSAGE_INTERVAL_MS = 100;
-  var SESSION_TTL_MS = 5 * 6e4;
-  var NOTICE_DEBOUNCE_MS = 200;
-  var LOCATION_POLL_MS = 500;
-  var MODELS_PATH = "/backend-api/models?iim=false&include_icons=false&is_gizmo=false";
+  // src/page/models.ts
   var EFFORT_NAMES = {
     light: "low",
     standard: "medium",
@@ -531,34 +591,8 @@
     heavy: "xhigh",
     max: "xhigh"
   };
-  var DriverError = class extends Error {
-    code;
-    constructor(message, code) {
-      super(message);
-      this.code = code;
-    }
-  };
   function isRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
-  }
-  function fail(code, error) {
-    return { ok: false, error, code };
-  }
-  var DONE = { ok: true };
-  function toFile(file) {
-    const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0));
-    return new File([bytes], file.name, { type: file.mime });
-  }
-  function wait2(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-  async function waitFor(predicate, ms) {
-    const deadline = Date.now() + ms;
-    while (!predicate()) {
-      if (Date.now() >= deadline) return false;
-      await wait2(100);
-    }
-    return true;
   }
   function parseModels(body) {
     const root = isRecord(body) ? body : {};
@@ -581,138 +615,37 @@
     const defaultModel = typeof root.default_model_slug === "string" ? root.default_model_slug : typeof fallback?.slug === "string" ? fallback.slug : null;
     return { defaultModel, models };
   }
-  function startDriver(transport2, tapChannel) {
-    const emit = (event) => transport2.send(event);
-    const streams = /* @__PURE__ */ new Map();
-    const startWaiters = /* @__PURE__ */ new Set();
-    let session = null;
-    let models = null;
-    let lastGenerating = null;
-    let lastNotice = null;
-    let lastUrl = location.href;
-    function queueMessage(stream, message) {
-      const now = Date.now();
-      const last = stream.lastEmit.get(message.id) ?? 0;
-      if (message.status !== "in_progress" || now - last >= MESSAGE_INTERVAL_MS) {
-        stream.pending.delete(message.id);
-        stream.lastEmit.set(message.id, now);
-        emit({ type: "message", streamId: stream.id, message });
-        return;
-      }
-      stream.pending.set(message.id, message);
-      stream.timer ??= setTimeout(() => flushMessages(stream), MESSAGE_INTERVAL_MS - (now - last));
+
+  // src/page/commands.ts
+  var MODELS_PATH = "/backend-api/models?iim=false&include_icons=false&is_gizmo=false";
+  var DONE = { ok: true };
+  function toFile(file) {
+    const bytes = Uint8Array.from(atob(file.data), (char) => char.charCodeAt(0));
+    return new File([bytes], file.name, { type: file.mime });
+  }
+  function wait2(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  async function waitFor(predicate, ms) {
+    const deadline = Date.now() + ms;
+    while (!predicate()) {
+      if (Date.now() >= deadline) return false;
+      await wait2(100);
     }
-    function flushMessages(stream) {
-      stream.timer = null;
-      const now = Date.now();
-      for (const [id, message] of stream.pending) {
-        stream.lastEmit.set(id, now);
-        emit({ type: "message", streamId: stream.id, message });
-      }
-      stream.pending.clear();
+    return true;
+  }
+  var PageCommands = class {
+    constructor(backend, streams) {
+      this.backend = backend;
+      this.streams = streams;
     }
-    function openStream(streamId, requestId) {
-      const stream = {
-        id: streamId,
-        conversationId: conversationIdFromUrl(location.href),
-        complete: false,
-        error: null,
-        lastEmit: /* @__PURE__ */ new Map(),
-        pending: /* @__PURE__ */ new Map(),
-        timer: null,
-        parser: new ConversationStreamParser({
-          message: (message) => queueMessage(stream, message),
-          conversation: (id) => {
-            stream.conversationId = id;
-          },
-          title: (conversationId, title) => emit({ type: "title", conversationId, title }),
-          complete: () => {
-            stream.complete = true;
-          },
-          error: (text) => {
-            stream.error = text;
-          }
-        })
-      };
-      streams.set(streamId, stream);
-      emit({ type: "turn-start", streamId, conversationId: stream.conversationId, requestId });
-      for (const waiter of [...startWaiters]) waiter({ conversationId: stream.conversationId, streamId });
+    models = null;
+    async loadModels() {
+      this.models = parseModels(await this.backend.request(MODELS_PATH));
+      return this.models;
     }
-    function closeStream(streamId, error) {
-      const stream = streams.get(streamId);
-      if (!stream) return;
-      streams.delete(streamId);
-      if (stream.timer) clearTimeout(stream.timer);
-      flushMessages(stream);
-      const outcome = stream.complete ? "complete" : error || stream.error ? "error" : "aborted";
-      emit({
-        type: "turn-end",
-        streamId,
-        conversationId: stream.conversationId,
-        outcome,
-        error: error ?? stream.error
-      });
-    }
-    window.addEventListener("message", (event) => {
-      if (event.source !== window || event.origin !== location.origin) return;
-      const data = event.data;
-      if (!data || typeof data !== "object" || data.channel !== tapChannel) return;
-      switch (data.kind) {
-        case "start":
-          openStream(data.streamId, data.requestId ?? null);
-          break;
-        case "chunk":
-          streams.get(data.streamId)?.parser.push(data.chunk ?? "");
-          break;
-        case "end":
-          streams.get(data.streamId)?.parser.end();
-          closeStream(data.streamId, null);
-          break;
-        case "error":
-          streams.get(data.streamId)?.parser.end();
-          closeStream(data.streamId, data.error ?? "stream failed");
-          break;
-      }
-    });
-    async function getSession(force = false) {
-      if (!force && session && Date.now() - session.at < SESSION_TTL_MS) return session;
-      try {
-        const response = await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
-        if (!response.ok) return session;
-        const body = await response.json();
-        const accessToken = typeof body.accessToken === "string" && body.accessToken ? body.accessToken : null;
-        session = {
-          signedIn: accessToken !== null,
-          accessToken,
-          email: typeof body.user?.email === "string" ? body.user.email : null,
-          at: Date.now()
-        };
-        return session;
-      } catch {
-        return session;
-      }
-    }
-    async function refreshAuth() {
-      const current = await getSession(true);
-      if (current) emit({ type: "auth", signedIn: current.signedIn, email: current.email });
-    }
-    async function backend(path) {
-      const current = await getSession();
-      const headers = {};
-      if (current?.accessToken) headers.Authorization = `Bearer ${current.accessToken}`;
-      const response = await fetch(path, { headers, credentials: "same-origin", cache: "no-store" });
-      if (response.status === 401 || response.status === 403) {
-        throw new DriverError(`ChatGPT refused ${path.split("?")[0]} (HTTP ${response.status})`, "signed-out");
-      }
-      if (!response.ok) throw new DriverError(`${path.split("?")[0]} failed (HTTP ${response.status})`, "failed");
-      return response.json();
-    }
-    async function loadModels() {
-      models = parseModels(await backend(MODELS_PATH));
-      return models;
-    }
-    async function status() {
-      const current = await getSession();
+    async status() {
+      const current = await this.backend.getSession();
       return {
         url: location.href,
         conversationId: conversationIdFromUrl(location.href),
@@ -721,19 +654,7 @@
         composerReady: findComposer() !== null
       };
     }
-    function waitForStart(ms) {
-      return new Promise((resolve) => {
-        const waiter = (value) => done(value);
-        const done = (value) => {
-          clearTimeout(timer);
-          startWaiters.delete(waiter);
-          resolve(value);
-        };
-        const timer = setTimeout(() => done(null), ms);
-        startWaiters.add(waiter);
-      });
-    }
-    async function send(text, files) {
+    async send(text, files) {
       if (!await waitFor(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
       if (isGenerating()) return fail("busy", "a response is still generating");
       if (!setComposerText(text)) return fail("failed", "could not type into the composer");
@@ -744,42 +665,51 @@
         const button = findSendButton();
         return button !== null && !button.disabled && button.getAttribute("aria-disabled") !== "true";
       };
-      if (!await waitFor(sendable, 5e3)) return fail("not-ready", "send button is not available");
-      const started = waitForStart(2e4);
+      if (!await waitFor(sendable, files.length > 0 ? 1500 : 5e3) && files.length === 0) return fail("not-ready", "send button is not available");
+      const started = this.streams.waitForStart(2e4);
       if (!clickSend()) return fail("failed", "send button could not be clicked");
       const value = await started;
       return value ? { ok: true, value } : fail("timeout", "no conversation stream started after send");
     }
-    async function selectModel2(model, effort) {
-      if (!models) await loadModels().catch(() => void 0);
-      const label = models?.models.find((entry) => entry.id === model)?.label ?? model;
+    async selectModel(model, effort) {
+      if (!this.models) await this.loadModels().catch(() => void 0);
+      const label = this.models?.models.find((entry) => entry.id === model)?.label ?? model;
       return await selectModel(label, effort) ? DONE : fail("not-found", `model ${model} not found in the picker`);
     }
-    async function run(command) {
+    async run(command) {
       try {
         switch (command.type) {
           case "status":
-            return { ok: true, value: await status() };
+            return { ok: true, value: await this.status() };
           case "send":
-            return await send(command.text, command.files);
+            return await this.send(command.text, command.files);
           case "stop":
             return clickStop() ? DONE : fail("not-found", "no stop control is visible");
           case "models":
-            return { ok: true, value: await loadModels() };
+            return { ok: true, value: await this.loadModels() };
           case "conversation": {
-            const json = await backend(`/backend-api/conversation/${encodeURIComponent(command.conversationId)}`);
+            const json = await this.backend.request(`/backend-api/conversation/${encodeURIComponent(command.conversationId)}`);
             return { ok: true, value: conversationToMessages(json) };
           }
           case "select-model":
-            return await selectModel2(command.model, command.effort);
+            return await this.selectModel(command.model, command.effort);
           case "usage":
             return { ok: false, error: "unsupported" };
         }
       } catch (error) {
         if (error instanceof DriverError) return fail(error.code, error.message);
-        return fail("failed", error instanceof Error ? error.message : String(error));
+        return fail("failed", errorMessage(error));
       }
     }
+  };
+
+  // src/page/observe.ts
+  var NOTICE_DEBOUNCE_MS = 200;
+  var LOCATION_POLL_MS = 500;
+  function observePage(emit) {
+    let lastGenerating = null;
+    let lastNotice = null;
+    let lastUrl = location.href;
     function checkPage() {
       const generating = isGenerating();
       if (generating !== lastGenerating) {
@@ -812,7 +742,131 @@
     };
     setInterval(checkLocation, LOCATION_POLL_MS);
     window.addEventListener("popstate", checkLocation);
-    transport2.onCommand(run);
+    return checkPage;
+  }
+
+  // src/page/streams.ts
+  var MESSAGE_INTERVAL_MS = 100;
+  var StreamRelay = class {
+    constructor(emit, conversationId) {
+      this.emit = emit;
+      this.conversationId = conversationId;
+    }
+    streams = /* @__PURE__ */ new Map();
+    startWaiters = /* @__PURE__ */ new Set();
+    handle(data) {
+      switch (data.kind) {
+        case "start":
+          this.openStream(data.streamId, data.requestId ?? null);
+          break;
+        case "chunk":
+          this.streams.get(data.streamId)?.parser.push(data.chunk ?? "");
+          break;
+        case "end":
+          this.streams.get(data.streamId)?.parser.end();
+          this.closeStream(data.streamId, null);
+          break;
+        case "error":
+          this.streams.get(data.streamId)?.parser.end();
+          this.closeStream(data.streamId, data.error ?? "stream failed");
+          break;
+      }
+    }
+    waitForStart(ms) {
+      return new Promise((resolve) => {
+        const waiter = (value) => done(value);
+        const done = (value) => {
+          clearTimeout(timer);
+          this.startWaiters.delete(waiter);
+          resolve(value);
+        };
+        const timer = setTimeout(() => done(null), ms);
+        this.startWaiters.add(waiter);
+      });
+    }
+    queueMessage(stream, message) {
+      const now = Date.now();
+      const last = stream.lastEmit.get(message.id) ?? 0;
+      if (message.status !== "in_progress" || now - last >= MESSAGE_INTERVAL_MS) {
+        stream.pending.delete(message.id);
+        stream.lastEmit.set(message.id, now);
+        this.emit({ type: "message", streamId: stream.id, message });
+        return;
+      }
+      stream.pending.set(message.id, message);
+      stream.timer ??= setTimeout(() => this.flushMessages(stream), MESSAGE_INTERVAL_MS - (now - last));
+    }
+    flushMessages(stream) {
+      stream.timer = null;
+      const now = Date.now();
+      for (const [id, message] of stream.pending) {
+        stream.lastEmit.set(id, now);
+        this.emit({ type: "message", streamId: stream.id, message });
+      }
+      stream.pending.clear();
+    }
+    openStream(streamId, requestId) {
+      const stream = {
+        id: streamId,
+        conversationId: this.conversationId(),
+        complete: false,
+        error: null,
+        lastEmit: /* @__PURE__ */ new Map(),
+        pending: /* @__PURE__ */ new Map(),
+        timer: null,
+        parser: new ConversationStreamParser({
+          message: (message) => this.queueMessage(stream, message),
+          conversation: (id) => {
+            stream.conversationId = id;
+          },
+          title: (conversationId, title) => this.emit({ type: "title", conversationId, title }),
+          complete: () => {
+            stream.complete = true;
+          },
+          error: (text) => {
+            stream.error = text;
+          }
+        })
+      };
+      this.streams.set(streamId, stream);
+      this.emit({ type: "turn-start", streamId, conversationId: stream.conversationId, requestId });
+      for (const waiter of [...this.startWaiters]) waiter({ conversationId: stream.conversationId, streamId });
+    }
+    closeStream(streamId, error) {
+      const stream = this.streams.get(streamId);
+      if (!stream) return;
+      this.streams.delete(streamId);
+      if (stream.timer) clearTimeout(stream.timer);
+      this.flushMessages(stream);
+      const outcome = stream.complete ? "complete" : error || stream.error ? "error" : "aborted";
+      this.emit({
+        type: "turn-end",
+        streamId,
+        conversationId: stream.conversationId,
+        outcome,
+        error: error ?? stream.error
+      });
+    }
+  };
+
+  // src/page/driver.ts
+  function startDriver(transport2, tapChannel) {
+    const emit = (event) => transport2.send(event);
+    const backend = createBackend();
+    const streams = new StreamRelay(emit, () => conversationIdFromUrl(location.href));
+    const commands = new PageCommands(backend, streams);
+    window.addEventListener("message", (event) => {
+      if (event.source !== window || event.origin !== location.origin) return;
+      const data = event.data;
+      if (!data || typeof data !== "object" || data.channel !== tapChannel) return;
+      streams.handle(data);
+    });
+    async function refreshAuth() {
+      const current = await backend.getSession(true);
+      if (current) emit({ type: "auth", signedIn: current.signedIn, email: current.email });
+    }
+    const checkPage = observePage(emit);
+    transport2.onCommand((command) => commands.run(command));
     emit({
       type: "hello",
       driverVersion: DRIVER_VERSION,

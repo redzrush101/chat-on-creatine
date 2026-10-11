@@ -1,4 +1,9 @@
 (() => {
+  // src/shared/errors.ts
+  function errorMessage(error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   // src/page/tap.ts
   function installFetchTap(channel) {
     const flag = `__chatOnCreatineTap_${channel}`;
@@ -25,11 +30,15 @@
         post({ kind: "chunk", streamId, requestId, chunk: decoder.decode() });
         post({ kind: "end", streamId, requestId });
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          post({ kind: "end", streamId, requestId });
+          return;
+        }
         post({
           kind: "error",
           streamId,
           requestId,
-          error: error instanceof Error ? error.message : String(error)
+          error: errorMessage(error)
         });
       }
     };
