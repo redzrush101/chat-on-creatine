@@ -64,6 +64,19 @@ async function waitFor(pattern) {
   throw new Error(`Timed out waiting for ${pattern}`);
 }
 
+/** The token file is written asynchronously, so it can land shortly after the server listens. */
+async function readTokens(file) {
+  const deadline = Date.now() + TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      return JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+  throw new Error(`${file} never appeared`);
+}
+
 function textOf(result) {
   return result.content.map((part) => (part.type === 'text' ? part.text : `[${part.type}]`)).join('\n');
 }
@@ -72,7 +85,7 @@ let failed = false;
 try {
   await waitFor(/\[app\] started/);
   const port = (await waitFor(/\[mcp\] listening on 127\.0\.0\.1:(\d+)/))[1];
-  const tokens = JSON.parse(readFileSync(path.join(profile, 'state', 'mcp-tokens.json'), 'utf8'));
+  const tokens = await readTokens(path.join(profile, 'state', 'mcp-tokens.json'));
   const client = new Client({ name: 'smoke', version: '1' });
   await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp/${tokens.core}`)));
   const names = (await client.listTools()).tools.map((tool) => tool.name);
