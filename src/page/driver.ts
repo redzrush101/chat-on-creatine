@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 /**
  * Page driver: runs inside a chatgpt.com page, observes the conversation stream relayed by the
  * fetch tap, watches the composer state and executes commands from the app.
@@ -353,7 +354,7 @@ export function startDriver(transport: DriverTransport, tapChannel: string): voi
       }
     } catch (error) {
       if (error instanceof DriverError) return fail(error.code, error.message);
-      return fail('failed', error instanceof Error ? error.message : String(error));
+      return fail('failed', errorMessage(error));
     }
   }
 

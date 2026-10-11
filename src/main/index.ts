@@ -27,7 +27,8 @@ if (!app.requestSingleInstanceLock()) {
 async function start(): Promise<void> {
   let services: Services | null = null;
   let window: BrowserWindow | null = null;
-  const markQuitting = () => ((app as unknown as { quitting?: boolean }).quitting = true);
+  let quitting = false;
+  const markQuitting = () => { quitting = true; };
 
   const send = <E extends MainEvent>(event: E, payload: MainEvents[E]): void => {
     if (window && !window.isDestroyed()) window.webContents.send(event, payload);
@@ -63,7 +64,7 @@ async function start(): Promise<void> {
 
   registerIpc(() => services, () => hub.snapshot(), (contents) => contents === window?.webContents);
 
-  window = createMainWindow({ preloadDir, resourcesDir, closeToTray: () => services?.config.get().ui.closeToTray ?? false });
+  window = createMainWindow({ preloadDir, resourcesDir, isQuitting: () => quitting, closeToTray: () => services?.config.get().ui.closeToTray ?? false });
   createTray(resourcesDir, {
     show: () => {
       window?.show();

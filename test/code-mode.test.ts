@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { defaultConfig, type Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { McpHttpServer, generateToken, type CallRecord } from '../src/main/mcp/server';
-import { defineTool, textResult, type Caller, type ToolServices, type ToolSpec } from '../src/main/mcp/tool';
+import { defineTool, textResult, type Caller, type ToolServices } from '../src/main/mcp/tool';
 
 const tokens: Record<SurfaceId, string> = { core: generateToken(), desktop: generateToken(), plugins: generateToken() };
 const caller: Caller = { sessionId: 's1', conversationId: 'c1', cwd: null, kind: 'chat' };
@@ -45,7 +45,7 @@ const sessionFinish = defineTool({
   run: async () => textResult('finished')
 });
 
-const tools = [echo, flaky, sessionFinish] as unknown as ToolSpec[];
+const tools = [echo, flaky, sessionFinish];
 
 const server = new McpHttpServer({
   getConfig: (): Config => defaultConfig(),

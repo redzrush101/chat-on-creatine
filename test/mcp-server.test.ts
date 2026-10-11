@@ -63,7 +63,7 @@ const browse = defineTool({
   run: async () => textResult('browsing')
 });
 
-const tools: ToolSpec[] = [echo as ToolSpec, fail as ToolSpec, plan as ToolSpec, hidden as ToolSpec, browse as ToolSpec];
+const tools: ToolSpec[] = [echo, fail, plan, hidden, browse];
 const caller: Caller = { sessionId: 's1', conversationId: 'c1', cwd: null, kind: 'chat' };
 const calls: CallRecord[] = [];
 

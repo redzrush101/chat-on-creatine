@@ -1,10 +1,7 @@
+import { errorMessage } from '@shared/errors';
 import { useCallback, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 
-
-export function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /** Runs an action from a button and keeps its failure visible in the panel. */
 export function useAction(): [string | null, (task: () => Promise<unknown>) => Promise<void>] {
@@ -14,7 +11,7 @@ export function useAction(): [string | null, (task: () => Promise<unknown>) => P
     try {
       await task();
     } catch (failure) {
-      setError(errorText(failure));
+      setError(errorMessage(failure));
     }
   }, []);
   return [error, run];

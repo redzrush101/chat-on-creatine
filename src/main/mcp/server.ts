@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -394,6 +395,6 @@ function toolErrorResult(error: ToolError): ToolResult {
 }
 
 function unexpectedResult(error: unknown): ToolResult {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   return { content: [{ type: 'text', text: `FAILED: ${message}` }], isError: true };
 }

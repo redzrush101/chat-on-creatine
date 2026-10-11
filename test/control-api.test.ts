@@ -52,11 +52,13 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function call(
+type EventsPage = { events: Record<string, unknown>[]; total: number; nextBefore: number | null; nextAfter: number | null };
+
+async function call<T = Record<string, unknown>>(
   method: string,
   route: string,
   options: { auth?: string | null; body?: unknown; headers?: Record<string, string> } = {}
-): Promise<{ status: number; body: any }> {
+): Promise<{ status: number; body: T }> {
   const headers: Record<string, string> = { ...options.headers };
   if (options.auth !== null) headers.authorization = `Bearer ${options.auth ?? token}`;
   if (options.body !== undefined) headers['content-type'] = 'application/json';
@@ -65,7 +67,7 @@ async function call(
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body)
   });
-  return { status: res.status, body: await res.json() };
+  return { status: res.status, body: await res.json() as T };
 }
 
 function note(id: string, text: string): SessionEvent {
@@ -87,7 +89,7 @@ describe('ControlApi lifecycle and access', () => {
     expect((await call('GET', '/v1/health', { auth: 'wrong' })).status).toBe(401);
     const health = await call('GET', '/v1/health');
     expect(health.status).toBe(200);
-    expect(health.body.actions.enabled).toBe(false);
+    expect(health.body.actions).toMatchObject({ enabled: false });
   });
 
   it('refuses any request that carries an Origin header, even with the token', async () => {
@@ -99,10 +101,10 @@ describe('ControlApi lifecycle and access', () => {
 describe('ControlApi reads', () => {
   it('pages sessions by cursor, 50 per page, without repeats', async () => {
     for (let i = 0; i < 55; i++) store.create({ kind: 'chat' });
-    const first = await call('GET', '/v1/sessions');
+    const first = await call<{ sessions: { id: string }[]; nextCursor: string | null }>('GET', '/v1/sessions');
     expect(first.body.sessions).toHaveLength(50);
     expect(first.body.nextCursor).not.toBeNull();
-    const second = await call('GET', `/v1/sessions?cursor=${encodeURIComponent(first.body.nextCursor)}`);
+    const second = await call<{ sessions: { id: string }[]; nextCursor: string | null }>('GET', `/v1/sessions?cursor=${encodeURIComponent(first.body.nextCursor!)}`);
     expect(second.body.sessions).toHaveLength(5);
     expect(second.body.nextCursor).toBeNull();
     const ids = [...first.body.sessions, ...second.body.sessions].map((session: { id: string }) => session.id);
@@ -120,30 +122,28 @@ describe('ControlApi reads', () => {
     ]);
     const base = `/v1/sessions/${chat.id}/events`;
 
-    const latest = await call('GET', `${base}?limit=2`);
-    expect(latest.body.events.map((event: { position: number }) => event.position)).toEqual([4, 5]);
+    const latest = await call<EventsPage>('GET', `${base}?limit=2`);
+    expect(latest.body.events.map((event) => event.position)).toEqual([4, 5]);
     expect(latest.body.total).toBe(5);
     expect(latest.body.nextBefore).toBe(4);
     expect(latest.body.nextAfter).toBeNull();
 
-    const older = await call('GET', `${base}?before=4&limit=2`);
-    expect(older.body.events.map((event: { position: number }) => event.position)).toEqual([2, 3]);
+    const older = await call<EventsPage>('GET', `${base}?before=4&limit=2`);
+    expect(older.body.events.map((event) => event.position)).toEqual([2, 3]);
     expect(older.body.nextBefore).toBe(2);
     expect(older.body.nextAfter).toBe(3);
 
-    const forward = await call('GET', `${base}?after=0&limit=2`);
-    expect(forward.body.events.map((event: { position: number }) => event.position)).toEqual([1, 2]);
+    const forward = await call<EventsPage>('GET', `${base}?after=0&limit=2`);
+    expect(forward.body.events.map((event) => event.position)).toEqual([1, 2]);
     expect(forward.body.nextAfter).toBe(2);
 
-    const kinds = await call('GET', `${base}?kinds=notice,turn`);
+    const kinds = await call<EventsPage>('GET', `${base}?kinds=notice,turn`);
     expect(kinds.body.total).toBe(3);
 
-    const [user, notice, , tool] = (await call('GET', base)).body.events;
-    expect(user.text.text).toHaveLength(4_000);
-    expect(user.text.truncated).toBe(true);
-    expect(user.text.chars).toBe(5_000);
-    expect(notice.text.text).not.toContain('abcdefgh12345678');
-    expect(tool.output[0].text.text).toHaveLength(2_000);
+    const [user, notice, , tool] = (await call<EventsPage>('GET', base)).body.events;
+    expect(user).toMatchObject({ text: { text: 'x'.repeat(4_000), truncated: true, chars: 5_000 } });
+    expect(notice).toMatchObject({ text: { text: expect.not.stringContaining('abcdefgh12345678') } });
+    expect(tool).toMatchObject({ output: [{ text: { text: 'y'.repeat(2_000) } }] });
 
     expect((await call('GET', `${base}?from=0&before=3`)).status).toBe(400);
     expect((await call('GET', `${base}?limit=101`)).status).toBe(400);
@@ -190,7 +190,7 @@ describe('ControlApi actions', () => {
     const cancelAgain = await call('POST', `/v1/inputs/${id}/cancel`, { body: {} });
     expect(cancelAgain.body.cancelled).toBe(false);
 
-    const listed = await call('GET', '/v1/inputs?state=cancelled');
+    const listed = await call<{ inputs: { id: string }[] }>('GET', '/v1/inputs?state=cancelled');
     expect(listed.body.inputs.map((input: { id: string }) => input.id)).toEqual([id]);
   });
 

@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import type { AutomationMode, SessionEvent } from '@shared/types';
 
 export interface Decision {
@@ -156,7 +157,7 @@ export async function callApiDecider(options: {
   } catch (error) {
     if (timeout.aborted) throw new Error('The decider API did not answer within 60 seconds.');
     if (options.signal?.aborted) throw error;
-    throw new Error(`The decider API is unreachable: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`The decider API is unreachable: ${errorMessage(error)}`);
   }
 
   if (response.status === 401 || response.status === 403) {

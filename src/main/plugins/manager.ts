@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { createHash } from 'node:crypto';
 import { Client, StreamableHTTPClientTransport, type Transport, type CallToolResult, type Tool } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
@@ -299,8 +300,4 @@ function toToolResult(result: CallToolResult): ToolResult {
     ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
     isError: result.isError === true
   };
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

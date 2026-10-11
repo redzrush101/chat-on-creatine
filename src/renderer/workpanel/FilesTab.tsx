@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';
@@ -5,7 +6,7 @@ import type { FileEntry } from '@shared/types';
 import type { FileContent } from '@shared/ipc';
 import { invoke } from '../lib/bridge';
 import { CodeViewer } from './CodeViewer';
-import { Empty, errorText, formatBytes, Notice, relativeTo, useAction } from './common';
+import { Empty, formatBytes, Notice, relativeTo, useAction } from './common';
 
 function basename(path: string): string {
   return path.split(/[\\/]/).pop() || path;
@@ -51,7 +52,7 @@ function DirList({ dir, depth, onOpen }: { dir: string; depth: number; onOpen(pa
         if (alive) setEntries(sortEntries(list));
       })
       .catch((failure: unknown) => {
-        if (alive) setError(errorText(failure));
+        if (alive) setError(errorMessage(failure));
       });
     return () => {
       alive = false;
@@ -116,7 +117,7 @@ function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; 
         if (alive) setFile(content);
       })
       .catch((failure: unknown) => {
-        if (alive) setLoadError(errorText(failure));
+        if (alive) setLoadError(errorMessage(failure));
       });
     return () => {
       alive = false;

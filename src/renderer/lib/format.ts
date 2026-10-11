@@ -1,3 +1,4 @@
+import { errorMessage as rawErrorMessage } from '@shared/errors';
 import type { SessionEvent } from '@shared/types';
 
 export function formatDuration(ms: number): string {
@@ -33,7 +34,7 @@ export function basename(path: string): string {
 
 /** Electron prefixes IPC rejections with the channel name; the user only needs the reason. */
 export function errorMessage(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error);
+  const raw = rawErrorMessage(error);
   return raw.replace(/^Error invoking remote method '[^']*': (Error: )?/, '') || 'Something went wrong';
 }
 

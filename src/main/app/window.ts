@@ -1,10 +1,11 @@
 import { join } from 'node:path';
-import { BrowserWindow, Menu, Tray, app, nativeImage, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, nativeImage, shell } from 'electron';
 
 interface WindowOptions {
   preloadDir: string;
   resourcesDir: string;
   closeToTray: () => boolean;
+  isQuitting: () => boolean;
 }
 
 /** The app's own window: loads the renderer, refuses navigation, opens links externally. */
@@ -36,7 +37,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     return { action: 'deny' };
   });
   window.on('close', (event) => {
-    if (!(app as unknown as { quitting?: boolean }).quitting && options.closeToTray()) {
+    if (!options.isQuitting() && options.closeToTray()) {
       event.preventDefault();
       window.hide();
     }

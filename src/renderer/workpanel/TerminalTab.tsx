@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Plus, X } from 'lucide-react';
@@ -5,7 +6,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { invoke, subscribe } from '../lib/bridge';
-import { Empty, errorText, Notice } from './common';
+import { Empty, Notice } from './common';
 
 // Output can arrive before a pane has its terminal id, so unclaimed output waits here.
 const dataListeners = new Map<string, (data: string) => void>();
@@ -124,7 +125,7 @@ function TerminalPane({ cwd, active, onError }: { cwd: string | null; active: bo
         for (const chunk of earlyData.get(id) ?? []) term.write(chunk);
         earlyData.delete(id);
       },
-      (failure: unknown) => onError(errorText(failure))
+      (failure: unknown) => onError(errorMessage(failure))
     );
 
     const input = term.onData((data) => {

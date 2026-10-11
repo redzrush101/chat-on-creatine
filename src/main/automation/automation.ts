@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { handoffPrompt } from '@shared/config';
 import { randomUUID } from 'node:crypto';
 import type { Config } from '@shared/config';
@@ -141,7 +142,7 @@ export class Automation {
       decision = parseDecision(await this.ask(meta, prompt), mode);
     } catch (error) {
       if (this.epoch(sessionId) !== epoch) return;
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       this.setGoal(sessionId, { status: 'error' });
       this.notify(sessionId, 'error', `Goal decision failed: ${message}`);
       return;

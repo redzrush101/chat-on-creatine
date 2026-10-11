@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { readFile } from 'node:fs/promises';
 import type { Config } from '@shared/config';
 import type { ChatMessage, PageEvent, PageFile } from '@shared/page-protocol';
@@ -433,17 +434,11 @@ export class ChatRouter {
     if (this.pumping.has(sessionId)) return;
     this.pumping.add(sessionId);
     try {
-      for (;;) {
-        if (this.turnOf(sessionId) !== 'idle') return;
-        const session = this.deps.store.get(sessionId);
-        if (!session || session.blocked) return;
-        const item = this.deps.outbox.nextFor(sessionId);
-        if (!item || !this.deps.canStart(session)) return;
-        const delivered = await this.deliver(session, item);
-        if (!delivered) return;
-        // A delivered input starts a turn; the next one waits for its end.
-        return;
-      }
+      if (this.turnOf(sessionId) !== 'idle') return;
+      const session = this.deps.store.get(sessionId);
+      if (!session || session.blocked) return;
+      const item = this.deps.outbox.nextFor(sessionId);
+      if (item && this.deps.canStart(session)) await this.deliver(session, item);
     } finally {
       this.pumping.delete(sessionId);
     }
@@ -486,7 +481,7 @@ export class ChatRouter {
       return true;
     } catch (error) {
       log.error(`delivery to ${session.id} failed`, error);
-      this.deps.outbox.markFailed(item.id, error instanceof Error ? error.message : String(error));
+      this.deps.outbox.markFailed(item.id, errorMessage(error));
       this.patchLive(session.id, { turn: 'idle' });
       return false;
     }

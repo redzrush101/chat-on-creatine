@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 // Self-contained: serialized with toString() for executeInMainWorld, so no outer-scope references.
 export function installFetchTap(channel: string): void {
   const flag = `__chatOnCreatineTap_${channel}`;
@@ -42,7 +43,7 @@ export function installFetchTap(channel: string): void {
         kind: 'error',
         streamId,
         requestId,
-        error: error instanceof Error ? error.message : String(error)
+        error: errorMessage(error)
       });
     }
   };

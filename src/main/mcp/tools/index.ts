@@ -7,4 +7,4 @@ import { viewImageTool } from './view-image';
 import { writeStdinTool } from './write-stdin';
 
 /** Every Core tool in listing order; each decides its own exposure from config. */
-export const CORE_TOOLS: ToolSpec[] = [readTool, viewImageTool, findTool, applyPatchTool, execCommandTool, writeStdinTool] as unknown as ToolSpec[];
+export const CORE_TOOLS: ToolSpec[] = [readTool, viewImageTool, findTool, applyPatchTool, execCommandTool, writeStdinTool];

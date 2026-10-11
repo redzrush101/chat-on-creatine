@@ -1,9 +1,10 @@
+import { errorMessage } from '@shared/errors';
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import type { GitFileChange, GitStatus } from '@shared/types';
 import { invoke } from '../lib/bridge';
-import { Empty, errorText, Notice, relativeTo } from './common';
+import { Empty, Notice, relativeTo } from './common';
 
 export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -17,7 +18,7 @@ export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element
     setError(null);
     invoke('files:gitStatus', rootDir)
       .then(setStatus)
-      .catch((failure: unknown) => setError(errorText(failure)))
+      .catch((failure: unknown) => setError(errorMessage(failure)))
       .finally(() => setLoading(false));
   }, [rootDir]);
 
@@ -86,7 +87,7 @@ function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFil
         if (alive) setDiff(text);
       })
       .catch((failure: unknown) => {
-        if (alive) setError(errorText(failure));
+        if (alive) setError(errorMessage(failure));
       });
     return () => {
       alive = false;

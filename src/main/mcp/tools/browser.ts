@@ -1,8 +1,9 @@
+import { errorMessage } from '@shared/errors';
 import { z } from 'zod';
 
 import { effectiveCapabilities } from '@shared/config';
 import type { AgentBrowser } from '../../browser-tools/agent-browser';
-import { defineTool, textResult, ToolError, type ToolContext, type ToolSpec } from '../tool';
+import { defineTool, textResult, ToolError, type ToolContext } from '../tool';
 
 /** Set by the app once the agent browser exists; tools fail with FAILED until then. */
 let browser: AgentBrowser | null = null;
@@ -34,7 +35,7 @@ async function attempt<T>(work: () => Promise<T>): Promise<T> {
     return await work();
   } catch (error) {
     if (error instanceof ToolError) throw error;
-    throw new ToolError('FAILED', error instanceof Error ? error.message : String(error));
+    throw new ToolError('FAILED', errorMessage(error));
   }
 }
 
@@ -262,4 +263,4 @@ export const browserTools = [
   browserNavigateTool,
   browserActionTool,
   browserEvaluateTool
-] as unknown as ToolSpec[];
+];

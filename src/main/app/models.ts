@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import type { ModelCatalog, ModelOption } from '@shared/types';
 import type { ModelsValue } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
@@ -57,7 +58,7 @@ export class ModelService {
       const value = result.value as ModelsValue;
       this.set({ state: 'ready', models: distinctLabels(value.models), defaultModel: value.defaultModel, fetchedAt: Date.now(), error: null });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       log.warn(`model list unavailable: ${message}`);
       this.set({ ...this.catalog, state: 'error', error: message });
     } finally {

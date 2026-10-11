@@ -24,7 +24,7 @@ import { browserTools, setAgentBrowser } from '../mcp/tools/browser';
 import { AgentBrowser } from '../browser-tools/agent-browser';
 import { sessionFinishTool } from '../mcp/tools/session-finish';
 import { updatePlanTool } from '../mcp/tools/update-plan';
-import { ToolError, type ToolSpec } from '../mcp/tool';
+import { ToolError } from '../mcp/tool';
 import { ControlApi } from '../control-api';
 import { recentLogs, createLogger } from '../core/log';
 import { PluginManager } from '../plugins/manager';
@@ -168,7 +168,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const plugins = new PluginManager({ getConfig, getSecret: (key) => secrets.get(key), onChange: hooks.changed });
   const agentBrowser = new AgentBrowser();
   setAgentBrowser(agentBrowser);
-  const coreTools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool, ...browserTools] as unknown as ToolSpec[];
+  const coreTools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool, ...browserTools];
   const server = new McpHttpServer({
     getConfig,
     tools: () => [...coreTools, ...plugins.tools()],

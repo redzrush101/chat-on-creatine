@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { MAX_IMAGE_BYTES, sniffImage } from '../../fs/files';
@@ -112,7 +113,7 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
       Promise.resolve()
         .then(() => invoke(name, request.args))
         .catch((error: unknown) => ({
-          content: [{ type: 'text' as const, text: `FAILED: ${error instanceof Error ? error.message : String(error)}` }],
+          content: [{ type: 'text' as const, text: `FAILED: ${errorMessage(error)}` }],
           isError: true
         }))
         .then((result) => post({ type: 'result', id, json: JSON.stringify(result) }))

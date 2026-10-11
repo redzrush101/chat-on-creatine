@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ButtonHTMLAttributes, JSX, ReactNode } from 'react';
 import type { DeepPartial, Config } from '@shared/config';
@@ -8,15 +9,11 @@ import { connectionView } from '../lib/connection';
 /** Errors from saving settings are shown by the settings shell, not swallowed. */
 export const ReportContext = createContext<(message: string) => void>(() => undefined);
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export function useSave(): (patch: DeepPartial<Config>) => void {
   const report = useContext(ReportContext);
   return useCallback(
     (patch: DeepPartial<Config>) => {
-      invoke('config:update', patch).catch((error: unknown) => report(errorText(error)));
+      invoke('config:update', patch).catch((error: unknown) => report(errorMessage(error)));
     },
     [report]
   );
@@ -29,7 +26,7 @@ export function useSecretSave(): (key: 'tunnelApiKey' | 'automationApiKey', valu
       try {
         await invoke('secrets:set', key, value);
       } catch (error) {
-        report(errorText(error));
+        report(errorMessage(error));
       }
     },
     [report]
@@ -386,7 +383,7 @@ export function useRun(): (task: () => Promise<unknown>) => Promise<void> {
       try {
         await task();
       } catch (error) {
-        report(errorText(error));
+        report(errorMessage(error));
       }
     },
     [report]

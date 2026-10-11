@@ -1,3 +1,4 @@
+import { errorMessage } from '@shared/errors';
 import type { Config, SecretKey } from '@shared/config';
 import type { ConnectionState, ConnectionStatus, SurfaceId, SurfaceStatus } from '@shared/types';
 import { createLogger } from '../core/log';
@@ -176,7 +177,7 @@ export class ConnectionManager {
       await this.deps.server.start(config.connection.port);
     } catch (error) {
       log.error('local server did not start', error);
-      this.setSurface('core', 'error', error instanceof Error ? error.message : String(error));
+      this.setSurface('core', 'error', errorMessage(error));
       this.emit();
       return;
     }
@@ -214,7 +215,7 @@ export class ConnectionManager {
       }
       runtime.handle = handle;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       log.warn(`${id} tunnel not started: ${message}`);
       this.setSurface(id, 'error', message);
     }
