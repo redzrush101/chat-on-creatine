@@ -105,6 +105,16 @@ describe('code mode (exec)', () => {
     expect((JSON.parse(texts[0]!) as { content: Array<{ text: string }> }).content[0]!.text).toBe('echo:x');
   });
 
+  it('validates nested arguments before executing the tool', async () => {
+    const { texts, isError } = await run(client, 'text(await tools.echo({value: 42}))');
+    const result = JSON.parse(texts[0]!) as { isError: boolean; content: Array<{ text: string }> };
+    expect(isError).toBe(false);
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('INVALID_ARGUMENT');
+    expect(result.content[0]!.text).toContain('value');
+    expect(calls.map((call) => call.tool)).toEqual(['exec']);
+  });
+
   it('runs Promise.all over nested calls', async () => {
     const code = "const [a, b] = await Promise.all([tools.echo({value:'a'}), tools.echo({value:'b'})]); text(a.content[0].text + ' ' + b.content[0].text)";
     const { texts } = await run(client, code);

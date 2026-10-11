@@ -279,10 +279,9 @@ export class McpHttpServer {
     );
     for (const tool of tools) {
       // Plugin tools advertise their upstream JSON Schema verbatim; our own tools declare zod.
-      const inputSchema = tool.jsonSchema ? fromJsonSchema(tool.jsonSchema as JsonSchemaType) : z.object(tool.input);
       server.registerTool(
         tool.name,
-        { title: tool.title, description: tool.description, inputSchema, annotations: tool.annotations },
+        { title: tool.title, description: tool.description, inputSchema: toolInputSchema(tool), annotations: tool.annotations },
         (args: unknown) => this.dispatch(tool, args, requestId, signal)
       );
     }
@@ -326,7 +325,15 @@ export class McpHttpServer {
       const tool = this.toolsFor(surface, config).find((candidate) => candidate.name === name);
       if (!tool) throw new ToolError('TOOL_DISABLED', `${name} is turned off in Settings.`);
       requireCaller(tool, config, attribution.caller);
-      return await this.run(tool, args, attribution);
+      const parsed = await toolInputSchema(tool)['~standard'].validate(args ?? {});
+      if (parsed.issues) {
+        const errors = parsed.issues.map((issue) => {
+          const path = issue.path?.map((part) => String(typeof part === 'object' ? part.key : part)).join('.');
+          return path ? `${path}: ${issue.message}` : issue.message;
+        });
+        throw new ToolError('INVALID_ARGUMENT', errors.join('\n'));
+      }
+      return await this.run(tool, parsed.value, attribution);
     } catch (error) {
       return error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
     }
@@ -381,6 +388,10 @@ export class McpHttpServer {
       isError: result.isError ?? false
     };
   }
+}
+
+function toolInputSchema(tool: ToolSpec) {
+  return tool.jsonSchema ? fromJsonSchema(tool.jsonSchema as JsonSchemaType) : z.object(tool.input);
 }
 
 /** Unattributed calls are refused for every tool unless the user allowed them. */
