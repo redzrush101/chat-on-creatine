@@ -57,8 +57,10 @@ describe('ProcessManager', () => {
   });
 
   it('writes input to an interactive process and reads its echo', async () => {
-    const started = await manager.exec({ cmd: 'cat', workdir: os.homedir(), yieldTimeMs: 250 }, 'chat-a');
-    const echoed = await manager.writeStdin({ sessionId: started.sessionId!, chars: 'ping\n', yieldTimeMs: 250 }, 'chat-a');
+    // A node echo behaves the same under every shell; PowerShell's `cat` is Get-Content.
+    const echo = `node -e "process.stdin.pipe(process.stdout)"`;
+    const started = await manager.exec({ cmd: echo, workdir: os.homedir(), yieldTimeMs: 250 }, 'chat-a');
+    const echoed = await manager.writeStdin({ sessionId: started.sessionId!, chars: 'ping\n', yieldTimeMs: 2000 }, 'chat-a');
     expect(echoed.output).toContain('ping');
     expect(echoed.sessionId).toBe(started.sessionId);
   });

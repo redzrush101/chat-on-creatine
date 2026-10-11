@@ -6,23 +6,26 @@ import { defaultConfig } from '@shared/config';
 import type { SessionMeta } from '@shared/types';
 import { AgentController } from '../src/main/agents/controller';
 import { type Caller, ToolError } from '../src/main/mcp/tool';
-import { flushWrites } from '../src/main/core/durable';
 import { Outbox } from '../src/main/sessions/outbox';
 import { SessionStore } from '../src/main/sessions/store';
 
 let dir: string;
+let stores: SessionStore[] = [];
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'agents-test-'));
 });
 
 afterEach(async () => {
-  await flushWrites();
+  // Saves are debounced; flushing the stores keeps a late save from racing the removal.
+  await Promise.all(stores.map((store) => store.flush()));
+  stores = [];
   rmSync(dir, { recursive: true, force: true });
 });
 
 function setup() {
   const store = new SessionStore(dir, { recording: () => true });
+  stores.push(store);
   store.load();
   const outbox = new Outbox(join(dir, 'outbox.json'));
   const controller = new AgentController({
