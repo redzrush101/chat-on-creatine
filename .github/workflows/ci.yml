@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Repository rules
+        run: npm run check
+
       - name: Typecheck
         run: npm run typecheck
 

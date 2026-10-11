@@ -1,0 +1,9 @@
+#!/bin/sh
+# Staged files: nothing private, and the mechanical code rules (AGENTS.md). On NixOS, node may only exist in the dev shell.
+if command -v node >/dev/null 2>&1; then
+  exec node scripts/check-repo.mjs --staged
+elif command -v nix >/dev/null 2>&1; then
+  exec nix develop --quiet -c node scripts/check-repo.mjs --staged
+fi
+echo "check-repo: node not found; install Node 24 or use nix develop" >&2
+exit 1

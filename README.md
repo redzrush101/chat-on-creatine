@@ -51,10 +51,13 @@ unsigned; the release notes explain the one-time step each system asks for.
 
 ```sh
 npm run dev         # electron-vite with HMR
-npm run verify      # typecheck, tests, build
+npm run verify      # repository rules, typecheck, tests, build
 npm run build:extension   # companion extension for the Chrome host
 npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
 ```
+
+Read [AGENTS.md](AGENTS.md) before changing code, and [CONTRIBUTING.md](CONTRIBUTING.md) for
+pull requests and releases.
 
 Code map: `src/shared` contracts · `src/main/mcp` server + tools · `src/main/chatgpt` hosts + router ·
 `src/page` in-page driver · `src/main/sessions` history/outbox/recorder · `src/main/{agents,automation}` workers,

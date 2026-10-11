@@ -20,13 +20,15 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "verify": "npm run typecheck && npm run test && npm run build",
+    "check": "node scripts/check-repo.mjs",
+    "verify": "npm run check && npm run typecheck && npm run test && npm run build",
     "tunnel-client": "node scripts/fetch-tunnel-client.mjs",
     "rebuild-native": "node scripts/rebuild-native.mjs",
     "build:extension": "node scripts/build-extension.mjs",
     "dist": "npm run build && electron-builder --publish never",
     "dist:dir": "npm run build && electron-builder --dir --publish never",
-    "smoke": "node scripts/smoke-packaged.mjs release"
+    "smoke": "node scripts/smoke-packaged.mjs release",
+    "prepare": "node scripts/install-hooks.mjs"
   },
   "dependencies": {
     "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
