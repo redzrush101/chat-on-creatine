@@ -24,7 +24,7 @@ afterEach(async () => {
 const NOT_DONE = '{"done": false, "message": "Keep going", "reason": "more to do"}';
 const DONE = '```json\n{"done": true, "message": "", "reason": "all requested work is in"}\n```';
 
-function setup(options: { reply?: string; maxSteps?: number; config?: (config: Config) => void } = {}) {
+function setup(options: { reply?: string; maxSteps?: number; helper?: boolean; config?: (config: Config) => void } = {}) {
   const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
   const outbox = new Outbox(join(dir, 'outbox.json'));
   const config = defaultConfig();
@@ -40,13 +40,13 @@ function setup(options: { reply?: string; maxSteps?: number; config?: (config: C
     getSecret: () => null,
     setTurn,
     workersBusy: () => false,
-    decide
+    decide: options.helper ? undefined : decide
   });
   const chat = store.create({ kind: 'chat', conversationId: 'conv-1' });
   const current = (): SessionMeta => store.get(chat.id)!;
   const finish = (outcome: 'done' | 'stopped' = 'done') => automation.onTurnEnd(current(), outcome);
-  const answer = (text: string) =>
-    store.append(chat.id, [
+  const answer = (text: string, sessionId = chat.id) =>
+    store.append(sessionId, [
       { kind: 'assistant', id: `answer:${text}`, at: Date.now(), messageId: text, text, channel: 'final', model: null, streaming: false }
     ]);
   const queued = () => outbox.list(chat.id).filter((item) => item.state === 'queued');
@@ -58,6 +58,42 @@ async function settle(): Promise<void> {
 }
 
 describe('Goal and Loop', () => {
+  it.each(['failed', 'cancelled'] as const)('reports a %s helper send without waiting for its response timeout', async (state) => {
+    const t = setup({ helper: true });
+    t.automation.setMode(t.chat.id, 'goal', 'Build the thing');
+    t.finish();
+    const helper = t.store.list().find((session) => session.kind === 'helper')!;
+    const input = t.outbox.list(helper.id)[0]!;
+    if (state === 'failed') {
+      t.outbox.markSending(input.id);
+      t.outbox.markFailed(input.id, 'composer unavailable');
+    } else {
+      t.outbox.cancel(input.id);
+    }
+    await vi.waitFor(() => expect(t.current().goal.status).toBe('error'));
+    expect(t.queued()).toEqual([]);
+    expect(t.store.events(t.chat.id)).toContainEqual(expect.objectContaining({ kind: 'notice', level: 'error', text: expect.stringContaining(state === 'failed' ? 'composer unavailable' : 'cancelled') }));
+  });
+
+  it('does not mistake an earlier failed helper input for the current decision', async () => {
+    const t = setup({ helper: true });
+    t.automation.setMode(t.chat.id, 'goal', 'Build the thing');
+    t.finish();
+    const helper = t.store.list().find((session) => session.kind === 'helper')!;
+    const first = t.outbox.list(helper.id)[0]!;
+    t.outbox.markSending(first.id);
+    t.outbox.markFailed(first.id, 'composer unavailable');
+    await vi.waitFor(() => expect(t.current().goal.status).toBe('error'));
+    t.automation.setMode(t.chat.id, 'goal', 'Build the thing');
+    t.finish();
+    const next = t.outbox.list(helper.id).find((item) => item.state === 'queued')!;
+    t.outbox.markSending(next.id);
+    t.outbox.markSent(next.id);
+    t.answer(DONE, helper.id);
+    t.automation.onTurnEnd(helper, 'done');
+    await vi.waitFor(() => expect(t.current().goal.status).toBe('done'));
+  });
+
   it('sends the next instruction and counts the step when not done', async () => {
     const t = setup();
     t.automation.setMode(t.chat.id, 'goal', 'Build the thing');

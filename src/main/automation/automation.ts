@@ -31,6 +31,7 @@ interface Compaction {
 }
 
 interface HelperWaiter {
+  inputId: string | null;
   resolve(text: string): void;
   reject(error: Error): void;
   timer: ReturnType<typeof setTimeout>;
@@ -48,7 +49,10 @@ export class Automation {
   private readonly epochs = new Map<string, number>();
 
   constructor(private readonly deps: AutomationDeps) {
-    deps.outbox.onChange(() => this.reconcileCompactions());
+    deps.outbox.onChange(() => {
+      this.reconcileCompactions();
+      this.reconcileHelperSends();
+    });
   }
 
   setMode(sessionId: string, mode: AutomationMode, objective?: string): void {
@@ -188,10 +192,23 @@ export class Automation {
         this.helperWaiters.delete(helper.id);
         reject(new Error('The decider chat did not answer within 10 minutes.'));
       }, HELPER_TIMEOUT_MS);
-      this.helperWaiters.set(helper.id, { resolve, reject, timer });
+      this.helperWaiters.set(helper.id, { resolve, reject, timer, inputId: null });
     });
-    this.deps.outbox.enqueue({ sessionId: helper.id, text: prompt, attachments: [], delivery: 'after-turn', source: 'automation' });
+    const input = this.deps.outbox.enqueue({ sessionId: helper.id, text: prompt, attachments: [], delivery: 'after-turn', source: 'automation' });
+    const waiter = this.helperWaiters.get(helper.id);
+    if (waiter) waiter.inputId = input.id;
+    this.reconcileHelperSends();
     return answer;
+  }
+
+  private reconcileHelperSends(): void {
+    for (const [sessionId, waiter] of this.helperWaiters) {
+      const input = this.deps.outbox.list(sessionId).find((item) => item.id === waiter.inputId);
+      if (!input || (input.state !== 'failed' && input.state !== 'cancelled')) continue;
+      this.helperWaiters.delete(sessionId);
+      clearTimeout(waiter.timer);
+      waiter.reject(new Error(input.state === 'failed' ? `The decider message could not be sent: ${input.error}` : 'The decider message was cancelled.'));
+    }
   }
 
   private helperFor(meta: SessionMeta): SessionMeta {
