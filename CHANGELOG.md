@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-10-11
 
 - Faster turns: a new chat or worker starts in a preloaded ChatGPT tab (about 3 s saved),
   the model picker is only reopened when the selection changes (about 0.3 s per message),
