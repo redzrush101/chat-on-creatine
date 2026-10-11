@@ -24,8 +24,6 @@ const SELECTORS = {
   ],
   /** The primary-action slot (voice, send or stop) in the composer form; icon-matched when unlabelled. */
   primarySlot: 'button[class*="size-token-button-composer"][class*="bg-composer-primary"]',
-  fileInput: 'input[type="file"]',
-  uploadBusy: '[aria-busy="true"], [role="progressbar"], [data-inline-file-uploading]',
   alert: '[role="alert"]',
   dialog: '[role="dialog"], [role="alertdialog"]',
   modelTrigger: [
@@ -84,7 +82,7 @@ export function findComposer(): HTMLElement | null {
   );
 }
 
-function composerForm(): HTMLFormElement | null {
+export function composerForm(): HTMLFormElement | null {
   return findComposer()?.closest('form') ?? null;
 }
 
@@ -189,38 +187,6 @@ export function clickStop(): boolean {
   return true;
 }
 
-/**
- * Attaches files through the composer's own file input and waits until every upload has finished
- * (no progress markers, send enabled). Resolves false on a missing input or a timeout.
- */
-export async function attachFiles(files: File[], timeoutMs = 120_000): Promise<boolean> {
-  const form = composerForm() ?? document;
-  const inputs = [...form.querySelectorAll<HTMLInputElement>(SELECTORS.fileInput)].filter((input) => !input.disabled);
-  const images = files.every((file) => file.type.startsWith('image/'));
-  const input =
-    inputs.find((candidate) => (images ? candidate.accept.includes('image') : !candidate.accept)) ?? inputs[0];
-  if (!input) return false;
-
-  const transfer = new DataTransfer();
-  for (const file of files) transfer.items.add(file);
-  input.files = transfer.files;
-  input.dispatchEvent(new Event('change', { bubbles: true }));
-
-  // Done when every file has a tile and nothing in the composer is still uploading. The send
-  // button is no evidence here: with tiles present it is not reliably identifiable.
-  const deadline = Date.now() + timeoutMs;
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  while (Date.now() < deadline) {
-    const current = composerForm();
-    const labels = [...(current?.querySelectorAll<HTMLElement>('button[aria-label]') ?? [])].map((b) => b.getAttribute('aria-label') ?? '');
-    // ChatGPT renames repeat uploads ("notes(1).txt"), so match on the name without extension.
-    const tiled = files.every((file) => labels.some((label) => label.includes(file.name.replace(/\.[^.]*$/, ''))));
-    const busy = current?.querySelector(SELECTORS.uploadBusy) != null;
-    if (tiled && !busy) return true;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  return false;
-}
 
 interface ErrorNotice {
   level: 'warn' | 'error';

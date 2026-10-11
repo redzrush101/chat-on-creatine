@@ -6,6 +6,7 @@ import * as dom from './dom';
 import type { createBackend } from './backend';
 import { DriverError, fail } from './errors';
 import { parseModels } from './models';
+import { attachFiles } from './attachments';
 import type { StreamRelay } from './streams';
 
 const MODELS_PATH = '/backend-api/models?iim=false&include_icons=false&is_gizmo=false';
@@ -55,7 +56,7 @@ export class PageCommands {
     if (!(await waitFor(() => dom.findComposer() !== null, 15_000))) return fail('not-ready', 'composer not found');
     if (dom.isGenerating()) return fail('busy', 'a response is still generating');
     if (!dom.setComposerText(text)) return fail('failed', 'could not type into the composer');
-    if (files.length > 0 && !(await dom.attachFiles(files.map(toFile)))) {
+    if (files.length > 0 && !(await attachFiles(files.map(toFile)))) {
       return fail('failed', 'attachments did not finish uploading');
     }
     const sendable = (): boolean => {

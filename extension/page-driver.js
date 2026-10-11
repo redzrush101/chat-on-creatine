@@ -374,8 +374,6 @@
     ],
     /** The primary-action slot (voice, send or stop) in the composer form; icon-matched when unlabelled. */
     primarySlot: 'button[class*="size-token-button-composer"][class*="bg-composer-primary"]',
-    fileInput: 'input[type="file"]',
-    uploadBusy: '[aria-busy="true"], [role="progressbar"], [data-inline-file-uploading]',
     alert: '[role="alert"]',
     dialog: '[role="dialog"], [role="alertdialog"]',
     modelTrigger: [
@@ -513,28 +511,6 @@
     button.click();
     return true;
   }
-  async function attachFiles(files, timeoutMs = 12e4) {
-    const form = composerForm() ?? document;
-    const inputs = [...form.querySelectorAll(SELECTORS.fileInput)].filter((input2) => !input2.disabled);
-    const images = files.every((file) => file.type.startsWith("image/"));
-    const input = inputs.find((candidate) => images ? candidate.accept.includes("image") : !candidate.accept) ?? inputs[0];
-    if (!input) return false;
-    const transfer = new DataTransfer();
-    for (const file of files) transfer.items.add(file);
-    input.files = transfer.files;
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    const deadline = Date.now() + timeoutMs;
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    while (Date.now() < deadline) {
-      const current = composerForm();
-      const labels = [...current?.querySelectorAll("button[aria-label]") ?? []].map((b) => b.getAttribute("aria-label") ?? "");
-      const tiled = files.every((file) => labels.some((label) => label.includes(file.name.replace(/\.[^.]*$/, ""))));
-      const busy = current?.querySelector(SELECTORS.uploadBusy) != null;
-      if (tiled && !busy) return true;
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-    return false;
-  }
   function readErrorNotice() {
     for (const dialog of document.querySelectorAll(SELECTORS.dialog)) {
       if (!visible(dialog)) continue;
@@ -614,6 +590,41 @@
     const fallback = list.find((model) => model.is_default === true);
     const defaultModel = typeof root.default_model_slug === "string" ? root.default_model_slug : typeof fallback?.slug === "string" ? fallback.slug : null;
     return { defaultModel, models };
+  }
+
+  // src/page/attachments.ts
+  var FILE_INPUT = 'input[type="file"]';
+  var UPLOAD_BUSY = '[aria-busy="true"], [role="progressbar"], [data-inline-file-uploading]';
+  async function waitForFileInput(files, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    const images = files.every((file) => file.type.startsWith("image/"));
+    do {
+      const form = composerForm() ?? document;
+      const inputs = [...form.querySelectorAll(FILE_INPUT)].filter((input2) => !input2.disabled);
+      const input = inputs.find((candidate) => images ? candidate.accept.includes("image") : !candidate.accept) ?? inputs[0];
+      if (input) return input;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } while (Date.now() < deadline);
+    return null;
+  }
+  async function attachFiles(files, timeoutMs = 12e4) {
+    const input = await waitForFileInput(files, Math.min(timeoutMs, 15e3));
+    if (!input) return false;
+    const transfer = new DataTransfer();
+    for (const file of files) transfer.items.add(file);
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    const deadline = Date.now() + timeoutMs;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    while (Date.now() < deadline) {
+      const current = composerForm();
+      const labels = [...current?.querySelectorAll("button[aria-label]") ?? []].map((b) => b.getAttribute("aria-label") ?? "");
+      const tiled = files.every((file) => labels.some((label) => label.includes(file.name.replace(/\.[^.]*$/, ""))));
+      const busy = current?.querySelector(UPLOAD_BUSY) != null;
+      if (tiled && !busy) return true;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
   }
 
   // src/page/commands.ts
