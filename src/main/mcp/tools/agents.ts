@@ -26,7 +26,8 @@ export const agentsTool = defineTool({
   surface: 'core',
   title: 'Multi-agent run',
   description:
-    'Run ChatGPT worker chats. Omit model and reasoning_effort unless the user explicitly requests an override; saved app defaults apply. ' +
+    'Run ChatGPT worker chats. spawn takes workers: [{label, task}] and optional context. ' +
+    'Omit model and reasoning_effort unless the user explicitly requests an override; saved app defaults apply. ' +
     'Do not ask the user to choose them. Reuse a suitable sleeping worker with message before spawn. ' +
     'message: prime↔worker. Reports ride tool results, never restart primes. Use status once to collect pending reports before finalizing; ' +
     'otherwise state that review is pending. Never poll repeatedly. ' +
