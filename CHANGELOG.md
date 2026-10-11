@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased]
+
+- Faster turns: a new chat or worker starts in a preloaded ChatGPT tab (about 3 s saved),
+  the model picker is only reopened when the selection changes (about 0.3 s per message),
+  and a turn ends at ChatGPT's final answer instead of seconds later when its stream closes.
+  The code mode tool lists every tool's arguments, so the model no longer spends its first
+  call of a turn discovering them.
+- A prime chat's message to a working worker now arrives within seconds as a real message
+  (the worker's turn is stopped) instead of waiting for its next tool result. Worker reports
+  are labelled as agent messages, are no longer re-sent as if you had written them, and
+  several waiting reports reach the prime in one message. Workers can report from code mode.
+- The context meter counts what the model actually received: full tool results, the opening
+  context and ChatGPT's own transcript, only since the last Compact & Resume, updating
+  during the turn.
+- apply_patch rewrites files in place like your shell does, fixing "permission denied" for
+  writable files in folders you cannot create files in (seen on macOS).
+- YOLO mode (Settings → Workspace): every capability on, any path, no command policy.
+- The terminal starts your account's login shell even when the app was launched from a dev
+  shell, and the work panel floats over the chat in tiled or half-screen windows instead of
+  not opening.
+
 ## [0.1.1] - 2026-10-11
 
 - Match the model picker and thinking levels to the choices available in your signed-in
