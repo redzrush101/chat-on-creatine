@@ -1,4 +1,4 @@
-import { BaseWindow, nativeImage, WebContentsView, type Rectangle } from 'electron';
+import { BrowserWindow, nativeImage } from 'electron';
 
 import { formatAxTree } from './snapshot-format';
 import { BrowserCapture, type ConsoleEntry, type NetworkEntry, type Page } from './capture';
@@ -36,26 +36,17 @@ function tabInfo(tab: Tab): TabInfo {
 }
 
 /**
- * App-owned browser for the Desktop browser tools. Pages live in hidden WebContentsViews and are
+ * App-owned browser for the Desktop browser tools. Pages render offscreen and are
  * driven through the Chrome DevTools Protocol, so they keep rendering while the window is hidden.
  */
 export class AgentBrowser {
-  private window: BaseWindow | null = null;
   private readonly tabs = new Map<string, Tab>();
   private tabCount = 0;
   private refCount = 0;
-  private closing = false;
   private readonly input = new BrowserInput();
 
-  show(): void {
-    this.ensureWindow().show();
-  }
-
   dispose(): void {
-    this.closing = true;
     for (const tab of [...this.tabs.values()]) this.closeTab(tab);
-    this.window?.destroy();
-    this.window = null;
   }
 
   listTabs(): TabInfo[] {
@@ -64,23 +55,27 @@ export class AgentBrowser {
 
   async newTab(url?: string): Promise<TabInfo> {
     const target = url === undefined ? null : parseWebUrl(url);
-    const win = this.ensureWindow();
-    const view = new WebContentsView({
+    // Offscreen pages produce compositor frames while hidden, including full-page captures.
+    const window = new BrowserWindow({
+      show: false,
+      frame: false,
+      useContentSize: true,
+      width: 1280,
+      height: 900,
       webPreferences: {
         partition: PARTITION,
         sandbox: true,
         contextIsolation: true,
         nodeIntegration: false,
-        backgroundThrottling: false
+        backgroundThrottling: false,
+        offscreen: true
       }
     });
-    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    win.contentView.addChildView(view);
-    view.setBounds(this.contentBounds(win));
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     const tab: Tab = {
       id: `t${++this.tabCount}`,
-      view,
-      wc: view.webContents,
+      window,
+      wc: window.webContents,
       refs: new Map(),
       refIds: new Map(),
       capture: new BrowserCapture()
@@ -107,8 +102,7 @@ export class AgentBrowser {
         // Already detached, for example after DevTools took the session.
       }
     }
-    this.window?.contentView.removeChildView(tab.view);
-    if (!tab.wc.isDestroyed()) tab.wc.close();
+    if (!tab.window.isDestroyed()) tab.window.destroy();
     this.tabs.delete(tab.id);
   }
 
@@ -231,28 +225,6 @@ export class AgentBrowser {
     const tab = tabId === undefined ? [...this.tabs.values()].at(-1) : this.tabs.get(tabId);
     if (!tab) throw new Error(tabId === undefined ? 'No tab is open. Open one with browser_tabs action new.' : `Unknown tab ${tabId}. Call browser_tabs with action list.`);
     return tab;
-  }
-
-  private ensureWindow(): BaseWindow {
-    if (this.window && !this.window.isDestroyed()) return this.window;
-    const win = new BaseWindow({ show: false, width: 1280, height: 900, title: 'Agent browser' });
-    win.on('resize', () => {
-      for (const tab of this.tabs.values()) tab.view.setBounds(this.contentBounds(win));
-    });
-    win.on('close', (event) => {
-      // The window is an app-owned surface; closing it only hides it, so tabs keep working.
-      if (!this.closing) {
-        event.preventDefault();
-        win.hide();
-      }
-    });
-    this.window = win;
-    return win;
-  }
-
-  private contentBounds(win: BaseWindow): Rectangle {
-    const { width, height } = win.getContentBounds();
-    return { x: 0, y: 0, width, height };
   }
 
   private async attach(tab: Tab): Promise<void> {
