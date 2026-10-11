@@ -28,16 +28,6 @@ export function formatTokens(count: number): string {
   return `${(count / 1_000_000).toFixed(1)}M`;
 }
 
-export function formatRelative(at: number, now = Date.now()): string {
-  const diff = Math.max(0, now - at);
-  const minute = 60_000;
-  if (diff < minute) return 'now';
-  if (diff < 60 * minute) return `${Math.floor(diff / minute)}m`;
-  if (diff < 24 * 60 * minute) return `${Math.floor(diff / (60 * minute))}h`;
-  if (diff < 7 * 24 * 60 * minute) return `${Math.floor(diff / (24 * 60 * minute))}d`;
-  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
 /** "3 minutes ago", for message timestamps. */

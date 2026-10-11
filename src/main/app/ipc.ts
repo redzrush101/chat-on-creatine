@@ -75,7 +75,6 @@ export function registerIpc(getServices: () => Services | null, snapshot: () => 
       return result.canceled ? [] : result.filePaths;
     },
 
-    'config:get': () => s().config.get(),
     'config:update': (patch) => s().config.update(patch),
     'secrets:set': (key, value) => s().secrets.set(key, value),
 
@@ -92,10 +91,6 @@ export function registerIpc(getServices: () => Services | null, snapshot: () => 
     'browser:refreshModels': () => void s().models.refresh(),
     'browser:signIn': () => void s().host.openTab('https://chatgpt.com/auth/login', { reveal: true }),
 
-    'sessions:create': ({ projectId }) => {
-      const config = s().config.get();
-      return s().store.create({ kind: 'chat', projectId, model: config.ui.defaultModel, reasoning: config.ui.defaultReasoning });
-    },
     'sessions:events': (sessionId) => s().store.events(sessionId),
     'sessions:update': (sessionId, patch) => {
       const updated = s().store.update(sessionId, patch);

@@ -52,7 +52,7 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
   private quitting = false;
   private readonly ipcHandlers: Array<() => void> = [];
 
-  constructor(private readonly options: { preloadPath: string; iconPath?: string }) {
+  constructor(private readonly options: { preloadPath: string }) {
     super();
   }
 

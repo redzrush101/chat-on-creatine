@@ -35,7 +35,7 @@ export const ToolRow = memo(function ToolRow({ event, defaultOpen = false }: { e
 });
 
 /** What a call did: its command and output, its diffs, or its arguments and text result. */
-export function ToolDetails({ event }: { event: ToolEvent }) {
+function ToolDetails({ event }: { event: ToolEvent }) {
   const described = describeTool(event);
   const shown = event.output.filter((part) => part.type !== 'text' || part.text.trim());
   const execs = shown.some((part) => part.type === 'exec');

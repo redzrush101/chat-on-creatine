@@ -53,7 +53,6 @@ export interface RendererApi {
   'app:pickFolder': () => string | null;
   'app:pickFiles': () => string[];
 
-  'config:get': () => Config;
   'config:update': (patch: DeepPartial<Config>) => Config;
   'secrets:set': (key: SecretKey, value: string | null) => void;
 
@@ -66,7 +65,6 @@ export interface RendererApi {
   'browser:refreshModels': () => void;
   'browser:signIn': () => void;
 
-  'sessions:create': (init: { projectId: string | null; kind?: 'chat' }) => SessionMeta;
   'sessions:events': (sessionId: string) => SessionEvent[];
   'sessions:update': (
     sessionId: string,
@@ -136,7 +134,6 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'app:revealPath',
   'app:pickFolder',
   'app:pickFiles',
-  'config:get',
   'config:update',
   'secrets:set',
   'connection:connect',
@@ -146,7 +143,6 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'browser:hide',
   'browser:refreshModels',
   'browser:signIn',
-  'sessions:create',
   'sessions:events',
   'sessions:update',
   'sessions:delete',

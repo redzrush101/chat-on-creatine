@@ -14,7 +14,7 @@ const TerminalTab = lazy(() => import('./TerminalTab').then((module) => ({ defau
 
 export type PanelTab = 'tasks' | 'plan' | 'files' | 'changes' | 'terminal';
 
-export const PANEL_TABS: readonly { id: PanelTab; label: string; icon: typeof ListChecks }[] = [
+const PANEL_TABS: readonly { id: PanelTab; label: string; icon: typeof ListChecks }[] = [
   { id: 'tasks', label: 'Background tasks', icon: Layers },
   { id: 'plan', label: 'Plan', icon: ListChecks },
   { id: 'files', label: 'Files', icon: FolderOpen },

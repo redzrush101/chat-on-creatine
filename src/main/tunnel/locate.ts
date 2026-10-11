@@ -13,8 +13,8 @@ interface LocateOptions {
   resourcesBinDir: string | null;
 }
 
-function executableName(name: BinaryName, platform: NodeJS.Platform = process.platform): string {
-  return platform === 'win32' ? `${name}.exe` : name;
+function executableName(name: BinaryName): string {
+  return process.platform === 'win32' ? `${name}.exe` : name;
 }
 
 /**
