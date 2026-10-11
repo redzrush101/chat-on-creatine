@@ -1,37 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
-import type { GitFileChange, GitStatus } from '@shared/types';
+import type { GitFileChange } from '@shared/types';
 import { DiffBody } from '../components/chat/ToolCard';
 import { diffRows } from '../components/chat/tool-labels';
 import { invoke } from '../lib/bridge';
-import { basename, errorMessage } from '../lib/format';
+import { basename } from '../lib/format';
+import { useGitStatus } from '../lib/git-status';
 import { Empty, Notice, useLoaded } from './common';
 
-export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
-  const [status, setStatus] = useState<GitStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+/** The chat folder's changes, kept current while the model works; `refreshKey` changes with each turn. */
+export function ChangesTab({ rootDir, refreshKey }: { rootDir: string | null; refreshKey: string }): JSX.Element {
+  const { status, error, loading, refresh } = useGitStatus(rootDir, refreshKey);
   const [selected, setSelected] = useState<GitFileChange | null>(null);
 
-  const refresh = useCallback(() => {
-    if (!rootDir) return;
-    setLoading(true);
-    setError(null);
-    invoke('files:gitStatus', rootDir)
-      .then(setStatus)
-      .catch((failure: unknown) => setError(errorMessage(failure)))
-      .finally(() => setLoading(false));
-  }, [rootDir]);
-
-  useEffect(() => {
-    setStatus(null);
-    setSelected(null);
-    refresh();
-  }, [refresh]);
+  useEffect(() => setSelected(null), [rootDir]);
 
   if (!rootDir) return <Empty title="No folder for this chat">Approve a project folder in Settings to see its changes.</Empty>;
-  if (selected) return <FileDiff rootDir={rootDir} change={selected} onBack={() => setSelected(null)} />;
+  if (selected) return <FileDiff rootDir={rootDir} change={selected} refreshKey={refreshKey} onBack={() => setSelected(null)} />;
 
   return (
     <div className="wp-changes">
@@ -76,8 +62,8 @@ function statusLetter(code: string): string {
   return letter || '?';
 }
 
-function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFileChange; onBack(): void }): JSX.Element {
-  const { value: diff, error } = useLoaded(`${rootDir}\0${change.path}`, () => invoke('files:gitDiff', rootDir, change.path));
+function FileDiff({ rootDir, change, refreshKey, onBack }: { rootDir: string; change: GitFileChange; refreshKey: string; onBack(): void }): JSX.Element {
+  const { value: diff, error } = useLoaded(`${rootDir}\0${change.path}\0${refreshKey}`, () => invoke('files:gitDiff', rootDir, change.path));
   const rows = useMemo(() => (diff === null ? null : diffRows(diff)), [diff]);
 
   return (

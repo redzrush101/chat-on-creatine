@@ -69,7 +69,7 @@ export function WorkPanel({ sessionId, tab, wide, onTab, onToggleWide, onClose, 
         {tab === 'plan' && <PlanTab sessionId={sessionId} />}
         <Suspense fallback={null}>
           {tab === 'files' && <FilesTab rootDir={rootDir} />}
-          {tab === 'changes' && <ChangesTab rootDir={rootDir} />}
+          {tab === 'changes' && <ChangesTab rootDir={rootDir} refreshKey={state?.live[sessionId]?.turn ?? 'idle'} />}
           {tab === 'terminal' && <TerminalTab rootDir={rootDir} />}
         </Suspense>
       </div>
