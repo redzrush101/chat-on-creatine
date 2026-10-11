@@ -595,43 +595,11 @@
   color: var(--danger);
 }
 
-.wp-diff {
+.wp-diff-view .diff-body {
   flex: 1;
   min-height: 0;
-  margin: 0;
-  padding: var(--space-2) 0;
-  overflow: auto;
+  max-height: none;
   background: var(--bg-code);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-}
-
-.wp-diff-line {
-  padding: 0 var(--space-3);
-  white-space: pre;
-  min-width: max-content;
-  color: var(--text-muted);
-}
-
-.wp-diff-line.is-add {
-  background: var(--diff-add);
-  color: var(--success);
-}
-
-.wp-diff-line.is-del {
-  background: var(--diff-del);
-  color: var(--danger);
-}
-
-.wp-diff-line.is-hunk {
-  color: var(--accent);
-  background: var(--accent-soft);
-  margin-top: var(--space-1);
-}
-
-.wp-diff-line.is-meta {
-  color: var(--text-faint);
 }
 
 /* ---------------------------------------------------------------- terminal */

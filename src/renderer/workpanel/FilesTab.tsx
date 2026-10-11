@@ -1,13 +1,12 @@
-import { basename, errorMessage, relativeTo } from '../lib/format';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import type { FileEntry } from '@shared/types';
-import type { FileContent } from '@shared/ipc';
 import { invoke } from '../lib/bridge';
+import { basename, relativeTo } from '../lib/format';
 import { useCopy } from '../lib/hooks';
 import { CodeViewer } from './CodeViewer';
-import { Empty, formatBytes, Notice, useAction } from './common';
+import { Empty, formatBytes, Notice, useAction, useLoaded } from './common';
 
 export function FilesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -39,22 +38,7 @@ export function FilesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
 
 /** Lazily loaded children of one folder; sub-folders load when they are expanded. */
 function DirList({ dir, depth, onOpen }: { dir: string; depth: number; onOpen(path: string): void }): JSX.Element {
-  const [entries, setEntries] = useState<FileEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    invoke('files:list', dir)
-      .then((list) => {
-        if (alive) setEntries(sortEntries(list));
-      })
-      .catch((failure: unknown) => {
-        if (alive) setError(errorMessage(failure));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [dir]);
+  const { value: entries, error } = useLoaded(dir, () => invoke('files:list', dir));
 
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!entries) return <div className="wp-tree-status" style={{ paddingLeft: 8 + depth * 14 }}>Loading…</div>;
@@ -92,34 +76,10 @@ function TreeRow({ entry, depth, onOpen }: { entry: FileEntry; depth: number; on
   );
 }
 
-function sortEntries(entries: FileEntry[]): FileEntry[] {
-  return [...entries].sort((a, b) => {
-    if (a.kind !== b.kind) return a.kind === 'dir' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-}
-
 function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; onBack(): void }): JSX.Element {
-  const [file, setFile] = useState<FileContent | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { value: file, error: loadError } = useLoaded(path, () => invoke('files:read', path));
   const [actionError, runAction] = useAction();
   const [copied, copy] = useCopy();
-
-  useEffect(() => {
-    let alive = true;
-    setFile(null);
-    setLoadError(null);
-    invoke('files:read', path)
-      .then((content) => {
-        if (alive) setFile(content);
-      })
-      .catch((failure: unknown) => {
-        if (alive) setLoadError(errorMessage(failure));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [path]);
 
   let body: JSX.Element;
   if (loadError) body = <Notice tone="error">{loadError}</Notice>;

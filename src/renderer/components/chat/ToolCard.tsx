@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, CircleAlert, Copy, Check, Image, LoaderCircl
 import type { SessionEvent, ToolOutputPart, WebSource } from '@shared/types';
 import { basename, cx, formatDuration } from '../../lib/format';
 import { useCopy } from '../../lib/hooks';
-import { describeTool, diffRows } from './tool-labels';
+import { describeTool, diffRows, type DiffRow } from './tool-labels';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 
@@ -172,23 +172,30 @@ export function DiffCard({ path, diff }: { path: string; diff: string }) {
           {copied ? <Check size={13} /> : <Copy size={13} />}
         </button>
       </div>
-      <div className="diff-body scroll" role="table" aria-label={`Changes in ${basename(path)}`}>
-        {rows.map((row, index) =>
-          row.kind === 'gap' ? (
-            <div key={index} className="diff-row is-gap" role="row">
-              <span className="diff-num" />
-              <span className="diff-mark" />
-              <span className="diff-text">⋯</span>
-            </div>
-          ) : (
-            <div key={index} className={`diff-row is-${row.kind}`} role="row">
-              <span className="diff-num">{row.line}</span>
-              <span className="diff-mark">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</span>
-              <span className="diff-text">{row.text || ' '}</span>
-            </div>
-          )
-        )}
-      </div>
+      <DiffBody rows={rows} label={`Changes in ${basename(path)}`} />
+    </div>
+  );
+}
+
+/** A unified diff's rows with line numbers. */
+export function DiffBody({ rows, label }: { rows: DiffRow[]; label: string }) {
+  return (
+    <div className="diff-body scroll" role="table" aria-label={label}>
+      {rows.map((row, index) =>
+        row.kind === 'gap' ? (
+          <div key={index} className="diff-row is-gap" role="row">
+            <span className="diff-num" />
+            <span className="diff-mark" />
+            <span className="diff-text">⋯</span>
+          </div>
+        ) : (
+          <div key={index} className={`diff-row is-${row.kind}`} role="row">
+            <span className="diff-num">{row.line}</span>
+            <span className="diff-mark">{row.kind === 'add' ? '+' : row.kind === 'del' ? '-' : ''}</span>
+            <span className="diff-text">{row.text || ' '}</span>
+          </div>
+        )
+      )}
     </div>
   );
 }

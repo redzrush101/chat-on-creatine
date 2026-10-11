@@ -1,10 +1,12 @@
-import { errorMessage } from '../lib/format';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import type { GitFileChange, GitStatus } from '@shared/types';
+import { DiffBody } from '../components/chat/ToolCard';
+import { diffRows } from '../components/chat/tool-labels';
 import { invoke } from '../lib/bridge';
-import { Empty, Notice } from './common';
+import { basename, errorMessage } from '../lib/format';
+import { Empty, Notice, useLoaded } from './common';
 
 export function ChangesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [status, setStatus] = useState<GitStatus | null>(null);
@@ -75,24 +77,8 @@ function statusLetter(code: string): string {
 }
 
 function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFileChange; onBack(): void }): JSX.Element {
-  const [diff, setDiff] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    setDiff(null);
-    setError(null);
-    invoke('files:gitDiff', rootDir, change.path)
-      .then((text) => {
-        if (alive) setDiff(text);
-      })
-      .catch((failure: unknown) => {
-        if (alive) setError(errorMessage(failure));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [rootDir, change.path]);
+  const { value: diff, error } = useLoaded(`${rootDir}\0${change.path}`, () => invoke('files:gitDiff', rootDir, change.path));
+  const rows = useMemo(() => (diff === null ? null : diffRows(diff)), [diff]);
 
   return (
     <div className="wp-diff-view">
@@ -105,30 +91,9 @@ function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFil
         </span>
       </div>
       {error && <Notice tone="error">{error}</Notice>}
-      {!error && diff === null && <div className="wp-tree-status">Loading diff…</div>}
-      {diff !== null && <UnifiedDiff text={diff} />}
+      {!error && rows === null && <div className="wp-tree-status">Loading diff…</div>}
+      {rows?.length === 0 && <Empty title="No text changes">The file is binary or only its mode changed.</Empty>}
+      {rows && rows.length > 0 && <DiffBody rows={rows} label={`Changes in ${basename(change.path)}`} />}
     </div>
   );
-}
-
-function UnifiedDiff({ text }: { text: string }): JSX.Element {
-  if (text.trim() === '') return <Empty title="No text changes">The file is binary or only its mode changed.</Empty>;
-  const lines = text.split('\n');
-  return (
-    <pre className="wp-diff" role="region" aria-label="Diff">
-      {lines.map((line, index) => (
-        <div key={index} className={`wp-diff-line ${classForLine(line)}`}>
-          {line || ' '}
-        </div>
-      ))}
-    </pre>
-  );
-}
-
-function classForLine(line: string): string {
-  if (line.startsWith('@@')) return 'is-hunk';
-  if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('diff ') || line.startsWith('index ')) return 'is-meta';
-  if (line.startsWith('+')) return 'is-add';
-  if (line.startsWith('-')) return 'is-del';
-  return 'is-context';
 }
