@@ -7,7 +7,7 @@ import type { ComposerProps } from './types';
 import { useComposerDraft } from './draft';
 
 export const MODES: { value: AutomationMode; label: string; hint: string }[] = [
-  { value: 'off', label: 'Normal', hint: 'Plain chat' },
+  { value: 'off', label: 'Normal', hint: 'One answer per message' },
   { value: 'goal', label: 'Goal', hint: 'Keep working toward the objective until it is met' },
   { value: 'loop', label: 'Loop', hint: 'Repeat the brief in steps until stopped' }
 ];
@@ -110,8 +110,8 @@ export function useComposer({
       : mode === 'loop'
         ? 'Describe what the loop should do…'
         : session
-          ? 'Message ChatGPT'
-          : 'What should we work on?';
+          ? 'Reply to ChatGPT…'
+          : 'How can I help you today?';
 
   return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder };
 }

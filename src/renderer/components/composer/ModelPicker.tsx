@@ -17,7 +17,6 @@ interface ModelPickerProps {
   catalog: ModelCatalog;
   onChange(value: ModelValue): void;
   disabled?: boolean;
-  className?: string;
 }
 
 const EFFORT_LABEL: Record<ReasoningEffort, string> = {
@@ -31,86 +30,111 @@ const EFFORT_LABEL: Record<ReasoningEffort, string> = {
   pro: 'Pro'
 };
 
-function modelLabel(catalog: ModelCatalog, model: string | null): string {
-  const labelOf = (id: string) => catalog.models.find((option) => option.id === id)?.label ?? id;
-  if (model) return labelOf(model);
-  return catalog.defaultModel ? `Default (${labelOf(catalog.defaultModel)})` : 'Default';
+function labelOf(catalog: ModelCatalog, id: string): string {
+  return catalog.models.find((option) => option.id === id)?.label ?? id;
 }
 
-/** Model and reasoning effort. `model: null` means the account default. */
-export function ModelPicker({ value, catalog, onChange, disabled, className }: ModelPickerProps) {
+/**
+ * Model and reasoning effort as two quiet triggers, "GPT-5 Thinking · Medium", like the Claude
+ * app's model and effort controls. `model: null` means the account default.
+ */
+export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerProps) {
   const effective = value.model ?? catalog.defaultModel;
   const efforts = catalog.models.find((option) => option.id === effective)?.efforts ?? [];
-  const label = modelLabel(catalog, value.model);
-  const effortLabel = value.reasoning ? ` · ${EFFORT_LABEL[value.reasoning]}` : '';
+  const modelText = value.model ? labelOf(catalog, value.model) : catalog.defaultModel ? labelOf(catalog, catalog.defaultModel) : 'Default model';
 
   return (
-    <Popover
-      label="Model"
-      panelClassName="is-picker"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          className={cx('chip chip-button', className)}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          disabled={disabled}
-          title="Model and reasoning"
-          onClick={toggle}
-        >
-          <span className="chip-text">{label}{effortLabel}</span>
-          <ChevronDown size={12} aria-hidden="true" />
-        </button>
-      )}
-    >
-      {() => (
-        <div className="picker">
-          <div className="picker-label">Model</div>
-          <button type="button" className="menu-item" onClick={() => onChange({ model: null, reasoning: null })}>
-            <span className="menu-text">{modelLabel(catalog, null)}</span>
-            {value.model === null && <Check size={14} className="menu-check" aria-hidden="true" />}
+    <>
+      <Popover
+        label="Model"
+        align="end"
+        panelClassName="is-picker"
+        trigger={({ open, toggle }) => (
+          <button type="button" className="quiet-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title={value.model ? 'Model' : 'Model (account default)'} onClick={toggle}>
+            <span className="chip-text">{modelText}</span>
           </button>
-          {catalog.models.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className="menu-item"
-              onClick={() => onChange({ model: option.id, reasoning: value.reasoning && option.efforts.includes(value.reasoning) ? value.reasoning : null })}
-            >
-              <span className="menu-text">{option.label}</span>
-              {value.model === option.id && <Check size={14} className="menu-check" aria-hidden="true" />}
+        )}
+      >
+        {(close) => (
+          <div className="picker">
+            <div className="picker-label">Model</div>
+            <button type="button" className="menu-item" onClick={() => {
+                  onChange({ model: null, reasoning: null });
+                  close();
+                }}>
+              <span className="menu-text">{catalog.defaultModel ? `Default (${labelOf(catalog, catalog.defaultModel)})` : 'Default'}</span>
+              {value.model === null && <Check size={14} className="menu-check" aria-hidden="true" />}
             </button>
-          ))}
-          {catalog.state === 'loading' && <p className="picker-note">Loading models…</p>}
-          {catalog.state === 'error' && (
-            <p className="picker-note is-error">
-              {catalog.error ?? 'Models unavailable.'}
+            {catalog.models.map((option) => (
               <button
+                key={option.id}
                 type="button"
-                className="link-btn"
-                onClick={() => invoke('browser:refreshModels').catch(reportError)}
+                className="menu-item"
+                onClick={() => {
+                  onChange({ model: option.id, reasoning: value.reasoning && option.efforts.includes(value.reasoning) ? value.reasoning : null });
+                  close();
+                }}
               >
-                <RotateCw size={11} aria-hidden="true" /> Retry
+                <span className="menu-text">{option.label}</span>
+                {value.model === option.id && <Check size={14} className="menu-check" aria-hidden="true" />}
               </button>
-            </p>
+            ))}
+            {catalog.state === 'loading' && <p className="picker-note">Loading models…</p>}
+            {catalog.state === 'error' && (
+              <p className="picker-note is-error">
+                {catalog.error ?? 'Models unavailable.'}
+                <button type="button" className="link-btn" onClick={() => invoke('browser:refreshModels').catch(reportError)}>
+                  <RotateCw size={11} aria-hidden="true" /> Retry
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+      </Popover>
+      {efforts.length > 0 && (
+        <Popover
+          label="Reasoning effort"
+          align="end"
+          panelClassName="is-picker"
+          trigger={({ open, toggle }) => (
+            <button type="button" className="quiet-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title="Reasoning effort" onClick={toggle}>
+              <span className="chip-text">{value.reasoning ? EFFORT_LABEL[value.reasoning] : 'Default'}</span>
+            </button>
           )}
-          {efforts.length > 0 && (
-            <>
+        >
+          {(close) => (
+            <div className="picker">
               <div className="picker-label">Reasoning</div>
-              <button type="button" className="menu-item" onClick={() => onChange({ ...value, reasoning: null })}>
+              <button type="button" className="menu-item" onClick={() => {
+                  onChange({ ...value, reasoning: null });
+                  close();
+                }}>
                 <span className="menu-text">Default</span>
                 {value.reasoning === null && <Check size={14} className="menu-check" aria-hidden="true" />}
               </button>
               {REASONING_EFFORTS.filter((effort) => efforts.includes(effort)).map((effort) => (
-                <button key={effort} type="button" className="menu-item" onClick={() => onChange({ ...value, reasoning: effort })}>
+                <button key={effort} type="button" className="menu-item" onClick={() => {
+                  onChange({ ...value, reasoning: effort });
+                  close();
+                }}>
                   <span className="menu-text">{EFFORT_LABEL[effort]}</span>
                   {value.reasoning === effort && <Check size={14} className="menu-check" aria-hidden="true" />}
                 </button>
               ))}
-            </>
+            </div>
           )}
-        </div>
+        </Popover>
       )}
-    </Popover>
+    </>
+  );
+}
+
+/** A labelled dropdown trigger with a leading chevron, like the Claude app's "⌄ Auto". */
+export function DropdownLabel({ text, className }: { text: string; className?: string }) {
+  return (
+    <span className={cx('dropdown-label', className)}>
+      <ChevronDown size={13} aria-hidden="true" />
+      <span className="chip-text">{text}</span>
+    </span>
   );
 }

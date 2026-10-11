@@ -1,17 +1,24 @@
-import { memo, useMemo } from 'react';
-import { Bot, Check, CircleAlert, CircleDot, Info, ListTodo, Paperclip, TriangleAlert } from 'lucide-react';
-import type { SessionEvent } from '@shared/types';
+import { memo, useMemo, useState } from 'react';
+import { Check, CircleAlert, CircleDot, Copy, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
+import type { SessionEvent, WorkerState } from '@shared/types';
 import { renderMarkdown } from '../../lib/markdown';
-import { basename, cx } from '../../lib/format';
-import { ToolCard } from './ToolCard';
+import { useAppState } from '../../lib/store';
+import { basename, cx, formatAgo } from '../../lib/format';
+import { ToolRow } from './ToolCard';
+
+export interface EventActions {
+  onOpenSession(sessionId: string): void;
+  /** Puts a sent message back into the composer to edit and send again. */
+  onReuse(text: string): void;
+}
 
 interface EventRowProps {
   event: SessionEvent;
-  onOpenSession(sessionId: string): void;
+  actions: EventActions;
 }
 
 /** One timeline row. Memoized by event object: the store keeps unchanged events' identity. */
-export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRowProps) {
+export const EventRow = memo(function EventRow({ event, actions }: EventRowProps) {
   switch (event.kind) {
     case 'user':
       return (
@@ -27,28 +34,42 @@ export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRo
               ))}
             </div>
           )}
-          {event.source !== 'app' && <div className="msg-caption">sent from {event.source}</div>}
+          <div className="msg-actions">
+            {event.source !== 'app' && <span className="msg-caption">sent from {event.source}</span>}
+            <time className="msg-time" dateTime={new Date(event.at).toISOString()} title={new Date(event.at).toLocaleString()}>
+              {formatAgo(event.at)}
+            </time>
+            <CopyButton text={event.text} />
+            <button type="button" className="icon-btn msg-action" aria-label="Edit and resend" title="Edit and resend" onClick={() => actions.onReuse(event.text)}>
+              <PencilLine size={13} />
+            </button>
+          </div>
         </div>
       );
     case 'assistant':
-      return <AssistantText text={event.text} streaming={event.streaming} commentary={event.channel === 'commentary'} />;
+      return <AssistantText text={event.text} streaming={event.streaming} final={event.channel === 'final'} />;
     case 'reasoning':
       return (
         <details className="reasoning" open={event.streaming || undefined}>
-          <summary>
-            <span>{event.streaming ? 'Thinking…' : 'Thought'}</span>
-          </summary>
+          <summary>{event.streaming ? 'Thinking…' : 'Thought'}</summary>
           <div className="reasoning-text">{event.text}</div>
         </details>
       );
     case 'tool':
-      return <ToolCard event={event} />;
-    case 'plan':
+      return (
+        <div className="steps">
+          <ToolRow event={event} />
+        </div>
+      );
+    case 'plan': {
+      const done = event.items.filter((item) => item.status === 'completed').length;
       return (
         <section className="plan" aria-label="Plan">
           <header className="plan-head">
-            <ListTodo size={13} aria-hidden="true" />
             <span>Plan</span>
+            <span className="plan-count">
+              {done} of {event.items.length} done
+            </span>
           </header>
           {event.explanation && <p className="plan-explanation">{event.explanation}</p>}
           <ol className="plan-items">
@@ -63,6 +84,7 @@ export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRo
           </ol>
         </section>
       );
+    }
     case 'turn':
       if (event.outcome === null || event.outcome === 'done' || event.phase === 'start') return null;
       return (
@@ -81,16 +103,7 @@ export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRo
       );
     }
     case 'agent':
-      return (
-        <div className="agent-row">
-          <Bot size={13} aria-hidden="true" />
-          <span className="agent-label">{event.label}</span>
-          <span className="agent-action">{event.text || event.action}</span>
-          <button type="button" className="link-btn" onClick={() => onOpenSession(event.workerSessionId)}>
-            Open worker
-          </button>
-        </div>
-      );
+      return <AgentRow event={event} onOpen={() => actions.onOpenSession(event.workerSessionId)} />;
     case 'handoff':
       return (
         <div className="handoff">
@@ -109,12 +122,55 @@ export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRo
   return null;
 });
 
-function AssistantText({ text, streaming, commentary }: { text: string; streaming: boolean; commentary: boolean }) {
+const AGENT_VERB = { spawned: 'Started agent', messaged: 'Messaged agent', finished: 'Agent finished', woke: 'Agent resumed' } as const;
+const WORKER_STATE: Record<WorkerState, string> = { queued: 'Queued', working: 'Running', asleep: 'Idle', finished: 'Finished', failed: 'Stopped' };
+
+/** "Started agent  Verify llm-agents flake  Running": the worker title opens its transcript. */
+function AgentRow({ event, onOpen }: { event: Extract<SessionEvent, { kind: 'agent' }>; onOpen(): void }) {
+  const app = useAppState();
+  const worker = app?.agents.flatMap((run) => run.workers).find((item) => item.sessionId === event.workerSessionId);
+  return (
+    <div className="agent-row">
+      <span className="agent-verb">{AGENT_VERB[event.action]}</span>
+      <button type="button" className="agent-label" title={event.text || 'Open the agent transcript'} onClick={onOpen}>
+        {event.label}
+      </button>
+      {worker && <span className={cx('agent-state', `is-${worker.state}`)}>{WORKER_STATE[worker.state]}</span>}
+    </div>
+  );
+}
+
+function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="icon-btn msg-action"
+      aria-label={label}
+      title={copied ? 'Copied' : label}
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />}
+    </button>
+  );
+}
+
+function AssistantText({ text, streaming, final }: { text: string; streaming: boolean; final: boolean }) {
   const html = useMemo(() => renderMarkdown(text), [text]);
   return (
-    <div className={cx('msg msg-assistant', commentary && 'is-commentary', streaming && 'is-streaming')}>
+    <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')}>
       <div className="md" dangerouslySetInnerHTML={{ __html: html }} />
       {streaming && <span className="caret" aria-hidden="true" />}
+      {final && !streaming && text.trim() && (
+        <div className="msg-actions is-start">
+          <CopyButton text={text} label="Copy answer" />
+        </div>
+      )}
     </div>
   );
 }

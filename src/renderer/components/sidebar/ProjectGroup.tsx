@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
-import { ChevronRight, Ellipsis, Folder, Pencil, SquarePen, Trash2 } from 'lucide-react';
+import { Ellipsis, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { Project } from '@shared/types';
-import { cx } from '../../lib/format';
 import { InlineEdit } from '../common/InlineEdit';
 import { MenuButton, type MenuEntry } from '../common/Popover';
 
@@ -18,6 +17,7 @@ interface ProjectGroupProps {
   onRemove(): void;
 }
 
+/** A project as its own sidebar section: name, new chat, actions, then its chats. */
 export function ProjectGroup({ project, open, renaming, chats, onToggle, onNewChat, onCancelRename, onRename, onRenameStart, onRemove }: ProjectGroupProps) {
   const entries: MenuEntry[] = [
     { label: 'Rename', icon: Pencil, onSelect: onRenameStart },
@@ -25,45 +25,34 @@ export function ProjectGroup({ project, open, renaming, chats, onToggle, onNewCh
     { label: 'Remove from list', icon: Trash2, danger: true, onSelect: onRemove }
   ];
   return (
-    <div className="project-group">
-      <div className="project-head">
+    <section className="sidebar-section project-group" aria-label={project.name}>
+      <div className="sidebar-section-head">
         {renaming ? (
-          <InlineEdit
-            label="Project name"
-            value={project.name}
-            onCancel={onCancelRename}
-            onCommit={onRename}
-          />
+          <InlineEdit label="Project name" value={project.name} onCancel={onCancelRename} onCommit={onRename} />
         ) : (
-          <button
-            type="button"
-            className="project-toggle"
-            aria-expanded={open}
-            title={project.path}
-            onClick={onToggle}
-          >
-            <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
-            <Folder size={13} aria-hidden="true" />
-            <span className="project-name">{project.name}</span>
+          <button type="button" className="sidebar-section-toggle" aria-expanded={open} title={project.path} onClick={onToggle}>
+            <span>{project.name}</span>
           </button>
         )}
-        <button
-          type="button"
-          className="icon-btn row-add"
-          aria-label={`New chat in ${project.name}`}
-          title={`New chat in ${project.name}`}
-          onClick={() => onNewChat(project.id)}
-        >
-          <SquarePen size={13} />
-        </button>
-        <MenuButton entries={entries} label={`Actions for ${project.name}`} icon={Ellipsis} className="row-menu" />
+        <div className="sidebar-section-actions">
+          <button
+            type="button"
+            className="icon-btn row-add"
+            aria-label={`New chat in ${project.name}`}
+            title={`New chat in ${project.name}`}
+            onClick={() => onNewChat(project.id)}
+          >
+            <Plus size={14} />
+          </button>
+          <MenuButton entries={entries} label={`Actions for ${project.name}`} icon={Ellipsis} className="row-add" />
+        </div>
       </div>
       {open && (
-        <div className="project-chats">
-          {chats.length === 0 && <p className="sidebar-empty is-nested">No chats yet.</p>}
+        <div className="sidebar-section-body">
+          {chats.length === 0 && <p className="sidebar-empty">No chats yet.</p>}
           {chats}
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { Check, type LucideIcon } from 'lucide-react';
 import { cx } from '../../lib/format';
 
-interface PopoverTrigger {
+export interface PopoverTrigger {
   open: boolean;
   toggle(): void;
 }
@@ -203,6 +203,22 @@ function MenuList({ entries, onClose }: MenuListProps) {
   );
 }
 
+interface MenuProps {
+  entries: MenuEntry[];
+  label: string;
+  align?: 'start' | 'end';
+  trigger(state: PopoverTrigger): ReactNode;
+}
+
+/** A menu behind any trigger, such as a title with a chevron. */
+export function Menu({ entries, label, align = 'start', trigger }: MenuProps) {
+  return (
+    <Popover label={label} align={align} panelClassName="is-menu" trigger={trigger}>
+      {(close) => <MenuList entries={entries} onClose={close} />}
+    </Popover>
+  );
+}
+
 interface MenuButtonProps {
   entries: MenuEntry[];
   label: string;
@@ -214,10 +230,10 @@ interface MenuButtonProps {
 /** Icon button that opens a MenuList. */
 export function MenuButton({ entries, label, icon: Icon, className, align = 'end' }: MenuButtonProps) {
   return (
-    <Popover
+    <Menu
+      entries={entries}
       label={label}
       align={align}
-      panelClassName="is-menu"
       trigger={({ open, toggle }) => (
         <button
           type="button"
@@ -234,8 +250,6 @@ export function MenuButton({ entries, label, icon: Icon, className, align = 'end
           <Icon size={15} />
         </button>
       )}
-    >
-      {(close) => <MenuList entries={entries} onClose={close} />}
-    </Popover>
+    />
   );
 }

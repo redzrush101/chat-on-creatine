@@ -1,11 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { ArrowDown, ChevronRight, Wrench } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { openExternal } from '../../lib/actions';
-import { cx, eventTime, formatDuration } from '../../lib/format';
-import { useNow } from '../../lib/hooks';
-import { EventRow } from './EventRow';
-import { buildBlocks, type TimelineBlock } from './timeline-model';
+import { EventRow, type EventActions } from './EventRow';
+import { WorkGroup } from './WorkGroup';
+import { buildBlocks } from './timeline-model';
 
 const STICK_THRESHOLD_PX = 80;
 
@@ -15,10 +14,10 @@ interface TimelineProps {
   busy: boolean;
   /** Changes when the user sends something: the view jumps to the bottom. */
   followNonce: number;
-  onOpenSession(sessionId: string): void;
+  actions: EventActions;
 }
 
-export function Timeline({ sessionId, events, busy, followNonce, onOpenSession }: TimelineProps) {
+export function Timeline({ sessionId, events, busy, followNonce, actions }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -89,56 +88,15 @@ export function Timeline({ sessionId, events, busy, followNonce, onOpenSession }
           {events === null && <p className="timeline-status">Loading conversation…</p>}
           {events !== null && events.length === 0 && <p className="timeline-status">No messages yet.</p>}
           {blocks.map((block) =>
-            block.type === 'event' ? (
-              <EventRow key={block.event.id} event={block.event} onOpenSession={onOpenSession} />
-            ) : (
-              <WorkGroup key={block.id} block={block} onOpenSession={onOpenSession} />
-            )
+            block.type === 'event' ? <EventRow key={block.event.id} event={block.event} actions={actions} /> : <WorkGroup key={block.id} block={block} />
           )}
         </div>
       </div>
       {!atBottom && (
-        <button type="button" className="jump-latest" onClick={jumpToLatest}>
-          <ArrowDown size={13} aria-hidden="true" />
-          Jump to latest
+        <button type="button" className="jump-latest" aria-label="Jump to latest" title="Jump to latest" onClick={jumpToLatest}>
+          <ArrowDown size={16} aria-hidden="true" />
         </button>
       )}
     </div>
   );
 }
-
-const WorkGroup = function WorkGroup({
-  block,
-  onOpenSession
-}: {
-  block: Extract<TimelineBlock, { type: 'work' }>;
-  onOpenSession(sessionId: string): void;
-}) {
-  const [toggled, setToggled] = useState<boolean | null>(null);
-  const open = toggled ?? block.running;
-  const now = useNow(block.running);
-  const start = block.events[0]?.at ?? now;
-  const end = block.running ? now : block.events.reduce((latest, event) => Math.max(latest, eventTime(event)), start);
-  const elapsed = formatDuration(end - start);
-  const toolLabel = block.tools === 1 ? '1 tool call' : `${block.tools} tool calls`;
-
-  return (
-    <section className={cx('work-group', open && 'is-open', block.running && 'is-running')}>
-      <button type="button" className="work-head" aria-expanded={open} onClick={() => setToggled(!open)}>
-        <Wrench size={13} aria-hidden="true" />
-        <span className="work-title">
-          {block.running ? `Working for ${elapsed}` : `Worked for ${elapsed}`}
-          {block.tools > 0 && <span className="work-meta"> · {toolLabel}</span>}
-        </span>
-        <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
-      </button>
-      {open && (
-        <div className="work-body">
-          {block.events.map((event) => (
-            <EventRow key={event.id} event={event} onOpenSession={onOpenSession} />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-};

@@ -257,6 +257,9 @@ export interface GitStatus {
   ahead: number;
   behind: number;
   changes: GitFileChange[];
+  /** Lines added and removed against HEAD, untracked files included. */
+  added: number;
+  removed: number;
 }
 
 export interface LogEntry {

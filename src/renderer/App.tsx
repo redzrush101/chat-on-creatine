@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from './lib/bridge';
 import { Toaster, reportError } from './components/common/Toasts';
 import { Resizer } from './components/common/Resizer';
@@ -8,7 +8,8 @@ import { Home } from './components/home/Home';
 import type { ModelValue } from './components/composer/ModelPicker';
 import type { NewChatDraft } from './components/composer/types';
 import { SettingsView } from './settings/SettingsView';
-import { WorkPanel } from './workpanel/WorkPanel';
+import { isPanelTab, WorkPanel, type PanelTab } from './workpanel/WorkPanel';
+import { chatFolder } from './lib/folders';
 import { useAppState } from './lib/store';
 import { useResize, useStoredState, useSystemDark, useViewportWidth } from './lib/hooks';
 import { cx } from './lib/format';
@@ -20,6 +21,12 @@ const NARROW_WIDTH = 900;
 /** The chat column keeps at least this much width; the work panel gives way before it does. */
 const MIN_MAIN_WIDTH = 560;
 const MIN_PANEL_WIDTH = 320;
+
+/** Chats visited in this window, for the sidebar's back and forward buttons. Null is the new-chat page. */
+interface Visits {
+  entries: (string | null)[];
+  index: number;
+}
 
 /** New-chat choices; `model` stays null until the user picks one, so config defaults apply. */
 interface DraftChoices {
@@ -33,6 +40,10 @@ export function App() {
   const systemDark = useSystemDark();
   const viewport = useViewportWidth();
   const [selectedId, setSelectedId] = useStoredState<string | null>('creatine.selected', null);
+  const [visits, setVisits] = useState<Visits>(() => ({ entries: [selectedId], index: 0 }));
+  const [storedTab, setPanelTab] = useStoredState<string>('creatine.workPanel.tab', 'tasks');
+  const panelTab: PanelTab = isPanelTab(storedTab) ? storedTab : 'tasks';
+  const [panelWide, setPanelWide] = useStoredState('creatine.workPanel.wide', false);
   const [sidebarOpen, setSidebarOpen] = useStoredState('creatine.sidebarOpen', true);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [settings, setSettings] = useState<{ section?: string } | null>(null);
@@ -77,8 +88,44 @@ export function App() {
   const toggleSidebar = () => (narrow ? setOverlayOpen(!overlayOpen) : setSidebarOpen(!sidebarOpen));
   const showSidebar = () => (narrow ? setOverlayOpen(true) : setSidebarOpen(true));
 
+  // Opening a chat drops the forward history, like a browser.
+  const visit = (sessionId: string | null) => {
+    setSelectedId(sessionId);
+    setVisits((current) => {
+      if (current.entries[current.index] === sessionId) return current;
+      const entries = [...current.entries.slice(0, current.index + 1), sessionId].slice(-50);
+      return { entries, index: entries.length - 1 };
+    });
+  };
+  // Chats deleted since they were visited are skipped.
+  const reachable = (entry: string | null | undefined) => entry === null || (app?.sessions.some((item) => item.id === entry) ?? false);
+  const stepTarget = (delta: number) => {
+    let index = visits.index + delta;
+    while (index >= 0 && index < visits.entries.length && !reachable(visits.entries[index])) index += delta;
+    return index >= 0 && index < visits.entries.length ? index : null;
+  };
+  const step = (delta: number) => {
+    const index = stepTarget(delta);
+    if (index === null) return;
+    setVisits({ ...visits, index });
+    setSelectedId(visits.entries[index] ?? null);
+    setSettings(null);
+  };
+
+  const openLatest = useRef((sessionId: string) => void sessionId);
+  openLatest.current = (sessionId: string) => {
+    setSettings(null);
+    setOverlayOpen(false);
+    visit(sessionId);
+  };
+  // Stable identity: timeline rows are memoized and receive it.
+  const openSession = useCallback((sessionId: string) => openLatest.current(sessionId), []);
+  const onSessionDeleted = (sessionId: string) => {
+    if (sessionId === selectedId) setSelectedId(null);
+  };
+
   const openNewChat = () => {
-    setSelectedId(null);
+    visit(null);
     setSettings(null);
     setOverlayOpen(false);
     setFocusNonce((value) => value + 1);
@@ -136,14 +183,13 @@ export function App() {
     model: draft.model ?? { model: app.config.ui.defaultModel, reasoning: app.config.ui.defaultReasoning }
   };
   const onNewChatChange = (patch: Partial<NewChatDraft>) => setDraft((current) => ({ ...current, ...patch }));
-  const openSession = (sessionId: string) => {
-    setSettings(null);
-    setOverlayOpen(false);
-    setSelectedId(sessionId);
+  const onPanel = (tab: PanelTab | null) => {
+    if (tab) setPanelTab(tab);
+    setWorkPanel(tab !== null);
   };
-  const toggleWorkPanel = () => setWorkPanel(!workPanelOpen);
   // The panel only shows beside a chat, and only when the chat column keeps its minimum width.
-  const panelWidth = Math.min(panel.width, viewport - (sidebarInFlow ? sidebar.width : 0) - MIN_MAIN_WIDTH);
+  const roomForPanel = viewport - (sidebarInFlow ? sidebar.width : 0) - MIN_MAIN_WIDTH;
+  const panelWidth = panelWide ? roomForPanel : Math.min(panel.width, roomForPanel);
   const panelVisible = workPanelOpen && !settings && session !== null && panelWidth >= MIN_PANEL_WIDTH;
 
   return (
@@ -156,6 +202,12 @@ export function App() {
             selectedId={session?.id ?? null}
             searchRef={searchRef}
             searchNonce={searchNonce}
+            history={{
+              canBack: stepTarget(-1) !== null,
+              canForward: stepTarget(1) !== null,
+              back: () => step(-1),
+              forward: () => step(1)
+            }}
             onSelect={openSession}
             onNewChat={(projectId) => {
               setDraft((current) => ({ ...current, projectId }));
@@ -163,9 +215,7 @@ export function App() {
             }}
             onCollapse={toggleSidebar}
             onOpenSettings={(section) => setSettings({ section })}
-            onSessionDeleted={(sessionId) => {
-              if (sessionId === selectedId) setSelectedId(null);
-            }}
+            onSessionDeleted={onSessionDeleted}
           />
           <Resizer
             side="right"
@@ -187,31 +237,31 @@ export function App() {
             app={app}
             session={session}
             sidebarOpen={sidebarShown}
-            workPanelOpen={workPanelOpen}
+            panel={panelVisible ? panelTab : null}
+            rootDir={chatFolder(app, session)}
             newChat={newChat}
             onNewChatChange={onNewChatChange}
             onToggleSidebar={toggleSidebar}
-            onToggleWorkPanel={toggleWorkPanel}
+            onPanel={onPanel}
             onOpenSession={openSession}
             onOpenSettings={(section) => setSettings({ section })}
+            onDeleted={onSessionDeleted}
           />
         ) : (
           <Home
             app={app}
             newChat={newChat}
             sidebarOpen={sidebarShown}
-            workPanelOpen={workPanelOpen}
             focusNonce={focusNonce}
             onNewChatChange={onNewChatChange}
             onCreated={openSession}
             onToggleSidebar={toggleSidebar}
-            onToggleWorkPanel={toggleWorkPanel}
             onOpenSettings={(section) => setSettings({ section })}
           />
         )}
       </main>
 
-      {panelVisible && (
+      {panelVisible && session && (
         <aside className="panel" style={{ width: panelWidth }} aria-label="Work panel">
           <Resizer
             side="left"
@@ -221,7 +271,15 @@ export function App() {
             onKeyDown={panel.onKeyDown}
             onReset={() => void invoke('config:update', { ui: { workPanelWidth: DEFAULT_PANEL_WIDTH } }).catch(reportError)}
           />
-          <WorkPanel sessionId={session?.id ?? null} />
+          <WorkPanel
+            sessionId={session.id}
+            tab={panelTab}
+            wide={panelWide}
+            onTab={setPanelTab}
+            onToggleWide={() => setPanelWide(!panelWide)}
+            onClose={() => onPanel(null)}
+            onOpenSession={openSession}
+          />
         </aside>
       )}
 

@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { childEnv } from '../exec/env';
 import type { GitStatus } from '@shared/types';
@@ -7,6 +8,9 @@ const TIMEOUT_MS = 15_000;
 const MAX_STATUS_BYTES = 4 * 1024 * 1024;
 const MAX_DIFF_BYTES = 1024 * 1024;
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
+/** Untracked files are counted line by line; beyond these caps the totals stay a lower bound. */
+const MAX_COUNTED_UNTRACKED = 200;
+const MAX_COUNTED_BYTES = 1024 * 1024;
 
 interface GitRun {
   code: number;
@@ -48,12 +52,12 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
   );
   if (run.code !== 0) {
     if (/not a git repository/i.test(run.stderr)) {
-      return { isRepo: false, branch: null, ahead: 0, behind: 0, changes: [] };
+      return { isRepo: false, branch: null, ahead: 0, behind: 0, changes: [], added: 0, removed: 0 };
     }
     throw new Error(run.stderr || `git status failed with code ${run.code}`);
   }
 
-  const status: GitStatus = { isRepo: true, branch: null, ahead: 0, behind: 0, changes: [] };
+  const status: GitStatus = { isRepo: true, branch: null, ahead: 0, behind: 0, changes: [], added: 0, removed: 0 };
   const records = run.stdout.split('\0');
   let index = 0;
   if (records[0]?.startsWith('## ')) {
@@ -68,7 +72,43 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
     // In -z output a rename or copy is followed by its source path as a separate record.
     if (code.includes('R') || code.includes('C')) index++;
   }
+  await addLineTotals(dir, status);
   return status;
+}
+
+/** Lines added and removed in the working tree against HEAD, untracked files counted as added. */
+async function addLineTotals(dir: string, status: GitStatus): Promise<void> {
+  if (status.changes.length === 0) return;
+  const hasHead = (await runGit(dir, ['rev-parse', '--verify', '--quiet', 'HEAD'], 4096)).code === 0;
+  const numstat = await runGit(dir, ['diff', '--numstat', '--no-ext-diff', '-M', hasHead ? 'HEAD' : EMPTY_TREE], MAX_STATUS_BYTES);
+  for (const line of numstat.code === 0 ? numstat.stdout.split('\n') : []) {
+    const [added, removed] = line.split('\t');
+    // Binary files report `-` for both counts.
+    status.added += Number(added) || 0;
+    status.removed += Number(removed) || 0;
+  }
+  const untracked = status.changes.filter((change) => change.status === '??').slice(0, MAX_COUNTED_UNTRACKED);
+  const counts = await Promise.all(untracked.map((change) => countLines(path.join(dir, change.path))));
+  for (const count of counts) status.added += count;
+}
+
+async function countLines(file: string): Promise<number> {
+  try {
+    const handle = await open(file, 'r');
+    try {
+      const buffer = Buffer.alloc(MAX_COUNTED_BYTES);
+      const { bytesRead } = await handle.read(buffer, 0, MAX_COUNTED_BYTES, 0);
+      const bytes = buffer.subarray(0, bytesRead);
+      if (bytes.includes(0)) return 0;
+      let lines = 0;
+      for (const byte of bytes) if (byte === 10) lines++;
+      return bytesRead > 0 && bytes[bytesRead - 1] !== 10 ? lines + 1 : lines;
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    return 0;
+  }
 }
 
 /** Line shapes: `main...origin/main [ahead 1, behind 2]`, `main`, `No commits yet on main`, `HEAD (no branch)`. */

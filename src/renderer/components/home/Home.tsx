@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FolderOpen, Settings2 } from 'lucide-react';
+import { Asterisk, FolderOpen, Settings2 } from 'lucide-react';
 import type { AppState } from '@shared/types';
 import { Composer } from '../composer/Composer';
 import type { NewChatDraft } from '../composer/types';
@@ -16,12 +16,10 @@ interface HomeProps {
   app: AppState;
   newChat: NewChatDraft;
   sidebarOpen: boolean;
-  workPanelOpen: boolean;
   focusNonce: number;
   onNewChatChange(patch: Partial<NewChatDraft>): void;
   onCreated(sessionId: string): void;
   onToggleSidebar(): void;
-  onToggleWorkPanel(): void;
   onOpenSettings(section?: string): void;
 }
 
@@ -30,12 +28,10 @@ export function Home({
   app,
   newChat,
   sidebarOpen,
-  workPanelOpen,
   focusNonce,
   onNewChatChange,
   onCreated,
   onToggleSidebar,
-  onToggleWorkPanel,
   onOpenSettings
 }: HomeProps) {
   const [prefill, setPrefill] = useState<{ id: number; text: string } | undefined>();
@@ -43,9 +39,12 @@ export function Home({
 
   return (
     <section className="home" aria-label="New chat">
-      <TopBar app={app} session={null} sidebarOpen={sidebarOpen} workPanelOpen={workPanelOpen} onToggleSidebar={onToggleSidebar} onToggleWorkPanel={onToggleWorkPanel} />
+      <TopBar app={app} session={null} sidebarOpen={sidebarOpen} panel={null} onToggleSidebar={onToggleSidebar} onPanel={() => undefined} />
       <div className="home-body">
-        <h1 className="home-title">What should we work on?</h1>
+        <h1 className="home-title">
+          <Asterisk size={34} strokeWidth={2.5} className="home-mark" aria-hidden="true" />
+          What should we work on?
+        </h1>
         <label className="home-project">
           <FolderOpen size={13} aria-hidden="true" />
           <span>Project</span>

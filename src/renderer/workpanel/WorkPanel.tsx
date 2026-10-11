@@ -1,86 +1,70 @@
-import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
-import { FolderTree, GitBranch, ListChecks, SquareTerminal, Users } from 'lucide-react';
+import { ChevronDown, FileDiff, FolderOpen, Layers, ListChecks, Maximize2, Minimize2, SquareTerminal, X } from 'lucide-react';
+import { chatFolder } from '../lib/folders';
 import { useAppState } from '../lib/store';
+import { Menu } from '../components/common/Popover';
 import { ChangesTab } from './ChangesTab';
-import { Empty } from './common';
 import { FilesTab } from './FilesTab';
 import { PlanTab } from './PlanTab';
+import { TasksTab } from './TasksTab';
 import { TerminalTab } from './TerminalTab';
-import { WorkersTab } from './WorkersTab';
 import './workpanel.css';
 
-type TabId = 'plan' | 'workers' | 'files' | 'changes' | 'terminal';
+export type PanelTab = 'tasks' | 'plan' | 'files' | 'changes' | 'terminal';
 
-const TABS: readonly { id: TabId; label: string; icon: typeof ListChecks }[] = [
+export const PANEL_TABS: readonly { id: PanelTab; label: string; icon: typeof ListChecks }[] = [
+  { id: 'tasks', label: 'Background tasks', icon: Layers },
   { id: 'plan', label: 'Plan', icon: ListChecks },
-  { id: 'workers', label: 'Workers', icon: Users },
-  { id: 'files', label: 'Files', icon: FolderTree },
-  { id: 'changes', label: 'Changes', icon: GitBranch },
+  { id: 'files', label: 'Files', icon: FolderOpen },
+  { id: 'changes', label: 'Changes', icon: FileDiff },
   { id: 'terminal', label: 'Terminal', icon: SquareTerminal }
 ];
 
-const TAB_KEY = 'creatine.workPanel.tab';
-
-function readTab(): TabId {
-  try {
-    const stored = localStorage.getItem(TAB_KEY);
-    return TABS.some((tab) => tab.id === stored) ? (stored as TabId) : 'plan';
-  } catch {
-    return 'plan';
-  }
+export function isPanelTab(value: unknown): value is PanelTab {
+  return PANEL_TABS.some((tab) => tab.id === value);
 }
 
-export function WorkPanel({ sessionId }: { sessionId: string | null }): JSX.Element {
+interface WorkPanelProps {
+  sessionId: string;
+  tab: PanelTab;
+  wide: boolean;
+  onTab(tab: PanelTab): void;
+  onToggleWide(): void;
+  onClose(): void;
+  onOpenSession(sessionId: string): void;
+}
+
+/** The side panel beside a chat, one view at a time, switched from the top bar or this title menu. */
+export function WorkPanel({ sessionId, tab, wide, onTab, onToggleWide, onClose, onOpenSession }: WorkPanelProps): JSX.Element {
   const state = useAppState();
-  const [tab, setTab] = useState<TabId>(readTab);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(TAB_KEY, tab);
-    } catch {
-      // Remembering the tab is a convenience; the panel works without it.
-    }
-  }, [tab]);
-
-  if (!sessionId) {
-    return (
-      <aside className="wp">
-        <Empty title="No chat selected">Open a chat to see its plan, workers, files, changes and terminal here.</Empty>
-      </aside>
-    );
-  }
-
   const session = state?.sessions.find((item) => item.id === sessionId) ?? null;
-  const project = session?.projectId ? state?.projects.find((item) => item.id === session.projectId) : undefined;
-  // The folder the chat works in: its own cwd, then its project, then the first approved folder.
-  const rootDir = session?.cwd ?? project?.path ?? state?.config.roots[0]?.path ?? null;
+  const rootDir = state ? chatFolder(state, session) : null;
+  const current = PANEL_TABS.find((item) => item.id === tab) ?? PANEL_TABS[0]!;
 
   return (
     <aside className="wp">
-      <div className="wp-tabs" role="tablist" aria-label="Work panel">
-        {TABS.map((item) => {
-          const Icon = item.icon;
-          const active = item.id === tab;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={active ? 'wp-tab is-active' : 'wp-tab'}
-              title={item.label}
-              onClick={() => setTab(item.id)}
-            >
-              <Icon size={15} aria-hidden />
-              <span>{item.label}</span>
+      <header className="wp-head">
+        <Menu
+          label="Panel view"
+          entries={PANEL_TABS.map((item) => ({ label: item.label, icon: item.icon, checked: item.id === tab, onSelect: () => onTab(item.id) }))}
+          trigger={({ open, toggle }) => (
+            <button type="button" className="wp-title" aria-haspopup="menu" aria-expanded={open} onClick={toggle}>
+              <span>{current.label}</span>
+              <ChevronDown size={13} aria-hidden />
             </button>
-          );
-        })}
-      </div>
-      <div className="wp-body" role="tabpanel">
+          )}
+        />
+        <span className="wp-spacer" />
+        <button type="button" className="icon-btn" aria-label={wide ? 'Narrow panel' : 'Widen panel'} title={wide ? 'Narrow panel' : 'Widen panel'} onClick={onToggleWide}>
+          {wide ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
+        <button type="button" className="icon-btn" aria-label="Close panel" title="Close panel (Ctrl+J)" onClick={onClose}>
+          <X size={15} />
+        </button>
+      </header>
+      <div className="wp-body" role="region" aria-label={current.label}>
+        {tab === 'tasks' && <TasksTab sessionId={sessionId} onOpenSession={onOpenSession} />}
         {tab === 'plan' && <PlanTab sessionId={sessionId} />}
-        {tab === 'workers' && <WorkersTab sessionId={sessionId} />}
         {tab === 'files' && <FilesTab rootDir={rootDir} />}
         {tab === 'changes' && <ChangesTab rootDir={rootDir} />}
         {tab === 'terminal' && <TerminalTab rootDir={rootDir} />}

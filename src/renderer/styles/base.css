@@ -1,10 +1,10 @@
 /* Reset, typography, primitives. Colors and spacing come from tokens.css; the few layout
    constants below are local to the app shell. */
 :root {
-  --content-max: 820px;
-  --topbar-h: 44px;
-  --control-h: 28px;
-  --row-h: 28px;
+  --content-max: 768px;
+  --topbar-h: 46px;
+  --control-h: 30px;
+  --row-h: 30px;
   --icon-btn: 28px;
   --sidebar-default: 272px;
   --panel-default: 420px;
@@ -71,7 +71,7 @@ p {
 }
 
 a {
-  color: var(--accent-strong);
+  color: var(--link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -161,17 +161,6 @@ kbd {
   border-color: var(--border-strong);
 }
 
-.btn-ghost {
-  border-color: transparent;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);
@@ -227,7 +216,7 @@ kbd {
   padding: 0;
   border: 0;
   background: none;
-  color: var(--accent-strong);
+  color: var(--link);
   font-size: var(--text-xs);
 }
 
@@ -253,16 +242,6 @@ kbd {
 .chip-text {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.chip-button {
-  border: 0;
-  cursor: pointer;
-}
-
-.chip-button:hover:not(:disabled) {
-  background: var(--bg-active);
-  color: var(--text);
 }
 
 /* Inline text editing (titles, row names) */
@@ -331,7 +310,7 @@ kbd {
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  min-height: 28px;
+  min-height: 30px;
   padding: 0 var(--space-2);
   border: 0;
   border-radius: var(--radius-sm);
@@ -366,15 +345,14 @@ kbd {
 }
 
 .menu-check {
-  color: var(--accent-strong);
+  margin-left: auto;
+  color: var(--text-muted);
 }
 
 .menu-label {
   padding: var(--space-2) var(--space-2) 2px;
   color: var(--text-faint);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .menu-separator {
@@ -394,8 +372,6 @@ kbd {
   padding: 0 var(--space-2);
   color: var(--text-faint);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .picker-note {

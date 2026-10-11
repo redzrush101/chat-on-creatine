@@ -23,5 +23,8 @@ export interface ComposerProps {
   /** Text placed into the field (starter suggestions); applied each time `id` changes. */
   prefill?: { id: number; text: string };
   hero?: boolean;
+  /** The chat folder; its git changes show in a bar above the field. */
+  rootDir?: string | null;
+  onReviewChanges?(): void;
 }
 

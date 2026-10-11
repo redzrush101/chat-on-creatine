@@ -1,40 +1,34 @@
-import { ArrowUp, Check, CircleAlert, LoaderCircle, Paperclip, Plug, Square, WifiOff, X } from 'lucide-react';
+import { Check, CircleAlert, CornerDownLeft, LoaderCircle, Paperclip, Plug, Plus, Square, WifiOff, X } from 'lucide-react';
 import { invoke } from '../../lib/bridge';
 import { basename, cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
 import { Banner } from '../common/Banner';
-import { ModelPicker } from './ModelPicker';
+import { Menu } from '../common/Popover';
+import { ContextMeter } from './ContextMeter';
+import { DropdownLabel, ModelPicker } from './ModelPicker';
 import { PendingInputs } from './PendingInputs';
+import { RepoBar } from './RepoBar';
 import { MODES, useComposer } from './useComposer';
 import type { ComposerProps } from './types';
 
-export function Composer({
-  app,
-  session,
-  activity,
-  newChat,
-  onNewChatChange,
-  onCreated,
-  onSubmitted,
-  onOpenSettings,
-  focusNonce,
-  prefill,
-  hero
-}: ComposerProps) {
+export function Composer(props: ComposerProps) {
+  const { app, session, activity, hero, onOpenSettings, rootDir, onReviewChanges } = props;
   const {
     sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked,
     toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder
-  } = useComposer({ app, session, activity, newChat, onNewChatChange, onCreated, onSubmitted, onOpenSettings, focusNonce, prefill });
+  } = useComposer(props);
+  const modeLabel = MODES.find((item) => item.value === mode)?.label ?? 'Normal';
 
   return (
     <div className={cx('composer-wrap', hero && 'is-hero')}>
       {activity && (
-        <div className={cx('turn-activity', activity.failed && 'is-failed')} role="status" aria-live="polite" aria-atomic="true">
+        <div className={cx('turn-activity', activity.failed && 'is-failed', activity.active && 'is-active')} role="status" aria-live="polite" aria-atomic="true">
           {activity.active ? <LoaderCircle size={13} className="spin" aria-hidden="true" /> : activity.failed ? <CircleAlert size={13} aria-hidden="true" /> : <Check size={13} aria-hidden="true" />}
           <span>{activity.label}</span>
         </div>
       )}
       <ComposerStatus app={app} hero={hero} onOpenSettings={onOpenSettings} sessionId={sessionId} browserBlocked={browserBlocked} toolsOffline={toolsOffline} inputs={inputs} />
+      {session && onReviewChanges && <RepoBar rootDir={rootDir ?? null} refreshKey={app.live[session.id]?.turn ?? 'idle'} onReview={onReviewChanges} />}
 
       <div className="composer">
         {attachments.length > 0 && (
@@ -57,77 +51,62 @@ export function Composer({
             ))}
           </div>
         )}
-        <textarea
-          ref={field}
-          className="composer-input"
-          rows={1}
-          value={text}
-          placeholder={placeholder}
-          aria-label="Message"
-          spellCheck
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <div className="composer-bar">
-          <button type="button" className="icon-btn" aria-label="Attach files" title="Attach files" onClick={attach}>
-            <Paperclip size={15} />
-          </button>
-          <ModelPicker value={modelValue} catalog={app.models} onChange={modelChange} />
-          <div className="segmented" role="group" aria-label="Mode">
-            {MODES.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                className={cx('segmented-item', mode === item.value && 'is-active')}
-                aria-pressed={mode === item.value}
-                title={item.hint}
-                onClick={() => setMode(item.value)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-          <div className="composer-spacer" />
+        <div className="composer-row">
+          <textarea
+            ref={field}
+            className="composer-input"
+            rows={1}
+            value={text}
+            placeholder={placeholder}
+            aria-label="Message"
+            spellCheck
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={onKeyDown}
+          />
           <ComposerActions busy={busy} canStop={canStop} canSend={canSend} browserBlocked={browserBlocked} submit={submit} stop={stop} />
         </div>
       </div>
-      <p className="composer-hint">
-        {mode !== 'off' && !busy ? MODES.find((item) => item.value === mode)?.hint : 'Enter sends · Shift+Enter for a new line'}
-        {toolsOffline && hero && (
-          <button type="button" className="link-btn" onClick={() => onOpenSettings('connection')}>
+
+      <div className="composer-foot">
+        <button type="button" className="icon-btn" aria-label="Attach files" title="Attach files" onClick={attach}>
+          <Plus size={16} />
+        </button>
+        <Menu
+          label="Mode"
+          entries={MODES.map((item) => ({ label: `${item.label} — ${item.hint}`, checked: item.value === mode, onSelect: () => setMode(item.value) }))}
+          trigger={({ open, toggle }) => (
+            <button type="button" className="quiet-trigger" aria-haspopup="menu" aria-expanded={open} title={MODES.find((item) => item.value === mode)?.hint} onClick={toggle}>
+              <DropdownLabel text={modeLabel} />
+            </button>
+          )}
+        />
+        {hero && toolsOffline && (
+          <button type="button" className="link-btn composer-offline" onClick={() => onOpenSettings('connection')}>
             <Plug size={11} aria-hidden="true" /> Local tools offline
           </button>
         )}
-      </p>
+        <span className="composer-spacer" />
+        <ModelPicker value={modelValue} catalog={app.models} onChange={modelChange} />
+        {session && <ContextMeter sessionId={session.id} tokens={session.contextTokens} advisory={app.config.context.advisoryTokens} />}
+      </div>
     </div>
   );
 }
 
 function ComposerActions({ busy, canStop, canSend, browserBlocked, submit, stop }: Pick<ReturnType<typeof useComposer>, 'busy' | 'canStop' | 'canSend' | 'browserBlocked' | 'submit' | 'stop'>) {
   return (
-    <>
-      {busy ? (
+    <div className="composer-actions">
+      {busy && canSend && (
         <>
-          <button
-            type="button"
-            className="btn btn-small"
-            disabled={!canSend}
-            title="Queue: sent after this turn (Enter)"
-            onClick={() => void submit('after-turn')}
-          >
+          <button type="button" className="btn btn-small" title="Queue: sent after this turn (Enter)" onClick={() => void submit('after-turn')}>
             Queue
           </button>
-          <button
-            type="button"
-            className="btn btn-small btn-primary"
-            disabled={!canSend}
-            title="Steer: reaches the model with its next tool result (Ctrl/Cmd+Enter)"
-            onClick={() => void submit('now')}
-          >
+          <button type="button" className="btn btn-small btn-primary" title="Steer: reaches the model with its next tool result (Ctrl/Cmd+Enter)" onClick={() => void submit('now')}>
             Steer
           </button>
         </>
-      ) : (
+      )}
+      {!busy && (
         <button
           type="button"
           className="icon-btn btn-send"
@@ -136,15 +115,15 @@ function ComposerActions({ busy, canStop, canSend, browserBlocked, submit, stop 
           disabled={!canSend || browserBlocked}
           onClick={() => void submit('now')}
         >
-          <ArrowUp size={16} />
+          <CornerDownLeft size={15} />
         </button>
       )}
       {canStop && (
-        <button type="button" className="btn btn-stop" aria-label="Stop" title="Stop (Esc)" onClick={stop}>
-          <Square size={11} fill="currentColor" aria-hidden="true" /> Stop
+        <button type="button" className="icon-btn btn-stop" aria-label="Stop" title="Stop (Esc)" onClick={stop}>
+          <Square size={10} fill="currentColor" aria-hidden="true" />
         </button>
       )}
-    </>
+    </div>
   );
 }
 

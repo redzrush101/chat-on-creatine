@@ -1,23 +1,53 @@
 import { Fragment, useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { ChevronRight, FolderPlus, PanelLeftClose, Search, Settings, SquarePen, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FolderPlus,
+  Globe,
+  History,
+  LogIn,
+  Palette,
+  PanelLeft,
+  Plug,
+  Plus,
+  Puzzle,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Users,
+  X
+} from 'lucide-react';
 import type { AppState, SessionMeta } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { cx, errorMessage } from '../../lib/format';
-import { connectionView, tunnelConfigured, type ConnectionView } from '../../lib/connection';
+import { connectionView, tunnelConfigured } from '../../lib/connection';
 import { useStoredState } from '../../lib/hooks';
 import { notify, reportError } from '../common/Toasts';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { Menu, type MenuEntry } from '../common/Popover';
 import { SessionRow } from './SessionRow';
 import { ProjectGroup } from './ProjectGroup';
 import { sidebarSessions } from './sidebar-model';
 
 type SearchHit = { sessionId: string; eventId: string; snippet: string };
 
+export interface NavHistory {
+  canBack: boolean;
+  canForward: boolean;
+  back(): void;
+  forward(): void;
+}
+
 interface SidebarProps {
   app: AppState;
   selectedId: string | null;
   searchRef: RefObject<HTMLInputElement | null>;
   searchNonce: number;
+  history: NavHistory;
   onSelect(sessionId: string): void;
   onNewChat(projectId: string | null): void;
   onCollapse(): void;
@@ -59,19 +89,18 @@ function useSidebarSearch(searchRef: RefObject<HTMLInputElement | null>, onSelec
   return { query, setQuery, hits, setHits, onSearchKeyDown, openHit };
 }
 
-export function Sidebar({
-  app,
-  selectedId,
-  searchRef,
-  searchNonce,
-  onSelect,
-  onNewChat,
-  onCollapse,
-  onOpenSettings,
-  onSessionDeleted
-}: SidebarProps) {
+/** The more-menu sections: everything in Settings that is not reached from the main nav. */
+const MORE_SECTIONS = [
+  { id: 'agents', label: 'Agents', icon: Users },
+  { id: 'context', label: 'Context & history', icon: History },
+  { id: 'connection', label: 'Connection', icon: Plug },
+  { id: 'appearance', label: 'Appearance', icon: Palette }
+] as const;
+
+export function Sidebar({ app, selectedId, searchRef, searchNonce, history, onSelect, onNewChat, onCollapse, onOpenSettings, onSessionDeleted }: SidebarProps) {
   const { query, setQuery, hits, setHits, onSearchKeyDown, openHit } = useSidebarSearch(searchRef, onSelect);
   const [collapsed, setCollapsed] = useStoredState<Record<string, boolean>>('creatine.sidebar.collapsed', {});
+  const [moreOpen, setMoreOpen] = useStoredState('creatine.sidebar.more', false);
   const [renamingProject, setRenamingProject] = useState<string | null>(null);
   const [removingProject, setRemovingProject] = useState<string | null>(null);
 
@@ -81,6 +110,7 @@ export function Sidebar({
 
   const { projects, live, platform } = app;
   const { chats, sessionById, pinned, chatsByProject, loose, workersOf, workerStateOf } = sidebarSessions(app);
+  const mod = platform === 'darwin' ? '⌘' : 'Ctrl+';
 
   const searching = query.trim().length > 0;
   const titleMatches = searching ? chats.filter((chat) => chat.title.toLowerCase().includes(query.trim().toLowerCase())) : [];
@@ -115,34 +145,28 @@ export function Sidebar({
       .catch(reportError);
   };
 
-  const section = (key: string, title: string, actions: ReactNode, children: ReactNode, count?: number) => {
-    return <SidebarSection title={title} actions={actions} count={count} open={!collapsed[key]} onToggle={() => toggleGroup(key)}>{children}</SidebarSection>;
-  };
-
   return (
     <nav className="sidebar-inner" aria-label="Chats">
-      <div className="sidebar-brand">
-        <span className="brand-mark" aria-hidden="true">C</span>
-        <span className="brand-name">Chat on Creatine</span>
-        <button type="button" className="icon-btn" title="Hide sidebar (Ctrl+B)" aria-label="Hide sidebar" onClick={onCollapse}>
-          <PanelLeftClose size={15} />
+      <div className="sidebar-top">
+        <button type="button" className="icon-btn" title={`Hide sidebar (${mod}B)`} aria-label="Hide sidebar" onClick={onCollapse}>
+          <PanelLeft size={16} />
+        </button>
+        <button type="button" className="icon-btn" title="Back" aria-label="Back" disabled={!history.canBack} onClick={history.back}>
+          <ArrowLeft size={16} />
+        </button>
+        <button type="button" className="icon-btn" title="Forward" aria-label="Forward" disabled={!history.canForward} onClick={history.forward}>
+          <ArrowRight size={16} />
         </button>
       </div>
 
-      <button type="button" className="btn sidebar-new" onClick={() => onNewChat(null)} title="New chat (Ctrl+N)">
-        <SquarePen size={14} />
-        <span>New chat</span>
-        <kbd>{platform === 'darwin' ? '⌘N' : 'Ctrl N'}</kbd>
-      </button>
-
       <div className="sidebar-search">
-        <Search size={13} aria-hidden="true" />
+        <Search size={14} aria-hidden="true" />
         <input
           ref={searchRef}
           type="search"
-          placeholder="Search chats"
+          placeholder="Search"
           aria-label="Search chats"
-          title="Search (Ctrl+K). Enter searches message history."
+          title={`Search (${mod}K). Enter searches message history.`}
           value={query}
           spellCheck={false}
           onChange={(event) => {
@@ -153,6 +177,42 @@ export function Sidebar({
         />
       </div>
 
+      <div className="sidebar-nav">
+        <button type="button" className="nav-item is-new" onClick={() => onNewChat(null)} title={`New chat (${mod}N)`}>
+          <span className="nav-new-icon" aria-hidden="true">
+            <Plus size={13} />
+          </span>
+          <span>New chat</span>
+        </button>
+        <button type="button" className="nav-item" onClick={addProject} title="Add a project folder">
+          <FolderPlus size={15} aria-hidden="true" />
+          <span>New project</span>
+        </button>
+        <button type="button" className="nav-item" onClick={() => onOpenSettings('skills')}>
+          <Sparkles size={15} aria-hidden="true" />
+          <span>Skills</span>
+        </button>
+        <button type="button" className="nav-item" onClick={() => onOpenSettings('plugins')}>
+          <Puzzle size={15} aria-hidden="true" />
+          <span>Plugins</span>
+        </button>
+        <button type="button" className="nav-item" onClick={() => onOpenSettings('instructions')}>
+          <SlidersHorizontal size={15} aria-hidden="true" />
+          <span>Customize</span>
+        </button>
+        <button type="button" className="nav-item is-more" aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
+          {moreOpen ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
+          <span>More</span>
+        </button>
+        {moreOpen &&
+          MORE_SECTIONS.map((item) => (
+            <button key={item.id} type="button" className="nav-item is-sub" onClick={() => onOpenSettings(item.id)}>
+              <item.icon size={14} aria-hidden="true" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+      </div>
+
       <div className="sidebar-scroll scroll">
         {searching ? (
           <div className="sidebar-results">
@@ -160,7 +220,9 @@ export function Sidebar({
               <span>Titles</span>
             </div>
             {titleMatches.length ? titleMatches.map((chat) => rowFor(chat)) : <p className="sidebar-empty">No chat titles match.</p>}
-            {hits !== null && (
+            {hits === null ? (
+              <p className="sidebar-empty">Press Enter to search messages.</p>
+            ) : (
               <>
                 <div className="sidebar-results-head">
                   <span>Messages</span>
@@ -180,44 +242,43 @@ export function Sidebar({
           </div>
         ) : (
           <>
-            {pinned.length > 0 && section('pinned', 'Pinned', null, pinned.map(chatBlock), pinned.length)}
-
-            {section(
-              'projects',
-              'Projects',
-              <button type="button" className="icon-btn" aria-label="Add project folder" title="Add project folder" onClick={addProject}>
-                <FolderPlus size={14} />
-              </button>,
-              projects.length === 0 ? (
-                <p className="sidebar-empty">Add a folder to group chats by project.</p>
-              ) : (
-                projects.map((project) => {
-                  const projectChats = chatsByProject.get(project.id) ?? [];
-                  const open = !collapsed[`project:${project.id}`];
-                  return (
-                    <ProjectGroup
-                      key={project.id}
-                      project={project}
-                      open={open}
-                      renaming={renamingProject === project.id}
-                      chats={projectChats.map(chatBlock)}
-                      onToggle={() => toggleGroup(`project:${project.id}`)}
-                      onNewChat={onNewChat}
-                      onCancelRename={() => setRenamingProject(null)}
-                      onRename={(name) => {
-                        setRenamingProject(null);
-                        invoke('projects:update', project.id, { name }).catch(reportError);
-                      }}
-                      onRenameStart={() => setRenamingProject(project.id)}
-                      onRemove={() => setRemovingProject(project.id)}
-                    />
-                  );
-                })
-              ),
-              projects.length
+            {pinned.length > 0 && (
+              <SidebarSection title="Pinned" open={!collapsed.pinned} onToggle={() => toggleGroup('pinned')}>
+                {pinned.map(chatBlock)}
+              </SidebarSection>
             )}
 
-            {section('chats', 'Chats', null, loose.length ? loose.map(chatBlock) : <p className="sidebar-empty">No chats outside projects.</p>)}
+            {projects.map((project) => (
+              <ProjectGroup
+                key={project.id}
+                project={project}
+                open={!collapsed[`project:${project.id}`]}
+                renaming={renamingProject === project.id}
+                chats={(chatsByProject.get(project.id) ?? []).map(chatBlock)}
+                onToggle={() => toggleGroup(`project:${project.id}`)}
+                onNewChat={onNewChat}
+                onCancelRename={() => setRenamingProject(null)}
+                onRename={(name) => {
+                  setRenamingProject(null);
+                  invoke('projects:update', project.id, { name }).catch(reportError);
+                }}
+                onRenameStart={() => setRenamingProject(project.id)}
+                onRemove={() => setRemovingProject(project.id)}
+              />
+            ))}
+
+            <SidebarSection
+              title="Recents"
+              open={!collapsed.chats}
+              onToggle={() => toggleGroup('chats')}
+              actions={
+                <button type="button" className="icon-btn row-add" aria-label="New chat" title="New chat" onClick={() => onNewChat(null)}>
+                  <Plus size={14} />
+                </button>
+              }
+            >
+              {loose.length ? loose.map(chatBlock) : <p className="sidebar-empty">{projects.length ? 'No chats outside projects.' : 'No chats yet.'}</p>}
+            </SidebarSection>
           </>
         )}
       </div>
@@ -238,12 +299,8 @@ export function Sidebar({
       )}
 
       <div className="sidebar-footer">
-        <ConnectionPill
-          view={connectionView(app.connection.state, tunnelConfigured(app))}
-          detail={app.connection.detail}
-          onClick={() => onOpenSettings('connection')}
-        />
-        <button type="button" className="icon-btn" aria-label="Settings" title="Settings (Ctrl+,)" onClick={() => onOpenSettings()}>
+        <AccountMenu app={app} onOpenSettings={onOpenSettings} />
+        <button type="button" className="icon-btn" aria-label="Settings" title={`Settings (${mod},)`} onClick={() => onOpenSettings()}>
           <Settings size={15} />
         </button>
       </div>
@@ -251,25 +308,57 @@ export function Sidebar({
   );
 }
 
-function ConnectionPill({ view, detail, onClick }: { view: ConnectionView; detail: string; onClick(): void }) {
+/** ChatGPT account and local-tools status, like the account chip in the Claude app. */
+function AccountMenu({ app, onOpenSettings }: { app: AppState; onOpenSettings(section?: string): void }) {
+  const view = connectionView(app.connection.state, tunnelConfigured(app));
+  const signedIn = app.browser.signedIn;
+  const account = signedIn === false ? 'Not signed in' : 'ChatGPT';
+  const entries: MenuEntry[] = [
+    { kind: 'label', label: `Local tools · ${view.label}` },
+    signedIn === false
+      ? { label: 'Sign in to ChatGPT', icon: LogIn, onSelect: () => invoke('browser:signIn').catch(reportError) }
+      : { label: 'Show ChatGPT', icon: Globe, onSelect: () => invoke('browser:show', null).catch(reportError) },
+    { label: 'Connection', icon: Plug, onSelect: () => onOpenSettings('connection') },
+    { label: 'ChatGPT settings', icon: Globe, onSelect: () => onOpenSettings('chatgpt') },
+    { label: 'Instructions', icon: FileText, onSelect: () => onOpenSettings('instructions') },
+    { kind: 'separator' },
+    { label: 'Settings', icon: Settings, onSelect: () => onOpenSettings() }
+  ];
   return (
-    <button type="button" className={cx('connection-pill', `is-${view.tone}`)} title={detail || view.label} onClick={onClick}>
-      <span className="status-dot" aria-hidden="true" />
-      <span>{view.label}</span>
-    </button>
+    <Menu
+      entries={entries}
+      label="Account"
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          className={cx('account', `is-${view.tone}`)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          title={app.connection.detail || view.label}
+          onClick={toggle}
+        >
+          <span className="account-avatar" aria-hidden="true">
+            G<span className="status-dot" />
+          </span>
+          <span className="account-text">
+            <span className="account-name">{account}</span>
+            <span className="account-plan">{view.label}</span>
+          </span>
+          <ChevronDown size={13} className="account-chevron" aria-hidden="true" />
+        </button>
+      )}
+    />
   );
 }
 
-function SidebarSection({ title, actions, children, count, open, onToggle }: { title: string; actions: ReactNode; children: ReactNode; count?: number; open: boolean; onToggle(): void }) {
+function SidebarSection({ title, actions, children, open, onToggle }: { title: string; actions?: ReactNode; children: ReactNode; open: boolean; onToggle(): void }) {
   return (
     <section className="sidebar-section" aria-label={title}>
       <div className="sidebar-section-head">
         <button type="button" className="sidebar-section-toggle" aria-expanded={open} onClick={onToggle}>
-          <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
           <span>{title}</span>
-          {count !== undefined && count > 0 && <span className="sidebar-count">{count}</span>}
         </button>
-        <div className="sidebar-section-actions">{actions}</div>
+        {actions && <div className="sidebar-section-actions">{actions}</div>}
       </div>
       {open && <div className="sidebar-section-body">{children}</div>}
     </section>

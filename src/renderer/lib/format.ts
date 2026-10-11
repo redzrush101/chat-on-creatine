@@ -12,6 +12,16 @@ export function formatDuration(ms: number): string {
   return restMinutes ? `${hours}h ${restMinutes}m` : `${hours}h`;
 }
 
+/** "01:16", or "1:02:05" past an hour: elapsed time of a task. */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return hours ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+}
+
 export function formatTokens(count: number): string {
   if (count < 1000) return String(count);
   if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
@@ -28,6 +38,21 @@ export function formatRelative(at: number, now = Date.now()): string {
   return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+/** "3 minutes ago", for message timestamps. */
+export function formatAgo(at: number, now = Date.now()): string {
+  const seconds = Math.round((at - now) / 1000);
+  if (seconds > -45) return 'just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes > -60) return relativeTime.format(minutes, 'minute');
+  const hours = Math.round(minutes / 60);
+  if (hours > -24) return relativeTime.format(hours, 'hour');
+  const days = Math.round(hours / 24);
+  if (days > -7) return relativeTime.format(days, 'day');
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function basename(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
@@ -36,32 +61,6 @@ export function basename(path: string): string {
 export function errorMessage(error: unknown): string {
   const raw = rawErrorMessage(error);
   return raw.replace(/^Error invoking remote method '[^']*': (Error: )?/, '') || 'Something went wrong';
-}
-
-function singleLine(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
-}
-
-const ARG_KEYS = ['command', 'cmd', 'path', 'file', 'paths', 'query', 'pattern', 'url', 'name', 'objective', 'text', 'message'];
-
-/** One line that tells what a tool call is about, from its arguments. */
-export function toolArgSummary(args: unknown): string {
-  if (typeof args === 'string') return singleLine(args, 160);
-  if (!args || typeof args !== 'object') return '';
-  const record = args as Record<string, unknown>;
-  for (const key of ARG_KEYS) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) return singleLine(value, 160);
-    if (Array.isArray(value) && value.every((item) => typeof item === 'string') && value.length) {
-      return singleLine(value.join(' '), 160);
-    }
-  }
-  try {
-    return singleLine(JSON.stringify(args), 160);
-  } catch {
-    return '';
-  }
 }
 
 export function eventTime(event: SessionEvent): number {

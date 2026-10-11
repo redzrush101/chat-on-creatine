@@ -45,6 +45,9 @@ describe('project git', () => {
       ])
     );
     expect(status.changes).toHaveLength(3);
+    // a.txt: one line changed; u.txt: one untracked line; the staged rename has no line changes.
+    expect(status.added).toBe(2);
+    expect(status.removed).toBe(1);
   });
 
   it('reports a folder outside a repository as not a repo', async () => {

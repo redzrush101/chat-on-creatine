@@ -1,24 +1,34 @@
 import { useState } from 'react';
-import { Folder, Globe, PanelLeft, PanelRight, Repeat, Target } from 'lucide-react';
+import { ChevronDown, Ellipsis, FileDiff, FolderOpen, Globe, Layers, ListChecks, MessageSquare, PanelLeft, PanelRightClose, Repeat, Target, Minimize2, SquareTerminal } from 'lucide-react';
 import type { AppState, GoalState, SessionMeta } from '@shared/types';
 import { invoke } from '../../lib/bridge';
-import { cx, formatTokens } from '../../lib/format';
+import { cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
 import { InlineEdit } from '../common/InlineEdit';
-import { Popover } from '../common/Popover';
-import { ModelPicker } from '../composer/ModelPicker';
+import { Menu, MenuButton, type MenuEntry } from '../common/Popover';
+import { updateSession, useSessionMenu } from '../sidebar/session-menu';
+import type { PanelTab } from '../../workpanel/WorkPanel';
 
 interface TopBarProps {
   app: AppState;
   session: SessionMeta | null;
   sidebarOpen: boolean;
-  workPanelOpen: boolean;
+  /** The work panel tab on show, or null while the panel is closed. */
+  panel: PanelTab | null;
   onToggleSidebar(): void;
-  onToggleWorkPanel(): void;
+  onPanel(tab: PanelTab | null): void;
+  onDeleted?(sessionId: string): void;
 }
 
-export function TopBar({ app, session, sidebarOpen, workPanelOpen, onToggleSidebar, onToggleWorkPanel }: TopBarProps) {
+const PANEL_BUTTONS: { tab: PanelTab; label: string; icon: typeof SquareTerminal }[] = [
+  { tab: 'terminal', label: 'Terminal', icon: SquareTerminal },
+  { tab: 'changes', label: 'Changes', icon: FileDiff },
+  { tab: 'files', label: 'Files', icon: FolderOpen }
+];
+
+export function TopBar({ app, session, sidebarOpen, panel, onToggleSidebar, onPanel, onDeleted }: TopBarProps) {
   const project = session?.projectId ? app.projects.find((item) => item.id === session.projectId) : null;
+  const togglePanel = (tab: PanelTab) => onPanel(panel === tab ? null : tab);
   return (
     <header className={cx('topbar', !sidebarOpen && 'is-sidebar-hidden')}>
       <div className="topbar-start">
@@ -29,56 +39,59 @@ export function TopBar({ app, session, sidebarOpen, workPanelOpen, onToggleSideb
         )}
         {session && (
           <>
-            <TitleEditor key={session.id} session={session} />
+            <TitleMenu key={session.id} app={app} session={session} onDeleted={onDeleted ?? (() => undefined)} />
             <span className="chip topbar-optional" title={session.cwd ?? project?.path ?? 'No project folder'}>
-              <Folder size={12} aria-hidden="true" />
               <span className="chip-text">{project?.name ?? 'No project'}</span>
             </span>
-            <ModelPicker
-              className="topbar-optional"
-              value={{ model: session.model, reasoning: session.reasoning }}
-              catalog={app.models}
-              onChange={(value) => {
-                invoke('sessions:update', session.id, { model: value.model, reasoning: value.reasoning }).catch(reportError);
-              }}
-            />
             {session.goal.mode !== 'off' && <GoalBadge goal={session.goal} maxSteps={app.config.automation.maxSteps} />}
           </>
         )}
       </div>
-      <div className="topbar-end">
-        {session && (
-          <>
-            <ContextMeter sessionId={session.id} tokens={session.contextTokens} advisory={app.config.context.advisoryTokens} />
+      {session && (
+        <div className="topbar-end">
+          {PANEL_BUTTONS.map(({ tab, label, icon: Icon }) => (
             <button
+              key={tab}
               type="button"
-              className="btn btn-ghost"
-              aria-label="Show ChatGPT"
-              title="Open the ChatGPT page for this chat"
-              onClick={() => invoke('browser:show', session.id).catch(reportError)}
+              className={cx('icon-btn', panel === tab && 'is-active')}
+              aria-label={label}
+              aria-pressed={panel === tab}
+              title={label}
+              onClick={() => togglePanel(tab)}
             >
-              <Globe size={14} aria-hidden="true" />
-              <span className="topbar-label">Show ChatGPT</span>
+              <Icon size={16} />
             </button>
-          </>
-        )}
-        <button
-          type="button"
-          className={cx('icon-btn', workPanelOpen && 'is-active')}
-          aria-label={workPanelOpen ? 'Hide work panel' : 'Show work panel'}
-          aria-pressed={workPanelOpen}
-          title={`${workPanelOpen ? 'Hide' : 'Show'} work panel (Ctrl+J)`}
-          onClick={onToggleWorkPanel}
-        >
-          <PanelRight size={16} />
-        </button>
-      </div>
+          ))}
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Show ChatGPT"
+            title="Open the ChatGPT page for this chat"
+            onClick={() => invoke('browser:show', session.id).catch(reportError)}
+          >
+            <Globe size={16} />
+          </button>
+          <MenuButton
+            label="More"
+            icon={Ellipsis}
+            entries={[
+              { label: 'Background tasks', icon: Layers, checked: panel === 'tasks', onSelect: () => togglePanel('tasks') },
+              { label: 'Plan', icon: ListChecks, checked: panel === 'plan', onSelect: () => togglePanel('plan') },
+              { kind: 'separator' },
+              { label: 'Compact & resume', icon: Minimize2, onSelect: () => invoke('chat:compact', session.id).catch(reportError) },
+              ...(panel ? [{ label: 'Hide panel', icon: PanelRightClose, onSelect: () => onPanel(null) } satisfies MenuEntry] : [])
+            ]}
+          />
+        </div>
+      )}
     </header>
   );
 }
 
-function TitleEditor({ session }: { session: SessionMeta }) {
+/** Chat title with a chevron, like the Claude app: it opens the chat's actions; Rename edits in place. */
+function TitleMenu({ app, session, onDeleted }: { app: AppState; session: SessionMeta; onDeleted(sessionId: string): void }) {
   const [editing, setEditing] = useState(false);
+  const { entries, dialog } = useSessionMenu(session, app.projects, () => setEditing(true), onDeleted);
   if (editing) {
     return (
       <InlineEdit
@@ -88,15 +101,26 @@ function TitleEditor({ session }: { session: SessionMeta }) {
         onCancel={() => setEditing(false)}
         onCommit={(title) => {
           setEditing(false);
-          invoke('sessions:update', session.id, { title }).catch(reportError);
+          updateSession(session.id, { title });
         }}
       />
     );
   }
   return (
-    <button type="button" className="title" title="Rename chat" onClick={() => setEditing(true)}>
-      {session.title || 'New chat'}
-    </button>
+    <>
+      <Menu
+        entries={entries}
+        label="Chat actions"
+        trigger={({ open, toggle }) => (
+          <button type="button" className="title" aria-haspopup="menu" aria-expanded={open} title={session.title || 'New chat'} onClick={toggle} onDoubleClick={() => setEditing(true)}>
+            <MessageSquare size={15} className="title-icon" aria-hidden="true" />
+            <span className="title-text">{session.title || 'New chat'}</span>
+            <ChevronDown size={14} className="title-chevron" aria-hidden="true" />
+          </button>
+        )}
+      />
+      {dialog}
+    </>
   );
 }
 
@@ -119,65 +143,5 @@ function GoalBadge({ goal, maxSteps }: { goal: GoalState; maxSteps: number }) {
         {isLoop ? 'Loop' : 'Goal'} · {GOAL_STATUS[goal.status]} · {goal.steps}/{maxSteps}
       </span>
     </span>
-  );
-}
-
-function ContextMeter({ sessionId, tokens, advisory }: { sessionId: string; tokens: number; advisory: number }) {
-  const ratio = advisory > 0 ? tokens / advisory : 0;
-  const percent = Math.min(100, Math.round(ratio * 100));
-  const radius = 6;
-  const circumference = 2 * Math.PI * radius;
-  return (
-    <Popover
-      label="Context"
-      align="end"
-      panelClassName="is-context"
-      trigger={({ open, toggle }) => (
-        <button
-          type="button"
-          className={cx('context-meter', ratio >= 0.8 && 'is-high', ratio >= 1 && 'is-over')}
-          aria-expanded={open}
-          aria-label={`Context about ${percent}% of the advisory limit`}
-          title="Context estimate"
-          onClick={toggle}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="8" cy="8" r={radius} className="ring-track" />
-            <circle
-              cx="8"
-              cy="8"
-              r={radius}
-              className="ring-fill"
-              strokeDasharray={`${(Math.min(ratio, 1) * circumference).toFixed(2)} ${circumference.toFixed(2)}`}
-            />
-          </svg>
-          <span>{percent}%</span>
-        </button>
-      )}
-    >
-      {(close) => (
-        <div className="context-panel">
-          <p className="context-title">Context</p>
-          <p className="context-figure">
-            About {formatTokens(tokens)} of {formatTokens(advisory)} tokens (local estimate)
-          </p>
-          <p className="context-hint">
-            {ratio >= 1
-              ? 'This chat is long. Compact to continue in a fresh ChatGPT chat with a handoff brief.'
-              : 'Compact & resume continues in a fresh ChatGPT chat with a handoff brief.'}
-          </p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              close();
-              invoke('chat:compact', sessionId).catch(reportError);
-            }}
-          >
-            Compact &amp; resume
-          </button>
-        </div>
-      )}
-    </Popover>
   );
 }

@@ -1,13 +1,13 @@
-/* Composer, queued inputs and the model/mode controls around it. */
+/* Composer, the repo bar, queued inputs and the quiet controls under the field, like the Claude app. */
 .composer-wrap {
   flex: none;
-  padding: var(--space-2) var(--space-4) var(--space-3);
+  padding: var(--space-1) var(--space-4) var(--space-2);
 }
 
 .chat .composer-wrap,
 .home .composer-wrap {
   width: 100%;
-  max-width: var(--content-max);
+  max-width: calc(var(--content-max) + 2 * var(--space-4));
   margin: 0 auto;
 }
 
@@ -21,16 +21,27 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-3) var(--space-2);
-  border: 1px solid var(--border-strong);
+  padding: 9px var(--space-2) 9px var(--space-3);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .composer:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--focus-ring);
+  border-color: var(--border-strong);
+}
+
+.composer-wrap.is-hero .composer {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+  box-shadow: var(--shadow-raised);
+}
+
+.composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
 }
 
 .composer .attachments {
@@ -39,10 +50,11 @@
 
 .composer-input {
   display: block;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   min-height: 24px;
   max-height: 240px;
-  padding: 0 var(--space-1);
+  padding: 2px 0;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -50,6 +62,10 @@
   line-height: 1.5;
   resize: none;
   overflow-y: auto;
+}
+
+.composer-wrap.is-hero .composer-input {
+  min-height: 48px;
 }
 
 .composer-input:focus-visible {
@@ -60,122 +76,232 @@
   color: var(--text-faint);
 }
 
-.composer-bar {
+.composer-actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--space-1);
-  min-width: 0;
-}
-
-.composer-bar > * {
-  flex: none;
-}
-
-.composer-bar > .composer-spacer {
-  flex: 1;
-  min-width: 0;
-}
-
-.composer-bar .chip-button {
-  height: 26px;
-  min-width: 0;
-  max-width: 200px;
-  flex: 0 1 auto;
-  color: var(--text-muted);
-}
-
-.segmented {
-  display: inline-flex;
-  flex: none;
-  padding: 2px;
-  border-radius: var(--radius-sm);
-  background: var(--bg-hover);
-}
-
-.segmented-item {
-  height: 22px;
-  padding: 0 var(--space-2);
-  white-space: nowrap;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: var(--text-xs);
-}
-
-.segmented-item:hover {
-  color: var(--text);
-}
-
-.segmented-item.is-active {
-  background: var(--bg-elevated);
-  color: var(--text);
-  box-shadow: 0 0 0 1px var(--border);
 }
 
 .btn-send {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-full);
-  background: var(--text);
-  color: var(--bg);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.btn-send:not(:disabled) {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 .btn-send:hover:not(:disabled) {
-  background: var(--text-muted);
-  color: var(--bg);
+  background: var(--accent-strong);
+  color: var(--on-accent);
 }
 
 .btn-send:disabled {
-  background: var(--bg-active);
+  background: transparent;
   color: var(--text-faint);
   opacity: 1;
 }
 
 .btn-stop {
-  height: 30px;
-  padding: 0 10px;
-  border-radius: var(--radius-full);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   background: var(--text);
   color: var(--bg);
 }
 
-.btn-stop:hover {
+.btn-stop:hover:not(:disabled) {
   background: var(--text-muted);
   color: var(--bg);
+}
+
+.composer-actions .btn-small {
+  height: 26px;
+}
+
+/* Quiet controls under the field: attach, mode on the left; model, effort and context on the right. */
+.composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 32px;
+  padding: 2px 2px 0;
+}
+
+.composer-foot > * {
+  flex: none;
+}
+
+.composer-foot > .composer-spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.composer-foot .icon-btn {
+  color: var(--text-muted);
+}
+
+.quiet-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 220px;
+  height: 26px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.quiet-trigger:hover:not(:disabled),
+.quiet-trigger[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-offline {
+  margin-left: var(--space-2);
+}
+
+.context-meter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+}
+
+.context-meter:hover,
+.context-meter[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.ring-track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.ring-fill {
+  fill: none;
+  stroke: var(--link);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 8px 8px;
+}
+
+.context-meter.is-high .ring-fill {
+  stroke: var(--warning);
+}
+
+.context-meter.is-over .ring-fill {
+  stroke: var(--danger);
+}
+
+.context-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.context-figure {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.context-hint {
+  margin: var(--space-2) 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* The repo bar: chat folder, branch and change totals, sitting on the composer. */
+.repo-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 38px;
+  margin-bottom: var(--space-2);
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  font-size: var(--text-sm);
+}
+
+.repo-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+
+.repo-branch {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.repo-spacer {
+  flex: 1;
+}
+
+.repo-stat {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.repo-review {
+  height: 26px;
+  font-size: var(--text-xs);
+}
+
+.repo-close {
+  width: 26px;
+  height: 26px;
 }
 
 .turn-activity {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
-  color: var(--text-muted);
+  margin: 0 var(--space-1) var(--space-2);
+  color: var(--text-faint);
   font-size: var(--text-xs);
+}
+
+.turn-activity.is-active {
+  color: var(--accent-strong);
 }
 
 .turn-activity.is-failed {
   color: var(--danger);
-}
-
-.composer-bar .btn-small {
-  height: 26px;
-}
-
-.composer-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  min-height: 18px;
-  margin-top: var(--space-2);
-  color: var(--text-faint);
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
-.composer-wrap.is-hero .composer-hint {
-  justify-content: center;
 }
 
 /* Queued and steered messages above the composer */
@@ -192,7 +318,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  min-height: 30px;
+  min-height: 32px;
   padding: 2px var(--space-2) 2px var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -203,7 +329,7 @@
 .pending-tag {
   flex: none;
   padding: 0 6px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: var(--text-xs);
@@ -251,24 +377,19 @@
 /* Short windows: the composer and its banners shrink so the timeline keeps the room. */
 @media (max-height: 720px) {
   .composer-wrap {
-    padding: var(--space-1) var(--space-3) var(--space-2);
-  }
-
-  .composer {
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-2) var(--space-1);
+    padding: var(--space-1) var(--space-3) var(--space-1);
   }
 
   .composer-input {
     max-height: 120px;
   }
 
-  .composer-hint {
-    display: none;
+  .composer-wrap .banner,
+  .repo-bar {
+    margin-bottom: var(--space-1);
   }
 
   .composer-wrap .banner {
-    margin-bottom: var(--space-1);
     padding: var(--space-1) var(--space-2);
   }
 }
