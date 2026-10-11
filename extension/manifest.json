@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Chat on Creatine Bridge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lets Chat on Creatine drive ChatGPT in this browser.",
   "minimum_chrome_version": "125",
   "permissions": ["tabs", "storage", "alarms"],

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.1] - 2026-10-11
+
+- Match the model picker and thinking levels to the choices available in your signed-in
+  ChatGPT account, hiding internal backend variants and unavailable presets.
+- Apply and confirm the selected model and thinking level before every message, including
+  changes within an existing chat. Report a readable error if selection fails.
+- Wait for ChatGPT's model control and thinking-level pane to mount on fresh chats.
+- Show ChatGPT's web sources and citations as readable links instead of raw markers.
+
 ## [0.1.0] - 2026-10-11
 
 First release.
