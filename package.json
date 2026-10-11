@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "description": "Desktop coding workspace that drives ChatGPT and serves local tools over MCP.",
+  "author": "redzrush101 <109347215+redzrush101@users.noreply.github.com>",
+  "homepage": "https://github.com/redzrush101/chat-on-creatine",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/redzrush101/chat-on-creatine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/redzrush101/chat-on-creatine/issues"
+  },
   "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
@@ -14,7 +23,10 @@
     "verify": "npm run typecheck && npm run test && npm run build",
     "tunnel-client": "node scripts/fetch-tunnel-client.mjs",
     "rebuild-native": "node scripts/rebuild-native.mjs",
-    "build:extension": "node scripts/build-extension.mjs"
+    "build:extension": "node scripts/build-extension.mjs",
+    "dist": "npm run build && electron-builder --publish never",
+    "dist:dir": "npm run build && electron-builder --dir --publish never",
+    "smoke": "node scripts/smoke-packaged.mjs release"
   },
   "dependencies": {
     "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
@@ -42,6 +54,7 @@
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.16",
     "electron": "44.5.1",
+    "electron-builder": "26.17.0",
     "electron-vite": "^5.0.0",
     "esbuild": "^0.25.12",
     "highlight.js": "^11.12.0",

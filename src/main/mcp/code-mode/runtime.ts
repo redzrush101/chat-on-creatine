@@ -1,4 +1,5 @@
 import { errorMessage } from '@shared/errors';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { MAX_IMAGE_BYTES, sniffImage } from '../../fs/files';
@@ -29,6 +30,16 @@ type WorkerMessage =
   | { type: 'done'; status: string | null; detail: string };
 
 const requireRuntime = createRequire(typeof __filename === 'string' ? __filename : import.meta.url);
+
+/**
+ * Where the worker loads a module from. In a packaged app the modules are unpacked next to
+ * app.asar (electron-builder asarUnpack), and the worker loads them from the real files there.
+ */
+function workerModule(name: string): string {
+  const resolved = requireRuntime.resolve(name);
+  const unpacked = resolved.replace(/\.asar([\\/])/, '.asar.unpacked$1');
+  return unpacked !== resolved && existsSync(unpacked) ? unpacked : resolved;
+}
 
 /** Accepts a PNG/JPEG/GIF/WebP as a data URL or as MCP image content; anything else is refused. */
 function toImage(value: unknown): ToolContent | null {
@@ -150,8 +161,8 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
           tools: tools.map(({ name, description }) => ({ name, description })),
           memoryBytes: CODE_MODE_LIMITS.memoryBytes,
           cpuMs: CODE_MODE_LIMITS.cpuMs,
-          coreModule: requireRuntime.resolve('quickjs-emscripten-core'),
-          wasmModule: requireRuntime.resolve('@jitl/quickjs-wasmfile-release-sync')
+          coreModule: workerModule('quickjs-emscripten-core'),
+          wasmModule: workerModule('@jitl/quickjs-wasmfile-release-sync')
         },
         resourceLimits: { maxOldGenerationSizeMb: 128, stackSizeMb: 4 }
       });

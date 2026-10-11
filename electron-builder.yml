@@ -1,0 +1,104 @@
+appId: com.chatoncreatine.app
+productName: Chat on Creatine
+copyright: Copyright © 2026 redzrush101. MIT licensed.
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built app and its runtime dependencies ship.
+files:
+  - out/**
+  - package.json
+  - '!node_modules/node-pty/third_party/**/*'
+  - '!node_modules/node-pty/deps/**/*'
+  - '!node_modules/node-pty/src/**/*'
+  - '!**/*.map'
+
+extraResources:
+  - from: LICENSE
+    to: LICENSE
+  - from: resources/icon.png
+    to: icon.png
+  - from: resources/tray.png
+    to: tray.png
+  # tunnel-client and cloudflared for this platform, fetched by `npm run tunnel-client`.
+  - from: resources/bin
+    to: bin
+    filter: ['**/*']
+  - from: extension
+    to: extension
+    filter: ['**/*', '!**/*.map']
+
+# node-pty is N-API (prebuilt for macOS and Windows, compiled by `npm ci` on Linux), so it loads in
+# Electron as is. Rebuilding would compile it from source on every runner for nothing.
+npmRebuild: false
+
+# Native code, helpers and the code-mode worker's QuickJS modules must be real files.
+asarUnpack:
+  - '**/node_modules/node-pty/**'
+  - '**/node_modules/@jitl/**'
+  - '**/node_modules/quickjs-emscripten-core/**'
+
+# The static AppImage runtime; the FUSE2 default does not start on Ubuntu 24.04 without libfuse2.
+toolsets:
+  appimage: '1.0.3'
+
+win:
+  target: nsis
+  icon: build/icon.png
+  requestedExecutionLevel: asInvoker
+  artifactName: Chat-on-Creatine-Windows-${arch}-Setup.${ext}
+  # node-pty ships prebuilds for every OS; each package keeps only its own.
+  files:
+    - '!node_modules/node-pty/prebuilds/darwin-*/**/*'
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Chat on Creatine
+  uninstallDisplayName: Chat on Creatine
+  deleteAppDataOnUninstall: false
+
+mac:
+  target: [dmg, zip]
+  icon: build/icon.png
+  category: public.app-category.developer-tools
+  minimumSystemVersion: '13.0'
+  # Releases are unsigned and not notarized. The afterPack hook seals the bundle ad hoc so Apple
+  # Silicon does not report it as damaged (the linker signs every arm64 binary regardless).
+  identity: null
+  notarize: false
+  artifactName: Chat-on-Creatine-macOS-${arch}.${ext}
+  files:
+    - '!node_modules/node-pty/prebuilds/win32-*/**/*'
+
+afterPack: scripts/afterpack-macos-adhoc-seal.mjs
+
+linux:
+  target: [AppImage, deb]
+  icon: build/icon.png
+  category: Development
+  executableName: chat-on-creatine
+  maintainer: redzrush101 <109347215+redzrush101@users.noreply.github.com>
+  synopsis: Desktop workspace that lets ChatGPT work on your computer
+  # electron-builder spells x64 as x86_64 (AppImage) and amd64 (deb); one label for both.
+  artifactName: Chat-on-Creatine-Linux-${env.PACKAGE_ARCH}.${ext}
+  # Linux has no node-pty prebuild; `npm ci` compiles it into build/Release.
+  files:
+    - '!node_modules/node-pty/prebuilds/**/*'
+
+deb:
+  depends:
+    - libgtk-3-0 | libgtk-3-0t64
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0 | libatspi2.0-0t64
+    - libuuid1
+    - libsecret-1-0

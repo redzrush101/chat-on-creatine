@@ -1,0 +1,143 @@
+name: Release
+
+# A tag v<package version> packages every target, smoke-tests each package and publishes a GitHub
+# release. Running it by hand packages the same targets as workflow artifacts, without a release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: Windows x64, runner: windows-2025, os: win, arch: x64 }
+          - { name: Windows arm64, runner: windows-11-arm, os: win, arch: arm64 }
+          - { name: macOS Apple Silicon, runner: macos-15, os: mac, arch: arm64 }
+          - { name: macOS Intel, runner: macos-15-intel, os: mac, arch: x64 }
+          - { name: Linux x64, runner: ubuntu-24.04, os: linux, arch: x64 }
+          - { name: Linux arm64, runner: ubuntu-24.04-arm, os: linux, arch: arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          architecture: ${{ matrix.arch }}
+          cache: npm
+
+      - name: Tag matches the package version
+        if: github.ref_type == 'tag'
+        run: node -e "const v=require('./package.json').version,e=require('./extension/manifest.json').version;if(process.env.GITHUB_REF_NAME!=='v'+v)throw new Error('Tag '+process.env.GITHUB_REF_NAME+' does not match package version '+v);if(e!==v)throw new Error('extension/manifest.json is '+e+', package.json is '+v)"
+
+      - name: Runner is the target
+        run: node -e "const want={win:'win32',mac:'darwin',linux:'linux'}['${{ matrix.os }}'];if(process.platform!==want||process.arch!=='${{ matrix.arch }}')throw new Error('Expected '+want+'-${{ matrix.arch }}, got '+process.platform+'-'+process.arch)"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify
+        run: npm run verify
+
+      - name: Fetch the pinned tunnel client
+        run: npm run tunnel-client
+
+      - name: Package
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --${{ matrix.os }} --${{ matrix.arch }} --publish never
+
+      - name: Smoke-test the packaged app
+        if: matrix.os != 'linux'
+        run: npm run smoke
+
+      - name: Smoke-test the packaged app (Xvfb)
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth
+          xvfb-run -a npm run smoke
+
+      - name: Check the DEB installs
+        if: matrix.os == 'linux'
+        run: |
+          deb="release/Chat-on-Creatine-Linux-${{ matrix.arch }}.deb"
+          dpkg-deb --field "$deb" Package Version Architecture
+          test "$(dpkg-deb --field "$deb" Version)" = "$(node -p "require('./package.json').version")"
+          sudo apt-get install -y --no-install-recommends "./$deb"
+          test -x "$(readlink -f /usr/bin/chat-on-creatine)"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            release/Chat-on-Creatine-*.exe
+            release/Chat-on-Creatine-*.dmg
+            release/Chat-on-Creatine-*.zip
+            release/Chat-on-Creatine-*.AppImage
+            release/Chat-on-Creatine-*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download packages
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: package-*
+          path: release
+          merge-multiple: true
+
+      - name: Package the companion extension
+        run: |
+          (cd extension && zip -qr ../release/Chat-on-Creatine-Extension.zip . -x '*.map')
+          zip -q release/Chat-on-Creatine-Extension.zip LICENSE
+
+      - name: Checksums
+        run: |
+          cd release
+          sha256sum Chat-on-Creatine-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # The CHANGELOG section for this version, without its heading.
+          awk -v v="$version" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "::error::CHANGELOG.md has no section for $version"; exit 1; }
+          cat docs/release-install.md >> notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/Chat-on-Creatine-* release/SHA256SUMS.txt \
+            --title "Chat on Creatine ${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            --verify-tag

@@ -1,5 +1,8 @@
 # Chat on Creatine
 
+[![CI](https://github.com/redzrush101/chat-on-creatine/actions/workflows/ci.yml/badge.svg)](https://github.com/redzrush101/chat-on-creatine/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/redzrush101/chat-on-creatine)](https://github.com/redzrush101/chat-on-creatine/releases/latest)
+
 A desktop workspace that lets ChatGPT work on your computer: it reads and edits files, runs commands in a real
 shell, plans, spawns worker chats, and keeps going on long tasks — while ChatGPT itself (your account, your plan)
 does the thinking. A clean rewrite of Chat On Steroids.
@@ -22,9 +25,15 @@ Local MCP server: Core (files, patches, terminal, plans, workers) · Desktop (br
   streamed message.
 - Approved folders bound every file tool; commands run with your normal user rights (optional allow/deny policy).
 
+## Download
+
+Get the installer for Windows, macOS or Linux (x64 and arm64) from the
+[latest release](https://github.com/redzrush101/chat-on-creatine/releases/latest). The builds are
+unsigned; the release notes explain the one-time step each system asks for.
+
 ## Setup
 
-1. Build and start (NixOS / nix):
+1. Install a release, or build and start from source (NixOS / nix):
    ```sh
    nix develop
    npm ci && npm run rebuild-native && npm run tunnel-client
@@ -42,9 +51,9 @@ Local MCP server: Core (files, patches, terminal, plans, workers) · Desktop (br
 
 ```sh
 npm run dev         # electron-vite with HMR
-npm run typecheck
-npm test            # vitest
+npm run verify      # typecheck, tests, build
 npm run build:extension   # companion extension for the Chrome host
+npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
 ```
 
 Code map: `src/shared` contracts · `src/main/mcp` server + tools · `src/main/chatgpt` hosts + router ·
