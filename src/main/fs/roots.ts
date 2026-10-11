@@ -77,7 +77,9 @@ export class RootGuard implements PathGuard {
     const roots: string[] = [];
     for (const root of this.getConfig().roots) {
       try {
-        roots.push(realpathSync(nodePath.resolve(expandHome(root.path))));
+        // The native realpath, like fs/promises realpath in canonicalize(): the JS one keeps
+        // Windows 8.3 short names (RUNNER~1), so the two sides would never compare equal.
+        roots.push(realpathSync.native(nodePath.resolve(expandHome(root.path))));
       } catch {
         // A folder that was moved or unmounted is no longer approved in practice.
       }
