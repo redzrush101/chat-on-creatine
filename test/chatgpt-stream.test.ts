@@ -185,8 +185,14 @@ describe('ConversationStreamParser', () => {
       { event: 'delta', data: json({ o: 'add', v: { message: tool, conversation_id: CONV, error: null }, c: 1 }) },
       { event: 'delta', data: json({ v: { message: answer, conversation_id: CONV, error: null }, c: 2 }) },
       { event: 'delta', data: json({ p: '/message/content/parts/0', o: 'append', v: 'Done' }) },
-      { event: 'delta', data: json({ o: 'add', v: { message: { ...tool, id: 'm6' }, conversation_id: CONV, error: null }, c: 3 }) }
+      { event: 'delta', data: json({ o: 'add', v: { message: { ...tool, id: 'm6' }, conversation_id: CONV, error: null }, c: 3 }) },
+      { event: 'delta', data: json({ o: 'patch', v: [{ p: '/message/status', o: 'replace', v: 'finished_successfully' }] }) },
+      // After a patch, a bare envelope is a new message, not another patch.
+      { event: 'delta', data: json({ v: { message: { ...answer, id: 'm7' }, conversation_id: CONV, error: null }, c: 4 }) },
+      { event: 'delta', data: json({ p: '/message/content/parts/0', o: 'append', v: 'Final' }) }
     ]));
+    expect(latest.get('m7')?.text).toBe('Final');
+    expect(latest.get('m6')?.text).toBe('ok');
     expect(latest.get('m3')).toMatchObject({ text: 'The word is **x**.', status: 'finished_successfully' });
     expect(latest.get('m4')).toMatchObject({ role: 'tool', authorName: 'functions.exec', text: 'ok' });
     expect(latest.get('m5')?.text).toBe('Done');

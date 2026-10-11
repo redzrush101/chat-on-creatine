@@ -302,6 +302,11 @@ export class ConversationStreamParser {
     if (typeof event.p === 'string') this.lastPath = event.p;
     else if (typeof event.o === 'string') this.lastPath = '';
     if (typeof event.o === 'string') this.lastOp = event.o;
+    // A bare message envelope always starts the next message, whatever the previous operation was.
+    if (event.p === undefined && event.o === undefined && isObj(event.v) && isObj(event.v.message)) {
+      this.lastPath = '';
+      this.lastOp = 'add';
+    }
     this.envelope = applyOp(this.envelope, this.lastPath, this.lastOp, event.v);
 
     if (!isObj(this.envelope)) return;

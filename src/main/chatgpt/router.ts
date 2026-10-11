@@ -82,6 +82,8 @@ export class ChatRouter {
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
   private readonly autoContinues = new Map<string, number>();
   private readonly incompleteTurns = new Set<string>();
+  /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
+  private readonly currentTurnIds = new Map<string, string>();
   private gcTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: RouterDeps) {
@@ -301,6 +303,7 @@ export class ChatRouter {
         break;
       case 'message':
         this.indexMessage(sessionId, event.message);
+        if (event.message.turnId) this.currentTurnIds.set(sessionId, event.message.turnId);
         if (event.message.role === 'assistant' && /partial|incomplete/.test(event.message.status)) this.incompleteTurns.add(sessionId);
         this.patchLive(sessionId, { lastActivityAt: Date.now() });
         break;
@@ -349,6 +352,7 @@ export class ChatRouter {
     if (!session) return;
     const tokens = contextTokens(this.deps.store.events(sessionId));
     const updated = this.deps.store.update(sessionId, { contextTokens: tokens }) ?? session;
+    void this.reconcile(updated);
     this.maybeAutoContinue(updated, finalOutcome);
     this.deps.onTurnEnd(updated, finalOutcome);
     void this.pump(sessionId);
@@ -369,6 +373,21 @@ export class ChatRouter {
     }
     this.autoContinues.set(session.id, count + 1);
     this.deps.outbox.enqueue({ sessionId: session.id, text: 'Continue.', attachments: [], delivery: 'after-turn', source: 'automation' });
+  }
+
+  /**
+   * Re-reads the finished turn from ChatGPT's conversation API and upserts its messages. The
+   * stream is the live view; this is the authoritative final text if a delta was ever misread.
+   */
+  private async reconcile(session: SessionMeta): Promise<void> {
+    const turnId = this.currentTurnIds.get(session.id);
+    const tabId = this.sessionTab.get(session.id);
+    if (!turnId || !tabId || !session.conversationId) return;
+    const result = await this.deps.host.command(tabId, { type: 'conversation', conversationId: session.conversationId }, 20_000);
+    if (!result.ok || !Array.isArray(result.value)) return;
+    for (const message of result.value as ChatMessage[]) {
+      if (message.turnId === turnId && message.role !== 'user') this.deps.recorder.handle(session.id, { type: 'message', streamId: null, message });
+    }
   }
 
   // ------------------------------------------------------------------ delivery
