@@ -46,6 +46,7 @@ export function App() {
   const [panelWide, setPanelWide] = useStoredState('creatine.workPanel.wide', false);
   const [sidebarOpen, setSidebarOpen] = useStoredState('creatine.sidebarOpen', true);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [floatingPanel, setFloatingPanel] = useState(false);
   const [settings, setSettings] = useState<{ section?: string } | null>(null);
   const [draft, setDraft] = useState<DraftChoices>({ projectId: null, model: null, mode: 'off' });
   const [focusNonce, setFocusNonce] = useState(0);
@@ -87,6 +88,13 @@ export function App() {
   const sidebarInFlow = sidebarShown && !narrow;
   const toggleSidebar = () => (narrow ? setOverlayOpen(!overlayOpen) : setSidebarOpen(!sidebarOpen));
   const showSidebar = () => (narrow ? setOverlayOpen(true) : setSidebarOpen(true));
+
+  const roomForPanel = viewport - (sidebarInFlow ? sidebar.width : 0) - MIN_MAIN_WIDTH;
+  // Without room beside the chat (a tiled or half-screen window) the panel floats over it,
+  // opened per window like the narrow sidebar, so a remembered open panel never covers the chat.
+  const panelFloats = roomForPanel < MIN_PANEL_WIDTH;
+  const panelOpen = panelFloats ? floatingPanel : workPanelOpen;
+  const showPanel = (open: boolean) => (panelFloats ? setFloatingPanel(open) : setWorkPanel(open));
 
   // Opening a chat drops the forward history, like a browser.
   const visit = (sessionId: string | null) => {
@@ -157,7 +165,7 @@ export function App() {
       toggleSidebar();
     } else if (key === 'j' && app && !settings) {
       event.preventDefault();
-      setWorkPanel(!workPanelOpen);
+      showPanel(!panelOpen);
     }
   };
 
@@ -185,12 +193,11 @@ export function App() {
   const onNewChatChange = (patch: Partial<NewChatDraft>) => setDraft((current) => ({ ...current, ...patch }));
   const onPanel = (tab: PanelTab | null) => {
     if (tab) setPanelTab(tab);
-    setWorkPanel(tab !== null);
+    showPanel(tab !== null);
   };
-  // The panel only shows beside a chat, and only when the chat column keeps its minimum width.
-  const roomForPanel = viewport - (sidebarInFlow ? sidebar.width : 0) - MIN_MAIN_WIDTH;
-  const panelWidth = panelWide ? roomForPanel : Math.min(panel.width, roomForPanel);
-  const panelVisible = workPanelOpen && !settings && session !== null && panelWidth >= MIN_PANEL_WIDTH;
+  // Beside the chat the panel leaves the chat column its minimum width; floating, it leaves an edge to click away.
+  const panelWidth = panelFloats ? Math.min(panel.width, viewport - 48) : panelWide ? roomForPanel : Math.min(panel.width, roomForPanel);
+  const panelVisible = panelOpen && !settings && session !== null;
 
   return (
     <div className="shell">
@@ -261,8 +268,9 @@ export function App() {
         )}
       </main>
 
+      {panelVisible && panelFloats && <button type="button" className="panel-scrim" aria-label="Close panel" onClick={() => showPanel(false)} />}
       {panelVisible && session && (
-        <aside className="panel" style={{ width: panelWidth }} aria-label="Work panel">
+        <aside className={cx('panel', panelFloats && 'is-overlay')} style={{ width: panelWidth }} aria-label="Work panel">
           <Resizer
             side="left"
             label="Work panel width"

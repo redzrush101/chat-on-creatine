@@ -36,7 +36,8 @@
   box-shadow: var(--shadow-pop);
 }
 
-.sidebar-scrim {
+.sidebar-scrim,
+.panel-scrim {
   position: absolute;
   inset: 0;
   z-index: 35;
@@ -561,6 +562,15 @@
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   overflow: hidden;
+}
+
+.panel.is-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  box-shadow: var(--shadow-pop);
 }
 
 /* Top bar (chat and new chat) */
