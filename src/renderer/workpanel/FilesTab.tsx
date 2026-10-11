@@ -1,4 +1,4 @@
-import { errorMessage } from '@shared/errors';
+import { errorMessage } from '../lib/format';
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';

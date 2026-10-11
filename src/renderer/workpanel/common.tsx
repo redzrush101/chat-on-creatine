@@ -1,4 +1,4 @@
-import { errorMessage } from '@shared/errors';
+import { errorMessage } from '../lib/format';
 import { useCallback, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 

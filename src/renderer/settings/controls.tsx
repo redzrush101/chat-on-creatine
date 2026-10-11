@@ -1,4 +1,4 @@
-import { errorMessage } from '@shared/errors';
+import { errorMessage } from '../lib/format';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ButtonHTMLAttributes, JSX, ReactNode } from 'react';
 import type { DeepPartial, Config } from '@shared/config';

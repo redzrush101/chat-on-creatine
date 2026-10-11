@@ -1,4 +1,4 @@
-import { errorMessage } from '@shared/errors';
+import { errorMessage } from '../lib/format';
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Plus, X } from 'lucide-react';
