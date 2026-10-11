@@ -12,12 +12,12 @@ import type { SessionStore } from '../sessions/store';
 import { contextTokens } from '../sessions/tokens';
 import type { ChatHost } from './host';
 import { CallerAttribution } from './attribution';
+import { TurnFollowUps } from './follow-ups';
 
 const log = createLogger('router');
 
 /** A page that stopped generating without a stream end is treated as idle after this. */
 const GENERATING_SETTLE_MS = 6_000;
-const MAX_AUTO_CONTINUES = 3;
 
 export type TurnOutcome = 'done' | 'stopped' | 'error' | 'incomplete';
 
@@ -48,9 +48,9 @@ export class ChatRouter {
   private readonly sessionTab = new Map<string, string>();
   private readonly live = new Map<string, SessionLive>();
   private readonly attribution: CallerAttribution;
+  private readonly followUps: TurnFollowUps;
   private readonly pumping = new Set<string>();
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
-  private readonly autoContinues = new Map<string, number>();
   private readonly incompleteTurns = new Set<string>();
   /** Sessions whose running turn the user stopped; that turn ends as `stopped` whatever the page says. */
   private readonly userStopped = new Set<string>();
@@ -58,8 +58,6 @@ export class ChatRouter {
   private readonly openStreams = new Map<string, Set<string>>();
   /** Streams whose turn already ended at the final answer; their late stream end is ignored. */
   private readonly answeredStreams = new Set<string>();
-  /** Inputs steered into tool results during the running turn. */
-  private readonly steeredThisTurn = new Map<string, InputItem[]>();
 
   /**
    * A new-chat tab loaded ahead of time (built-in browser only), so a new chat or worker does not
@@ -73,6 +71,7 @@ export class ChatRouter {
   private gcTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: RouterDeps) {
+    this.followUps = new TurnFollowUps(deps.outbox, deps.store, deps.getConfig);
     this.attribution = new CallerAttribution({
       callerFor: (id) => this.callerFor(id),
       generatingSessions: () => [...this.live.values()].filter((live) => live.turn === 'generating').map((live) => live.sessionId),
@@ -126,7 +125,16 @@ export class ChatRouter {
     if (!tabId) return;
     if (this.turnOf(sessionId) !== 'idle') this.userStopped.add(sessionId);
     const result = await this.deps.host.command(tabId, { type: 'stop' }, 10_000);
-    if (!result.ok) log.warn(`stop failed: ${result.error}`);
+    if (!result.ok) {
+      // The turn goes on, so it must not end as stopped when it finishes.
+      this.userStopped.delete(sessionId);
+      log.warn(`stop failed: ${result.error}`);
+    }
+  }
+
+  /** Stops a generating turn so the session's queued input is delivered as soon as it ends. */
+  interrupt(sessionId: string): void {
+    if (this.turnOf(sessionId) === 'generating') void this.stopTurn(sessionId);
   }
 
   setTurn(sessionId: string, turn: SessionLive['turn']): void {
@@ -191,26 +199,7 @@ export class ChatRouter {
 
   /** Inputs handed to the model inside a tool result during the current turn. */
   noteSteered(sessionId: string, items: InputItem[]): void {
-    this.steeredThisTurn.set(sessionId, [...(this.steeredThisTurn.get(sessionId) ?? []), ...items]);
-  }
-
-  /**
-   * Models treat tool output as data, not instructions, and ChatGPT's code runner may never print
-   * it, so a message steered into a tool result is not reliably acted on. After the turn it is sent
-   * again as a real user message, worded so a model that already handled it just confirms.
-   */
-  private resendUnseenSteering(session: SessionMeta): void {
-    const steered = this.steeredThisTurn.get(session.id) ?? [];
-    this.steeredThisTurn.delete(session.id);
-    for (const item of steered) {
-      this.deps.outbox.enqueue({
-        sessionId: session.id,
-        text: `While you were working I sent this message; if you have not handled it yet, do it now, otherwise just confirm:\n\n${item.text}`,
-        attachments: [],
-        delivery: 'after-turn',
-        source: 'automation'
-      });
-    }
+    this.followUps.noteSteered(sessionId, items);
   }
 
   noteToolRunning(sessionId: string, delta: 1 | -1): void {
@@ -328,27 +317,9 @@ export class ChatRouter {
     const tokens = contextTokens(this.deps.store.events(sessionId));
     const updated = this.deps.store.update(sessionId, { contextTokens: tokens }) ?? session;
     void this.reconcile(updated);
-    this.resendUnseenSteering(updated);
-    this.maybeAutoContinue(updated, finalOutcome);
+    this.followUps.afterTurn(updated, finalOutcome);
     this.deps.onTurnEnd(updated, finalOutcome);
     void this.pump(sessionId);
-  }
-
-  private maybeAutoContinue(session: SessionMeta, outcome: TurnOutcome): void {
-    if (outcome === 'done' || outcome === 'stopped') {
-      this.autoContinues.delete(session.id);
-      return;
-    }
-    if (!this.deps.getConfig().automation.autoContinue) return;
-    const count = this.autoContinues.get(session.id) ?? 0;
-    if (count >= MAX_AUTO_CONTINUES) {
-      this.record(session.id, [
-        { kind: 'notice', id: `notice:${Date.now()}`, at: Date.now(), level: 'warn', text: 'The answer stopped unfinished again; not continuing automatically.' }
-      ]);
-      return;
-    }
-    this.autoContinues.set(session.id, count + 1);
-    this.deps.outbox.enqueue({ sessionId: session.id, text: 'Continue.', attachments: [], delivery: 'after-turn', source: 'automation' });
   }
 
   /**

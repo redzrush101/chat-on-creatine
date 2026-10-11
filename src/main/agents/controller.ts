@@ -11,6 +11,8 @@ interface AgentControllerDeps {
   outbox: Outbox;
   getConfig(): Config;
   turnOf(sessionId: string): 'idle' | 'sending' | 'generating' | 'compacting';
+  /** Stops the session's running turn so the message queued for it is sent right away. */
+  interrupt(sessionId: string): void;
   onChange(): void;
 }
 
@@ -224,19 +226,21 @@ export class AgentController implements AgentsApi {
       return 'Sent to the prime.';
     }
 
+    // The prime's word reaches a worker as a real message at once: a message riding a tool result
+    // is easily ignored, so a working worker's turn is stopped and the message starts the next one.
     const prime = from;
     const runtime = this.rt(to);
     const label = `${to.title} (${to.id})`;
+    this.enqueue(to.id, `Message from the prime chat:\n\n${text}`, 'after-turn');
     if (runtime.state === 'asleep' || runtime.state === 'failed') {
       runtime.state = 'queued';
-      this.enqueue(to.id, text, 'after-turn');
       this.record(prime.id, 'woke', to, text);
       return `Waking ${label} in its existing chat.`;
     }
-    const delivery: InputDelivery = runtime.state === 'working' ? 'now' : 'after-turn';
-    this.enqueue(to.id, text, delivery);
     this.record(prime.id, 'messaged', to, text);
-    return `Sent to ${label}${delivery === 'now' ? '; it is working and reads this with its next tool result' : ''}.`;
+    if (runtime.state === 'queued') return `Sent to ${label}; it reads this when it starts.`;
+    this.deps.interrupt(to.id);
+    return `Sent to ${label}. It was working: its turn was stopped and it reads this now.`;
   }
 
   private report(prime: SessionMeta, worker: SessionMeta, heading: string, text: string, action: AgentAction): void {
@@ -244,8 +248,12 @@ export class AgentController implements AgentsApi {
     this.enqueue(prime.id, `${heading}\n\n${text}`, 'now');
   }
 
+  /** Agent messages that have not left yet travel together: one turn reads every pending report. */
   private enqueue(sessionId: string, text: string, delivery: InputDelivery): void {
-    this.deps.outbox.enqueue({ sessionId, text, attachments: [], delivery, source: 'agent' });
+    const { outbox } = this.deps;
+    const pending = outbox.list(sessionId).find((item) => item.state === 'queued' && item.source === 'agent' && item.delivery === delivery);
+    if (pending && outbox.update(pending.id, { text: `${pending.text}\n\n---\n\n${text}` })) return;
+    outbox.enqueue({ sessionId, text, attachments: [], delivery, source: 'agent' });
   }
 
   private record(primeId: string, action: AgentAction, worker: SessionMeta, text: string): void {

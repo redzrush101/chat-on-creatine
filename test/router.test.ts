@@ -33,8 +33,12 @@ afterEach(async () => {
 });
 
 function setup(selection: PageResult = { ok: true }) {
-  const command = vi.fn(async (_tabId: string, cmd: PageCommand): Promise<PageResult> =>
-    cmd.type === 'select-model' ? selection : { ok: true, value: { conversationId: 'conversation' } });
+  const command = vi.fn(async (_tabId: string, cmd: PageCommand): Promise<PageResult> => {
+    if (cmd.type === 'select-model') return selection;
+    if (cmd.type === 'stop') return { ok: false, error: 'no stop control is visible' };
+    return { ok: true, value: { conversationId: 'conversation' } };
+  });
+  const ends: string[] = [];
   const opened: ReturnType<ChatHost['tabs']> = [];
   const host: ChatHost = {
     kind: 'builtin', start: async () => {}, stop: async () => {},
@@ -51,9 +55,9 @@ function setup(selection: PageResult = { ok: true }) {
   router = new ChatRouter({ host, store, outbox,
     recorder: new Recorder({ store, isOwnConnectorPath: () => false }),
     getConfig: defaultConfig, openingContext: async () => null, sessionCwd: () => null,
-    canStart: () => true, onTurnEnd: () => {}, onLiveChange: () => {}
+    canStart: () => true, onTurnEnd: (_session, outcome) => ends.push(outcome), onLiveChange: () => {}
   });
-  return { command, host };
+  return { command, host, ends };
 }
 
 describe('model selection before delivery', () => {
@@ -123,5 +127,33 @@ describe('turn end', () => {
     page.page('tab0', { type: 'turn-start', streamId: 's2', conversationId: 'conversation', requestId: null });
     page.page('tab0', { type: 'turn-end', streamId: 's1', conversationId: 'conversation', outcome: 'complete', error: null });
     expect(router.turnOf(session.id)).toBe('generating');
+  });
+
+  async function generating() {
+    const session = store.create({ kind: 'chat', conversationId: 'conversation' });
+    const first = outbox.enqueue({ sessionId: session.id, text: 'first', attachments: [], delivery: 'now', source: 'app' });
+    await vi.waitFor(() => expect(outbox.get(first.id)?.state).toBe('sent'));
+    page.page('tab0', { type: 'turn-start', streamId: 's1', conversationId: 'conversation', requestId: null });
+    return session;
+  }
+
+  it('does not end a turn as stopped when the stop control was missing', async () => {
+    const { ends } = setup();
+    const session = await generating();
+    await router.stopTurn(session.id);
+    page.page('tab0', { type: 'message', streamId: 's1', message: answer });
+    expect(ends).toEqual(['done']);
+  });
+
+  it("sends the user's steered messages again after the turn, but not agent reports", async () => {
+    setup();
+    const session = await generating();
+    for (const source of ['app', 'agent'] as const) {
+      outbox.enqueue({ sessionId: session.id, text: `from ${source}`, attachments: [], delivery: 'now', source });
+    }
+    router.noteSteered(session.id, outbox.takeSteerable(session.id));
+    page.page('tab0', { type: 'message', streamId: 's1', message: answer });
+    const resent = outbox.list(session.id).filter((item) => item.source === 'automation');
+    expect(resent.map((item) => item.text)).toEqual([expect.stringContaining('from app')]);
   });
 });

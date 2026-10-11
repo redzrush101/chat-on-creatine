@@ -29,7 +29,8 @@ export const agentsTool = defineTool({
     'Run ChatGPT worker chats. spawn takes workers: [{label, task}] and optional context. ' +
     'Omit model and reasoning_effort unless the user explicitly requests an override; saved app defaults apply. ' +
     'Do not ask the user to choose them. Reuse a suitable sleeping worker with message before spawn. ' +
-    'message: prime↔worker. Reports ride tool results, never restart primes. Use status once to collect pending reports before finalizing; ' +
+    'message: prime↔worker. A message to a working worker stops its turn and reaches it at once; to a sleeping worker it wakes it. ' +
+    'Worker reports reach you with your next tool result, or as a message once you are idle. Use status once to collect pending reports before finalizing; ' +
     'otherwise state that review is pending. Never poll repeatedly. ' +
     'status: this run’s workers, their state and free slots. finish: record the report, then normally sleep.',
   input: {

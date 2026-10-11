@@ -131,7 +131,14 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
 
   // Router, agents and automation reference each other through these late-bound closures.
   let router: ChatRouter;
-  const agents = new AgentController({ store, outbox, getConfig, turnOf: (id) => router.turnOf(id), onChange: hooks.changed });
+  const agents = new AgentController({
+    store,
+    outbox,
+    getConfig,
+    turnOf: (id) => router.turnOf(id),
+    interrupt: (id) => router.interrupt(id),
+    onChange: hooks.changed
+  });
   const automation = new Automation({
     store,
     outbox,

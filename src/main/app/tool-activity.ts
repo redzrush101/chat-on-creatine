@@ -1,4 +1,4 @@
-import type { PlanItem, SessionEvent, ToolOutputPart } from '@shared/types';
+import type { InputItem, PlanItem, SessionEvent, ToolOutputPart } from '@shared/types';
 import { createLogger } from '../core/log';
 import type { ChatRouter } from '../chatgpt/router';
 import type { CallRecord } from '../mcp/server';
@@ -80,8 +80,16 @@ export class ToolActivity {
     });
   }
 
-  /** User messages typed while the model worked ride along with its next tool result. */
+  /** Messages queued while the model worked ride along with its next tool result, labelled by sender. */
   steering(caller: Caller): string[] {
+    return this.take(caller).map((item) =>
+      item.source === 'agent'
+        ? `MESSAGE FROM ANOTHER AGENT IN THIS RUN (arrived while you were working). Read it and act on it before you finish:\n${item.text}`
+        : `NEW MESSAGE FROM THE USER (sent while you were working). Treat it as part of the task and act on it before you finish:\n${item.text}`
+    );
+  }
+
+  private take(caller: Caller): InputItem[] {
     const items = this.deps.outbox.takeSteerable(caller.sessionId);
     if (!items.length) return [];
     this.deps.router.noteSteered(caller.sessionId, items);
@@ -97,7 +105,7 @@ export class ToolActivity {
         source: item.source === 'agent' ? 'agent' : item.source === 'automation' ? 'automation' : 'app'
       }))
     );
-    return items.map((item) => item.text);
+    return items;
   }
 
   /** One plan per user turn: later updates in the same turn replace it in place. */
@@ -114,7 +122,7 @@ export class ToolActivity {
       const queued = this.deps.outbox.list(caller.sessionId).filter((item) => item.state === 'queued');
       if (queued.length) {
         for (const item of queued) this.deps.outbox.update(item.id, { delivery: 'now' });
-        const texts = this.steering(caller);
+        const texts = this.take(caller).map((item) => item.text);
         if (texts.length) return `Queued instructions from the user — complete and verify them, then call session_finish again:\n\n${texts.map((text, i) => `${i + 1}. ${text}`).join('\n\n')}`;
       }
       await new Promise((resolve) => setTimeout(resolve, 1_000));

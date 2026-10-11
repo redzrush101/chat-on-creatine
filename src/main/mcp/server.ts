@@ -47,7 +47,7 @@ interface McpHttpServerOptions {
   tokens: Record<SurfaceId, string>;
   /** Attributes a call to a chat from its `x-request-id` join key (null when the header is absent). */
   resolveCaller(requestId: string | null, call: { surface: SurfaceId; tool: string; args: unknown }): Promise<Caller | null>;
-  /** User messages typed to this chat while it was working; appended to the result. */
+  /** Queued messages for the caller's session, already labelled, to append to this tool result. */
   steering(caller: Caller): string[];
   hooks?: {
     onRequest?(surface: SurfaceId): void;
@@ -310,10 +310,7 @@ export class McpHttpServer {
     const steering = caller ? options.steering(caller) : [];
     const content = [
       ...boundContent(result.content),
-      ...steering.map((message): ToolContent => ({
-        type: 'text',
-        text: `NEW MESSAGE FROM THE USER (sent while you were working). Treat it as part of the task and act on it before you finish:\n${message}`
-      }))
+      ...steering.map((text): ToolContent => ({ type: 'text', text }))
     ];
     return this.toCallResult({ ...result, content });
   }

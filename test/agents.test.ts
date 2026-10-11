@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultConfig } from '@shared/config';
 import type { SessionMeta } from '@shared/types';
 import { AgentController } from '../src/main/agents/controller';
@@ -28,11 +28,13 @@ function setup() {
   stores.push(store);
   store.load();
   const outbox = new Outbox(join(dir, 'outbox.json'));
+  const interrupt = vi.fn();
   const controller = new AgentController({
     store,
     outbox,
     getConfig: () => defaultConfig(),
     turnOf: () => 'idle',
+    interrupt,
     onChange: () => {}
   });
   const prime = store.create({ kind: 'chat', title: 'Prime', conversationId: 'conv-prime' });
@@ -47,7 +49,7 @@ function setup() {
     if (!found) throw new Error(`no worker ${label}`);
     return found;
   };
-  return { store, outbox, controller, prime, callerOf, worker };
+  return { store, outbox, controller, prime, callerOf, worker, interrupt };
 }
 
 const THREE = {
@@ -105,15 +107,46 @@ describe('AgentController', () => {
     const { outbox, controller, prime, callerOf, worker } = setup();
     await controller.spawn(callerOf(prime), THREE);
     controller.canStart(worker('A'));
+    for (const item of outbox.list(worker('A').id)) outbox.markSending(item.id) && outbox.markSent(item.id);
     await controller.finish(callerOf(worker('A')), { result: 'parser done' });
 
     await controller.message(callerOf(prime), { messages: [{ to: 'A', text: 'Also cover errors.' }] });
 
-    expect(outbox.list(worker('A').id).find((item) => item.state === 'queued' && item.text === 'Also cover errors.')).toMatchObject({
-      delivery: 'after-turn'
+    expect(outbox.list(worker('A').id).find((item) => item.state === 'queued')).toMatchObject({
+      delivery: 'after-turn',
+      text: 'Message from the prime chat:\n\nAlso cover errors.'
     });
     const run = controller.runs().find((entry) => entry.primeSessionId === prime.id)!;
     expect(run.workers.find((info) => info.label === 'A')?.state).toBe('queued');
+  });
+
+  it('a message to a working worker is sent as its next message and stops its turn', async () => {
+    const { outbox, controller, prime, callerOf, worker, interrupt } = setup();
+    await controller.spawn(callerOf(prime), THREE);
+    controller.canStart(worker('A'));
+    for (const item of outbox.list(worker('A').id)) outbox.markSending(item.id) && outbox.markSent(item.id);
+
+    const reply = await controller.message(callerOf(prime), { messages: [{ to: 'A', text: 'Stop, use the other API.' }] });
+
+    expect(interrupt).toHaveBeenCalledExactlyOnceWith(worker('A').id);
+    expect(outbox.list(worker('A').id).filter((item) => item.state === 'queued')).toEqual([
+      expect.objectContaining({ delivery: 'after-turn', text: 'Message from the prime chat:\n\nStop, use the other API.' })
+    ]);
+    expect(reply).toContain('its turn was stopped');
+  });
+
+  it('reports that have not reached the prime yet travel as one message', async () => {
+    const { outbox, controller, prime, callerOf, worker } = setup();
+    await controller.spawn(callerOf(prime), THREE);
+    controller.canStart(worker('A'));
+    controller.canStart(worker('B'));
+
+    await controller.finish(callerOf(worker('A')), { result: 'parser done' });
+    await controller.finish(callerOf(worker('B')), { result: 'tests done' });
+
+    const queued = outbox.list(prime.id).filter((item) => item.state === 'queued');
+    expect(queued).toHaveLength(1);
+    expect(queued[0]!.text).toBe('Worker "A" finished:\n\nparser done\n\n---\n\nWorker "B" finished:\n\ntests done');
   });
 
   it('a worker cannot spawn workers', async () => {
