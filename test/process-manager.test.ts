@@ -32,7 +32,8 @@ const ptyLoads = (() => {
 
 describe('ProcessManager', () => {
   it('returns output and the exit code of a command that finishes within the yield window', async () => {
-    const result = await manager.exec({ cmd: 'echo hello', workdir: os.homedir(), yieldTimeMs: 300 }, 'chat-a');
+    // A generous window: exec returns as soon as the command exits, and PowerShell starts slowly.
+    const result = await manager.exec({ cmd: 'echo hello', workdir: os.homedir(), yieldTimeMs: 10_000 }, 'chat-a');
     expect(result.exitCode).toBe(0);
     expect(result.sessionId).toBeNull();
     expect(result.output).toContain('hello');

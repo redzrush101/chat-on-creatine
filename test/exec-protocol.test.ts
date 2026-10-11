@@ -29,7 +29,10 @@ it('passes a running command ID directly from exec_command to write_stdin over M
     await server.start(0);
     await client.connect(new StreamableHTTPClientTransport(new URL(server.localUrl('core')!)));
     const started = await client.callTool({ name: 'exec_command', arguments: {
-      cmd: 'read answer; printf "received:%s\\n" "$answer"', workdir: root, yield_time_ms: 250
+      // Node reads the line, so the command means the same in bash, zsh and PowerShell.
+      cmd: `node -e "process.stdin.once('data', (d) => { process.stdout.write('received:' + String(d).trim() + '\\n'); process.exit(0); })"`,
+      workdir: root,
+      yield_time_ms: 250
     } });
     expect(started.isError).toBe(false);
     const { session_id: sessionId } = z.object({ session_id: z.number().int().nonnegative() }).parse(started.structuredContent);

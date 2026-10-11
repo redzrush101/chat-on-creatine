@@ -76,8 +76,11 @@ function note(id: string, text: string): SessionEvent {
 
 describe('ControlApi lifecycle and access', () => {
   it('writes a private token and endpoint on start and removes both on stop', async () => {
-    expect(statSync(join(dir, 'control-api', 'token')).mode & 0o777).toBe(0o600);
-    expect(statSync(join(dir, 'control-api', 'endpoint.json')).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX modes; there the per-user profile folder's ACL keeps the files private.
+    if (process.platform !== 'win32') {
+      expect(statSync(join(dir, 'control-api', 'token')).mode & 0o777).toBe(0o600);
+      expect(statSync(join(dir, 'control-api', 'endpoint.json')).mode & 0o777).toBe(0o600);
+    }
     config.controlApi.enabled = false;
     await api.sync();
     expect(() => readFileSync(join(dir, 'control-api', 'token'))).toThrow();

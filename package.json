@@ -28,7 +28,8 @@
     "dist": "npm run build && electron-builder --publish never",
     "dist:dir": "npm run build && electron-builder --dir --publish never",
     "smoke": "node scripts/smoke-packaged.mjs release",
-    "prepare": "node scripts/install-hooks.mjs"
+    "prepare": "node scripts/install-hooks.mjs",
+    "postinstall": "node scripts/fix-node-pty.mjs"
   },
   "dependencies": {
     "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",

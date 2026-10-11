@@ -85,7 +85,9 @@ describe('RootGuard', () => {
   });
 
   it('expands ~ against the home folder', async () => {
+    // os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
     process.env.HOME = root;
+    process.env.USERPROFILE = root;
     await expect(guard.resolve('~/sub/file.txt', { cwd: null, mustExist: true })).resolves.toBe(
       path.join(root, 'sub', 'file.txt')
     );
