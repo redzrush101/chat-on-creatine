@@ -3,7 +3,6 @@
  * resolved, permission-checked and matched, so a failing hunk leaves every file as it was.
  */
 
-import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { Capabilities } from '@shared/config';
@@ -130,10 +129,10 @@ export async function planPatch(hunks: readonly Hunk[], options: PlanOptions): P
   return { added, modified, deleted, files, writes };
 }
 
-/** Writes the planned changes: new and moved-to files first, then removals, each atomically. */
+/** Writes the planned changes: new, changed and moved-to files first, then removals. */
 export async function commitPlan(plan: PatchPlan): Promise<void> {
   for (const [abs, content] of plan.writes) {
-    if (content !== null) await writeFileAtomic(abs, content);
+    if (content !== null) await writeFileInPlace(abs, content);
   }
   for (const [abs, content] of plan.writes) {
     if (content === null) await fs.rm(abs, { force: true });
@@ -166,24 +165,14 @@ async function readText(abs: string, display: string): Promise<string | null> {
   return bytes.toString('utf8');
 }
 
-async function writeFileAtomic(target: string, content: string): Promise<void> {
-  const dir = path.dirname(target);
-  await fs.mkdir(dir, { recursive: true });
-  let mode: number | null = null;
-  try {
-    mode = (await fs.stat(target)).mode & 0o7777;
-  } catch {
-    // A new file takes the default mode.
-  }
-  const temp = path.join(dir, `.${path.basename(target)}.${randomBytes(6).toString('hex')}.tmp`);
-  try {
-    await fs.writeFile(temp, content, { encoding: 'utf8', flag: 'wx' });
-    if (mode !== null) await fs.chmod(temp, mode);
-    await fs.rename(temp, target);
-  } catch (error) {
-    await fs.rm(temp, { force: true });
-    throw error;
-  }
+/**
+ * Writes a file the way `printf > file` does: an existing file is rewritten in place, keeping its
+ * owner, mode, ACLs, extended attributes and hard links. A temp file renamed over it would also need
+ * write access to the folder and ownership of the file, which the user's own shell does not.
+ */
+async function writeFileInPlace(target: string, content: string): Promise<void> {
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, content, 'utf8');
 }
 
 interface SourceLine {

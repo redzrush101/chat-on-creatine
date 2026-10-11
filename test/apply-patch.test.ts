@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile, access } from 'node:fs/promises';
+import { chmod, mkdtemp, mkdir, readFile, rm, writeFile, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -142,6 +142,24 @@ describe('apply_patch file operations', () => {
     expect(await readFile(path.join(root, 'b.txt'), 'utf8')).toBe('y\n');
     await expect(access(path.join(root, 'created.txt'))).rejects.toThrow();
   });
+
+  // Root ignores permission bits and Windows has no POSIX modes, so the setup cannot reproduce it there.
+  it.runIf(process.platform !== 'win32' && process.getuid?.() !== 0)(
+    'edits a writable file in a folder it may not create files in, keeping the file itself',
+    async () => {
+      const dir = path.join(root, 'locked');
+      await mkdir(dir);
+      await writeFile(path.join(dir, 'a.txt'), 'one\n');
+      await chmod(dir, 0o555);
+      try {
+        const result = await runApplyPatch('*** Begin Patch\n*** Update File: locked/a.txt\n@@\n-one\n+two\n*** End Patch', ctxFor());
+        expect(result.isError).toBeFalsy();
+        expect(await readFile(path.join(dir, 'a.txt'), 'utf8')).toBe('two\n');
+      } finally {
+        await chmod(dir, 0o755);
+      }
+    }
+  );
 
   it('refuses to add a file that already exists', async () => {
     await writeFile(path.join(root, 'taken.txt'), 'mine\n');
