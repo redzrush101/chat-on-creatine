@@ -183,7 +183,7 @@ export function registerIpc(getServices: () => Services | null, snapshot: () => 
     'skills:remove': (skillId) => s().skills.remove(skillId),
     'skills:read': (skillId) => s().skills.read(skillId),
 
-    'plugins:restart': () => undefined,
+    'plugins:restart': (pluginId) => void s().plugins.restart(pluginId),
 
     'agents:stopWorker': async (workerSessionId) => {
       s().agents.stopWorker(workerSessionId);

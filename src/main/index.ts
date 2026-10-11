@@ -47,6 +47,7 @@ async function start(): Promise<void> {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
   services = createServices(paths, preloadDir, resourcesBin, {
+    version: app.getVersion(),
     changed: () => hub.changed(),
     terminalData: (terminalId, data) => send('terminal:data', { terminalId, data }),
     terminalExit: (terminalId, code) => send('terminal:exit', { terminalId, code })

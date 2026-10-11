@@ -13,7 +13,8 @@
     "test": "vitest run",
     "verify": "npm run typecheck && npm run test && npm run build",
     "tunnel-client": "node scripts/fetch-tunnel-client.mjs",
-    "rebuild-native": "node scripts/rebuild-native.mjs"
+    "rebuild-native": "node scripts/rebuild-native.mjs",
+    "build:extension": "node scripts/build-extension.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

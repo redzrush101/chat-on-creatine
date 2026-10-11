@@ -2,8 +2,11 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import type { Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { createLogger } from '../core/log';
@@ -31,7 +34,8 @@ export interface CallRecord {
 
 export interface McpHttpServerOptions {
   getConfig(): Config;
-  tools: ToolSpec[];
+  /** A function is re-read on every request, so tools can come and go without a restart. */
+  tools: ToolSpec[] | (() => ToolSpec[]);
   services: ToolServices;
   /** Secret path token per surface, supplied by the caller and persisted there. */
   tokens: Record<SurfaceId, string>;
@@ -167,7 +171,9 @@ export class McpHttpServer {
   }
 
   private toolsFor(surface: SurfaceId, config: Config): ToolSpec[] {
-    return this.options.tools.filter((tool) => tool.surface === surface && tool.exposed(config));
+    const { tools } = this.options;
+    const all = typeof tools === 'function' ? tools() : tools;
+    return all.filter((tool) => tool.surface === surface && tool.exposed(config));
   }
 
   private surfaceForPath(path: string, prefix = ''): SurfaceId | null {
@@ -237,19 +243,58 @@ export class McpHttpServer {
     await transport.handleRequest(req, res, body);
   }
 
-  private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer {
+  private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer | Server {
     const config = this.options.getConfig();
-    const server = new McpServer(
-      { name: SURFACES[surface].serverName, version: SERVER_VERSION },
-      { instructions: serverInstructions(surface, config) }
-    );
-    for (const tool of this.toolsFor(surface, config)) {
+    const tools = this.toolsFor(surface, config);
+    const info = { name: SURFACES[surface].serverName, version: SERVER_VERSION };
+    const instructions = serverInstructions(surface, config);
+    if (tools.some((tool) => tool.jsonSchema)) return this.rawServer(info, instructions, tools, requestId, signal);
+    const server = new McpServer(info, { instructions });
+    for (const tool of tools) {
       server.registerTool(
         tool.name,
         { title: tool.title, description: tool.description, inputSchema: tool.input, annotations: tool.annotations },
         (args: unknown) => this.dispatch(tool, args, requestId, signal)
       );
     }
+    return server;
+  }
+
+  /**
+   * Low-level server for tools that carry their own JSON Schema, which McpServer cannot advertise
+   * verbatim. Zod-declared tools on the same surface are still validated here.
+   */
+  private rawServer(
+    info: { name: string; version: string },
+    instructions: string,
+    tools: ToolSpec[],
+    requestId: string | null,
+    signal: AbortSignal
+  ): Server {
+    const server = new Server(info, { capabilities: { tools: {} }, instructions });
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    server.setRequestHandler(ListToolsRequestSchema, async () => ({
+      tools: tools.map((tool): Tool => ({
+        name: tool.name,
+        title: tool.title,
+        description: tool.description,
+        inputSchema: (tool.jsonSchema ?? z.toJSONSchema(z.object(tool.input))) as Tool['inputSchema'],
+        annotations: tool.annotations
+      }))
+    }));
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const tool = byName.get(request.params.name);
+      if (!tool) return this.toCallResult(toolErrorResult(new ToolError('TOOL_DISABLED', `${request.params.name} is turned off in Settings.`)));
+      let args: unknown = request.params.arguments ?? {};
+      if (!tool.jsonSchema) {
+        const parsed = z.object(tool.input).safeParse(args);
+        if (!parsed.success) {
+          return this.toCallResult(toolErrorResult(new ToolError('INVALID_ARGUMENT', parsed.error.message)));
+        }
+        args = parsed.data;
+      }
+      return this.dispatch(tool, args, requestId, signal);
+    });
     return server;
   }
 

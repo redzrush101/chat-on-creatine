@@ -6,6 +6,9 @@ import type { SessionMeta, SurfaceId } from '@shared/types';
 import { AgentController } from '../agents/controller';
 import { Automation } from '../automation/automation';
 import { BuiltinHost } from '../chatgpt/builtin-host';
+import { ExtensionHost } from '../chatgpt/extension-host';
+import type { ChatHost } from '../chatgpt/host';
+import { HostSwitch } from '../chatgpt/host-switch';
 import { ChatRouter } from '../chatgpt/router';
 import { ConfigStore } from '../core/config-store';
 import { readJsonSync, writeJson } from '../core/durable';
@@ -17,9 +20,14 @@ import { McpHttpServer, generateToken } from '../mcp/server';
 import { CONNECTOR_BRAND } from '../mcp/surfaces';
 import { CORE_TOOLS } from '../mcp/tools';
 import { agentsTool } from '../mcp/tools/agents';
+import { browserTools, setAgentBrowser } from '../mcp/tools/browser';
+import { AgentBrowser } from '../browser-tools/agent-browser';
 import { sessionFinishTool } from '../mcp/tools/session-finish';
 import { updatePlanTool } from '../mcp/tools/update-plan';
 import { ToolError, type ToolSpec } from '../mcp/tool';
+import { ControlApi } from '../control-api';
+import { recentLogs, createLogger } from '../core/log';
+import { PluginManager } from '../plugins/manager';
 import { ProjectStore } from '../projects/projects';
 import { Outbox } from '../sessions/outbox';
 import { Recorder } from '../sessions/recorder';
@@ -30,6 +38,8 @@ import { ConnectionManager } from '../tunnel/connection';
 import { ModelService } from './models';
 import { buildOpeningContext } from './opening';
 import { ToolActivity } from './tool-activity';
+
+const log = createLogger('services');
 
 const safeCipher: Cipher = {
   available: () => safeStorage.isEncryptionAvailable(),
@@ -59,13 +69,15 @@ export interface Services {
   skills: SkillLibrary;
   processes: ProcessManager;
   terminals: TerminalManager;
-  host: BuiltinHost;
+  host: HostSwitch;
   router: ChatRouter;
   agents: AgentController;
   automation: Automation;
   server: McpHttpServer;
   connection: ConnectionManager;
   models: ModelService;
+  plugins: PluginManager;
+  controlApi: ControlApi;
   /** Sessions whose Compact & Resume is in progress (shown as the `compacting` turn). */
   compacting: Set<string>;
   sessionCwd(session: SessionMeta): string | null;
@@ -73,6 +85,7 @@ export interface Services {
 }
 
 export interface ServiceHooks {
+  version: string;
   /** Something in AppState changed. */
   changed(): void;
   terminalData(id: string, data: string): void;
@@ -94,7 +107,15 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const processes = new ProcessManager();
   const terminals = new TerminalManager({ onData: hooks.terminalData, onExit: hooks.terminalExit });
   const roots = new RootGuard(getConfig);
-  const host = new BuiltinHost({ preloadPath: join(preloadDir, 'chatgpt.js') });
+  const createHost = (kind: ChatHost['kind']): ChatHost =>
+    kind === 'extension'
+      ? new ExtensionHost({
+          port: getConfig().browser.bridgePort,
+          loadToken: () => secrets.get('extensionToken'),
+          saveToken: (token) => secrets.set('extensionToken', token)
+        })
+      : new BuiltinHost({ preloadPath: join(preloadDir, 'chatgpt.js') });
+  const host = new HostSwitch(createHost(getConfig().browser.host), createHost);
   const recorder = new Recorder({
     store,
     // `/<Connector Name>/link_…/<tool>`: our own calls are recorded by the MCP server itself.
@@ -143,10 +164,13 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
 
   let connection: ConnectionManager | null = null;
   const activity = new ToolActivity({ store, outbox, router, connection: () => connection });
-  const tools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool] as unknown as ToolSpec[];
+  const plugins = new PluginManager({ getConfig, getSecret: (key) => secrets.get(key), onChange: hooks.changed });
+  const agentBrowser = new AgentBrowser();
+  setAgentBrowser(agentBrowser);
+  const coreTools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool, ...browserTools] as unknown as ToolSpec[];
   const server = new McpHttpServer({
     getConfig,
-    tools,
+    tools: () => [...coreTools, ...plugins.tools()],
     services: {
       paths: roots,
       processes,
@@ -184,7 +208,28 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   outbox.onChange(hooks.changed);
   projects.onChange(hooks.changed);
   skills.onChange(hooks.changed);
-  config.onChange(hooks.changed);
+  const controlApi = new ControlApi({
+    dir: join(paths.userData, 'control-api'),
+    version: hooks.version,
+    getConfig,
+    store,
+    outbox,
+    turnOf: (id) => router.turnOf(id),
+    connectionStatus: () => connection!.status(),
+    agents: () => agents.runs(),
+    logs: (limit) => recentLogs(limit)
+  });
+  const syncControlApi = () => void Promise.resolve(controlApi.sync()).catch((error: unknown) => log.error('control API', error));
+  config.onChange((next, previous) => {
+    hooks.changed();
+    if (next.browser.host !== previous.browser.host || next.browser.bridgePort !== previous.browser.bridgePort) {
+      void host.use(next.browser.host, next.browser.host === 'extension' && next.browser.bridgePort !== previous.browser.bridgePort);
+    }
+    void plugins.reconcile();
+    syncControlApi();
+  });
+  void plugins.start();
+  syncControlApi();
 
   return {
     paths,
@@ -203,11 +248,17 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
     server,
     connection,
     models,
+    plugins,
+    controlApi,
     compacting,
     sessionCwd,
     async dispose() {
       router.stop();
       await connection?.dispose();
+      await plugins.stop();
+      await controlApi.close();
+      agentBrowser.dispose();
+      setAgentBrowser(null);
       await server.stop();
       await processes.dispose();
       terminals.disposeAll();

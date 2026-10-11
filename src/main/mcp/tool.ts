@@ -131,6 +131,8 @@ export interface ToolSpec<Shape extends z.ZodRawShape = z.ZodRawShape> {
   title: string;
   description: string;
   input: Shape;
+  /** Advertised verbatim instead of a schema derived from `input` (external MCP tools). */
+  jsonSchema?: Record<string, unknown>;
   annotations?: ToolAnnotations;
   /** Whether the tool is advertised under this config. Handlers still re-check permissions. */
   exposed(config: Config): boolean;

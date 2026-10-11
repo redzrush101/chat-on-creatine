@@ -50,7 +50,7 @@ export class StateHub {
       projects: s.projects.list(),
       agents: s.agents.runs(),
       skills: s.skills.list(),
-      plugins: [],
+      plugins: s.plugins.status(),
       secretsSet: s.secrets.keys(),
       tools: { tunnelClient: tools.tunnelClient, cloudflared: tools.cloudflared, ripgrep: null }
     };
