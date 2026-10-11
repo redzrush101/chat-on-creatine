@@ -65,8 +65,9 @@ export class PageCommands {
 
   private async send(text: string, files: PageFile[]): Promise<PageResult> {
     if (!(await waitFor(() => dom.findComposer() !== null, 15_000))) return fail('not-ready', 'composer not found');
-    // The app ends a turn at the final answer; ChatGPT shows its stop control a moment longer.
-    if (!(await waitFor(() => !dom.isGenerating(), 15_000))) return fail('busy', 'a response is still generating');
+    // The app ends a turn at the final answer, but ChatGPT holds a new message until the previous
+    // turn's stream has closed, which can take half a minute; typing before then times out.
+    if (!(await waitFor(() => !dom.isGenerating() && this.streams.idle(), 60_000))) return fail('busy', 'a response is still generating');
     if (!dom.setComposerText(text)) return fail('failed', 'could not type into the composer');
     if (files.length > 0 && !(await attachFiles(files.map(toFile)))) {
       return fail('failed', 'attachments did not finish uploading');

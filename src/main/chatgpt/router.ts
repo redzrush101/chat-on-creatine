@@ -370,7 +370,8 @@ export class ChatRouter {
 
       const eventId = `input:${item.id}`;
       this.deps.recorder.expectUserEcho(session.id, eventId, item.text);
-      const result = await this.deps.host.command(tabId, { type: 'send', text, files }, 60_000);
+      // The page may first wait up to a minute for the previous turn's stream to close.
+      const result = await this.deps.host.command(tabId, { type: 'send', text, files }, 120_000);
       if (!result.ok) {
         this.deps.outbox.markFailed(item.id, result.error);
         this.patchLive(session.id, { turn: 'idle' });

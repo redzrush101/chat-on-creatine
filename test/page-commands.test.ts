@@ -74,7 +74,7 @@ function setup() {
   });
   state.click = click;
   const commands = new PageCommands({ getSession: async () => null, request: async () => ({}) }, streams);
-  return { commands, click };
+  return { commands, click, streams };
 }
 
 describe('page send readiness', () => {
@@ -92,6 +92,18 @@ describe('page send readiness', () => {
     await expect(sending).resolves.toMatchObject({ ok: true });
     expect(state.draft).toBe('message');
     expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("waits for the previous turn's stream to close before sending", async () => {
+    const { commands, click, streams } = setup();
+    state.mounted = true;
+    streams.handle({ channel: 'test', kind: 'start', streamId: 'previous' });
+    const sending = commands.run({ type: 'send', text: 'message', files: [] });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(click).not.toHaveBeenCalled();
+    streams.handle({ channel: 'test', kind: 'end', streamId: 'previous' });
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(sending).resolves.toMatchObject({ ok: true });
   });
 
   it('reports unavailable controls without trying to submit', async () => {

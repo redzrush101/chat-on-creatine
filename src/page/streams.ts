@@ -48,6 +48,11 @@ export class StreamRelay {
     }
   }
 
+  /** No conversation stream is open in this page. */
+  idle(): boolean {
+    return this.streams.size === 0;
+  }
+
   waitForStart(ms: number): Promise<SendValue | null> {
     return new Promise((resolve) => {
       const waiter = (value: SendValue): void => done(value);

@@ -798,7 +798,7 @@
     }
     async send(text, files) {
       if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
-      if (!await waitFor2(() => !isGenerating(), 15e3)) return fail("busy", "a response is still generating");
+      if (!await waitFor2(() => !isGenerating() && this.streams.idle(), 6e4)) return fail("busy", "a response is still generating");
       if (!setComposerText(text)) return fail("failed", "could not type into the composer");
       if (files.length > 0 && !await attachFiles(files.map(toFile))) {
         return fail("failed", "attachments did not finish uploading");
@@ -925,6 +925,10 @@
           this.closeStream(data.streamId, data.error ?? "stream failed");
           break;
       }
+    }
+    /** No conversation stream is open in this page. */
+    idle() {
+      return this.streams.size === 0;
     }
     waitForStart(ms) {
       return new Promise((resolve) => {
