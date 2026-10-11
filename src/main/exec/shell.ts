@@ -28,7 +28,7 @@ function shellTypeOf(binary: string): ShellType | null {
   return SHELL_BY_NAME.get(stem) ?? null;
 }
 
-function isRunnableFile(file: string): boolean {
+export function isRunnableFile(file: string): boolean {
   try {
     if (!statSync(file).isFile()) return false;
     if (process.platform !== 'win32') accessSync(file, constants.X_OK);
@@ -38,11 +38,11 @@ function isRunnableFile(file: string): boolean {
   }
 }
 
-function findOnPath(name: string): string | null {
-  const separator = process.platform === 'win32' ? ';' : ':';
+/** The first runnable `name` on PATH, trying each PATHEXT extension on Windows. */
+export function findOnPath(name: string): string | null {
   const extensions =
     process.platform === 'win32' ? ['', ...(process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')] : [''];
-  for (const dir of (process.env['PATH'] ?? '').split(separator)) {
+  for (const dir of (process.env['PATH'] ?? '').split(path.delimiter)) {
     if (!dir) continue;
     for (const extension of extensions) {
       const candidate = path.join(dir, `${name}${extension}`);

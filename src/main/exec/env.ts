@@ -37,16 +37,17 @@ export function childEnv(extra: Record<string, string> = {}): Record<string, str
   return { ...env, ...terminalEnv(process.platform), ...extra };
 }
 
-/** Ends a process and its descendants: the POSIX process group, or the Windows process tree. */
-export function terminateProcessTree(pid: number, force = true): Promise<void> {
+/**
+ * Signals a process and its descendants: the POSIX process group, or the Windows process tree.
+ * Windows always forces: a process without a console window cannot be asked to close.
+ */
+export function terminateProcessTree(pid: number, signal: 'SIGTERM' | 'SIGKILL' = 'SIGKILL'): Promise<void> {
   if (process.platform === 'win32') {
     return new Promise((resolve) => {
-      const args = ['/pid', String(pid), '/T'];
-      if (force) args.push('/F');
-      const killer = spawn('taskkill', args, { windowsHide: true, stdio: 'ignore' });
+      const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
       const fallback = (): void => {
         try {
-          process.kill(pid, force ? 'SIGKILL' : 'SIGTERM');
+          process.kill(pid);
         } catch {
           /* already gone */
         }
@@ -57,7 +58,6 @@ export function terminateProcessTree(pid: number, force = true): Promise<void> {
     });
   }
 
-  const signal = force ? 'SIGKILL' : 'SIGTERM';
   try {
     process.kill(-pid, signal);
   } catch {

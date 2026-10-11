@@ -1,5 +1,6 @@
-import { existsSync, statSync, accessSync, constants } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { findOnPath, isRunnableFile } from '../exec/shell';
 
 type BinaryName = 'tunnel-client' | 'cloudflared';
 
@@ -16,16 +17,6 @@ function executableName(name: BinaryName, platform: NodeJS.Platform = process.pl
   return platform === 'win32' ? `${name}.exe` : name;
 }
 
-function isExecutable(file: string): boolean {
-  try {
-    if (!statSync(file).isFile()) return false;
-    if (process.platform !== 'win32') accessSync(file, constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Finds a tunnel executable: the explicit setting, then the app's own download, then the bundled
  * copy, then PATH. An explicit setting that does not resolve yields null rather than a silent
@@ -37,19 +28,14 @@ export function locateBinary(name: BinaryName, options: LocateOptions): string |
   if (explicit) {
     if (existsSync(explicit) && statSync(explicit).isDirectory()) {
       const inside = path.join(explicit, file);
-      return isExecutable(inside) ? inside : null;
+      return isRunnableFile(inside) ? inside : null;
     }
-    return isExecutable(explicit) ? explicit : null;
+    return isRunnableFile(explicit) ? explicit : null;
   }
   for (const dir of [options.binDir, options.resourcesBinDir]) {
     if (!dir) continue;
     const candidate = path.join(dir, file);
-    if (isExecutable(candidate)) return candidate;
+    if (isRunnableFile(candidate)) return candidate;
   }
-  for (const dir of (process.env.PATH ?? '').split(path.delimiter)) {
-    if (!dir) continue;
-    const candidate = path.join(dir, file);
-    if (isExecutable(candidate)) return candidate;
-  }
-  return null;
+  return findOnPath(file);
 }
