@@ -50,6 +50,29 @@ describe('project git', () => {
     expect(status.removed).toBe(1);
   });
 
+  it('scopes status and diffs to a subfolder of the repository', async () => {
+    const mono = path.join(root, 'mono');
+    const pkg = path.join(mono, 'pkg');
+    await mkdir(pkg, { recursive: true });
+    git(mono, 'init', '-q');
+    await writeFile(path.join(mono, 'top.txt'), 'top\n');
+    await writeFile(path.join(pkg, 'a.txt'), 'one\n');
+    git(mono, 'add', '.');
+    git(mono, 'commit', '-q', '-m', 'init');
+    await writeFile(path.join(mono, 'top.txt'), 'TOP\n');
+    await writeFile(path.join(pkg, 'a.txt'), 'ONE\n');
+    await writeFile(path.join(pkg, 'n.txt'), 'new\n');
+
+    const status = await gitStatus(pkg);
+    expect(status.changes).toEqual([
+      { path: 'a.txt', status: ' M' },
+      { path: 'n.txt', status: '??' }
+    ]);
+    expect(status.added).toBe(2);
+    expect(status.removed).toBe(1);
+    expect(await gitDiff(pkg, 'a.txt')).toContain('+ONE');
+  });
+
   it('reports a folder outside a repository as not a repo', async () => {
     const plain = path.join(root, 'plain');
     await mkdir(plain);

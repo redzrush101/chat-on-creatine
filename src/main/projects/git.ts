@@ -43,11 +43,14 @@ function runGit(cwd: string, args: string[], maxBytes: number): Promise<GitRun> 
   });
 }
 
-/** `git status` of a folder. A folder outside any repository reports `isRepo: false`. */
+/**
+ * `git status` of a folder, which may be a subfolder of its repository: only changes inside it,
+ * with paths relative to it. A folder outside any repository reports `isRepo: false`.
+ */
 export async function gitStatus(dir: string): Promise<GitStatus> {
   const run = await runGit(
     dir,
-    ['status', '--porcelain=v1', '-z', '-b', '--untracked-files=all', '--ignore-submodules=dirty'],
+    ['status', '--porcelain=v1', '-z', '-b', '--untracked-files=all', '--ignore-submodules=dirty', '--', '.'],
     MAX_STATUS_BYTES
   );
   if (run.code !== 0) {
@@ -57,6 +60,8 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
     throw new Error(run.stderr || `git status failed with code ${run.code}`);
   }
 
+  // Porcelain paths are relative to the repository root, whatever folder git runs in.
+  const prefix = (await runGit(dir, ['rev-parse', '--show-prefix'], 4096)).stdout.trim();
   const status: GitStatus = { isRepo: true, branch: null, ahead: 0, behind: 0, changes: [], added: 0, removed: 0 };
   const records = run.stdout.split('\0');
   let index = 0;
@@ -68,7 +73,8 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
     const record = records[index]!;
     if (record.length < 4) continue;
     const code = record.slice(0, 2);
-    status.changes.push({ status: code, path: record.slice(3) });
+    const file = record.slice(3);
+    status.changes.push({ status: code, path: file.startsWith(prefix) ? file.slice(prefix.length) : file });
     // In -z output a rename or copy is followed by its source path as a separate record.
     if (code.includes('R') || code.includes('C')) index++;
   }
@@ -80,7 +86,7 @@ export async function gitStatus(dir: string): Promise<GitStatus> {
 async function addLineTotals(dir: string, status: GitStatus): Promise<void> {
   if (status.changes.length === 0) return;
   const hasHead = (await runGit(dir, ['rev-parse', '--verify', '--quiet', 'HEAD'], 4096)).code === 0;
-  const numstat = await runGit(dir, ['diff', '--numstat', '--no-ext-diff', '-M', hasHead ? 'HEAD' : EMPTY_TREE], MAX_STATUS_BYTES);
+  const numstat = await runGit(dir, ['diff', '--numstat', '--relative', '--no-ext-diff', '-M', hasHead ? 'HEAD' : EMPTY_TREE], MAX_STATUS_BYTES);
   for (const line of numstat.code === 0 ? numstat.stdout.split('\n') : []) {
     const [added, removed] = line.split('\t');
     // Binary files report `-` for both counts.
