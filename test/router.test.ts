@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultConfig } from '@shared/config';
-import type { PageCommand, PageResult } from '@shared/page-protocol';
+import { conversationIdFromUrl, type PageCommand, type PageResult } from '@shared/page-protocol';
 import type { ChatHost } from '../src/main/chatgpt/host';
 import { ChatRouter } from '../src/main/chatgpt/router';
 import { flushWrites } from '../src/main/core/durable';
@@ -33,12 +33,17 @@ afterEach(async () => {
 function setup(selection: PageResult = { ok: true }) {
   const command = vi.fn(async (_tabId: string, cmd: PageCommand): Promise<PageResult> =>
     cmd.type === 'select-model' ? selection : { ok: true, value: { conversationId: 'conversation' } });
+  const opened: ReturnType<ChatHost['tabs']> = [];
   const host: ChatHost = {
     kind: 'builtin', start: async () => {}, stop: async () => {},
     status: () => ({ ready: true, signedIn: true, windowVisible: false, extensionConnected: false, detail: '' }),
-    tabs: () => [{ tabId: 'tab', url: 'https://chatgpt.com/c/conversation', conversationId: 'conversation', driverReady: true,
-      signedIn: true, generating: false, createdAt: 1 }],
-    openTab: vi.fn(async () => 'tab'), navigate: async () => {}, closeTab: async () => {},
+    tabs: () => opened,
+    openTab: vi.fn(async (url: string) => {
+      const tabId = `tab${opened.length}`;
+      opened.push({ tabId, url, conversationId: conversationIdFromUrl(url), driverReady: true, signedIn: true, generating: false, createdAt: 1 });
+      return tabId;
+    }),
+    navigate: async () => {}, closeTab: async () => {},
     command, reveal: () => {}, hide: () => {}, setListener: () => {}
   };
   router = new ChatRouter({ host, store, outbox,
@@ -71,7 +76,19 @@ describe('model selection before delivery', () => {
       { type: 'select-model', model: 'thinking', effort: 'medium' }, { type: 'send', text: 'first', files: [] },
       { type: 'select-model', model: 'legacy-thinking', effort: 'high' }, { type: 'send', text: 'second', files: [] }
     ]);
-    expect(host.openTab).toHaveBeenCalledOnce();
+    expect(vi.mocked(host.openTab).mock.calls.filter(([url]) => url.includes('/c/'))).toHaveLength(1);
+  });
+
+  it('starts a new chat in the preloaded tab instead of loading chatgpt.com again', async () => {
+    const { command, host } = setup();
+    router.start();
+    await vi.waitFor(() => expect(host.openTab).toHaveBeenCalledOnce());
+    const session = store.create({ kind: 'chat' });
+    const item = outbox.enqueue({ sessionId: session.id, text: 'message', attachments: [], delivery: 'now', source: 'app' });
+    await vi.waitFor(() => expect(outbox.get(item.id)?.state).toBe('sent'));
+    expect(command.mock.calls[0]?.[0]).toBe('tab0');
+    // The adopted tab is replaced by a new preloaded one for the next chat.
+    await vi.waitFor(() => expect(host.openTab).toHaveBeenCalledTimes(2));
   });
 
   it('keeps the input as a readable failure and never sends when selection fails', async () => {
@@ -83,3 +100,4 @@ describe('model selection before delivery', () => {
     expect(router.turnOf(session.id)).toBe('idle');
   });
 });
+

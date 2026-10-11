@@ -59,6 +59,13 @@ export class ChatRouter {
   /** Inputs steered into tool results during the running turn. */
   private readonly steeredThisTurn = new Map<string, InputItem[]>();
 
+  /**
+   * A new-chat tab loaded ahead of time (built-in browser only), so a new chat or worker does not
+   * wait the seconds chatgpt.com takes to load before its first message.
+   */
+  private spareTab: string | null = null;
+  private warming = false;
+
   /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
   private readonly currentTurnIds = new Map<string, string>();
   private gcTimer: NodeJS.Timeout | null = null;
@@ -72,7 +79,10 @@ export class ChatRouter {
     deps.host.setListener({
       page: (tabId, event) => this.onPage(tabId, event),
       closed: (tabId) => this.unbindTab(tabId),
-      status: () => deps.onLiveChange()
+      status: () => {
+        void this.warmSpare();
+        deps.onLiveChange();
+      }
     });
     deps.outbox.onChange(() => this.pumpAll());
   }
@@ -81,6 +91,7 @@ export class ChatRouter {
     this.gcTimer = setInterval(() => void this.collectIdleTabs(), 60_000);
     this.gcTimer.unref?.();
     this.pumpAll();
+    void this.warmSpare();
   }
 
   stop(): void {
@@ -139,9 +150,37 @@ export class ChatRouter {
       if (info.conversationId !== wanted) await this.deps.host.navigate(existing, url);
       return existing;
     }
+    if (fresh || !session.conversationId) {
+      const spare = this.takeSpare();
+      if (spare) {
+        this.bind(spare, session.id);
+        void this.warmSpare();
+        return spare;
+      }
+    }
     const tabId = await this.deps.host.openTab(url);
     this.bind(tabId, session.id);
+    void this.warmSpare();
     return tabId;
+  }
+
+  private takeSpare(): string | null {
+    const spare = this.spareTab;
+    this.spareTab = null;
+    return spare && this.deps.host.tabs().some((tab) => tab.tabId === spare && !tab.conversationId) ? spare : null;
+  }
+
+  private async warmSpare(): Promise<void> {
+    const { host } = this.deps;
+    if (this.spareTab || this.warming || host.kind !== 'builtin' || host.status().signedIn !== true) return;
+    this.warming = true;
+    try {
+      this.spareTab = await host.openTab(newChatUrl(null));
+    } catch (error) {
+      log.warn(`could not preload a ChatGPT tab: ${errorMessage(error)}`);
+    } finally {
+      this.warming = false;
+    }
   }
 
   resolveCaller(requestId: string | null, call: { tool: string; args: unknown }): Promise<Caller | null> {
@@ -373,6 +412,7 @@ export class ChatRouter {
   }
 
   private unbindTab(tabId: string): void {
+    if (this.spareTab === tabId) this.spareTab = null;
     const sessionId = this.tabSession.get(tabId);
     this.tabSession.delete(tabId);
     if (sessionId && this.sessionTab.get(sessionId) === tabId) {
@@ -391,6 +431,7 @@ export class ChatRouter {
     const pending = new Set(this.deps.outbox.list().filter((item) => item.state === 'queued').map((item) => item.sessionId));
     const visible = this.deps.host.status().windowVisible;
     for (const tab of this.deps.host.tabs()) {
+      if (tab.tabId === this.spareTab) continue;
       const sessionId = this.tabSession.get(tab.tabId);
       const live = sessionId ? this.live.get(sessionId) : undefined;
       if (tab.generating || (live && (live.turn !== 'idle' || live.runningTools > 0))) continue;
@@ -427,3 +468,4 @@ export class ChatRouter {
     this.deps.onLiveChange();
   }
 }
+
