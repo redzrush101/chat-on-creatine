@@ -5,6 +5,7 @@ import { Composer } from '../composer/Composer';
 import type { NewChatDraft } from '../composer/types';
 import { TopBar } from './TopBar';
 import { Timeline } from './Timeline';
+import { turnActivity } from './turn-activity';
 
 interface ChatViewProps {
   app: AppState;
@@ -51,6 +52,7 @@ export function ChatView({
         key={session.id}
         app={app}
         session={session}
+        activity={turnActivity(session, live, events)}
         newChat={newChat}
         onNewChatChange={onNewChatChange}
         onCreated={onOpenSession}

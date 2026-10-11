@@ -15,6 +15,7 @@ export const MODES: { value: AutomationMode; label: string; hint: string }[] = [
 export function useComposer({
   app,
   session,
+  activity,
   newChat,
   onNewChatChange,
   onCreated,
@@ -29,6 +30,7 @@ export function useComposer({
 
   const live = sessionId ? app.live[sessionId] : undefined;
   const busy = live !== undefined && live.turn !== 'idle';
+  const canStop = busy || activity?.active === true;
   const mode: AutomationMode = session ? session.goal.mode : newChat.mode;
   const browserBlocked = app.browser.signedIn === false || !app.browser.ready;
   const toolsOffline = app.connection.state !== 'connected';
@@ -89,7 +91,7 @@ export function useComposer({
       event.preventDefault();
       // While a turn runs, Enter queues for after it; Ctrl/Cmd+Enter steers into the current turn.
       void submit(busy && !(event.metaKey || event.ctrlKey) ? 'after-turn' : 'now');
-    } else if (event.key === 'Escape' && busy) {
+    } else if (event.key === 'Escape' && canStop) {
       event.preventDefault();
       stop();
     }
@@ -111,5 +113,5 @@ export function useComposer({
           ? 'Message ChatGPT'
           : 'What should we work on?';
 
-  return { sessionId, text, setText, field, attachments, setAttachments, busy, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder };
+  return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder };
 }

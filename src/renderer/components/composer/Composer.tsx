@@ -1,4 +1,4 @@
-import { ArrowUp, CircleAlert, Paperclip, Plug, Square, WifiOff, X } from 'lucide-react';
+import { ArrowUp, Check, CircleAlert, LoaderCircle, Paperclip, Plug, Square, WifiOff, X } from 'lucide-react';
 import { invoke } from '../../lib/bridge';
 import { basename, cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
@@ -11,6 +11,7 @@ import type { ComposerProps } from './types';
 export function Composer({
   app,
   session,
+  activity,
   newChat,
   onNewChatChange,
   onCreated,
@@ -21,12 +22,18 @@ export function Composer({
   hero
 }: ComposerProps) {
   const {
-    sessionId, text, setText, field, attachments, setAttachments, busy, mode, browserBlocked,
+    sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked,
     toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder
-  } = useComposer({ app, session, newChat, onNewChatChange, onCreated, onSubmitted, onOpenSettings, focusNonce, prefill });
+  } = useComposer({ app, session, activity, newChat, onNewChatChange, onCreated, onSubmitted, onOpenSettings, focusNonce, prefill });
 
   return (
     <div className={cx('composer-wrap', hero && 'is-hero')}>
+      {activity && (
+        <div className={cx('turn-activity', activity.failed && 'is-failed')} role="status" aria-live="polite" aria-atomic="true">
+          {activity.active ? <LoaderCircle size={13} className="spin" aria-hidden="true" /> : activity.failed ? <CircleAlert size={13} aria-hidden="true" /> : <Check size={13} aria-hidden="true" />}
+          <span>{activity.label}</span>
+        </div>
+      )}
       <ComposerStatus app={app} hero={hero} onOpenSettings={onOpenSettings} sessionId={sessionId} browserBlocked={browserBlocked} toolsOffline={toolsOffline} inputs={inputs} />
 
       <div className="composer">
@@ -81,7 +88,7 @@ export function Composer({
             ))}
           </div>
           <div className="composer-spacer" />
-          <ComposerActions busy={busy} sessionId={sessionId} canSend={canSend} browserBlocked={browserBlocked} submit={submit} stop={stop} />
+          <ComposerActions busy={busy} canStop={canStop} canSend={canSend} browserBlocked={browserBlocked} submit={submit} stop={stop} />
         </div>
       </div>
       <p className="composer-hint">
@@ -96,45 +103,47 @@ export function Composer({
   );
 }
 
-function ComposerActions({ busy, sessionId, canSend, browserBlocked, submit, stop }: Pick<ReturnType<typeof useComposer>, 'busy' | 'sessionId' | 'canSend' | 'browserBlocked' | 'submit' | 'stop'>) {
+function ComposerActions({ busy, canStop, canSend, browserBlocked, submit, stop }: Pick<ReturnType<typeof useComposer>, 'busy' | 'canStop' | 'canSend' | 'browserBlocked' | 'submit' | 'stop'>) {
   return (
     <>
-          {busy && sessionId ? (
-            <>
-              <button
-                type="button"
-                className="btn btn-small"
-                disabled={!canSend}
-                title="Queue: sent after this turn (Enter)"
-                onClick={() => void submit('after-turn')}
-              >
-                Queue
-              </button>
-              <button
-                type="button"
-                className="btn btn-small btn-primary"
-                disabled={!canSend}
-                title="Steer: reaches the model with its next tool result (Ctrl/Cmd+Enter)"
-                onClick={() => void submit('now')}
-              >
-                Steer
-              </button>
-              <button type="button" className="icon-btn btn-stop" aria-label="Stop" title="Stop generating (Esc)" onClick={stop}>
-                <Square size={12} fill="currentColor" />
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="icon-btn btn-send"
-              aria-label="Send"
-              title={browserBlocked ? 'Sign in to ChatGPT to send' : 'Send (Enter)'}
-              disabled={!canSend || browserBlocked}
-              onClick={() => void submit('now')}
-            >
-              <ArrowUp size={16} />
-            </button>
-          )}
+      {busy ? (
+        <>
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={!canSend}
+            title="Queue: sent after this turn (Enter)"
+            onClick={() => void submit('after-turn')}
+          >
+            Queue
+          </button>
+          <button
+            type="button"
+            className="btn btn-small btn-primary"
+            disabled={!canSend}
+            title="Steer: reaches the model with its next tool result (Ctrl/Cmd+Enter)"
+            onClick={() => void submit('now')}
+          >
+            Steer
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          className="icon-btn btn-send"
+          aria-label="Send"
+          title={browserBlocked ? 'Sign in to ChatGPT to send' : 'Send (Enter)'}
+          disabled={!canSend || browserBlocked}
+          onClick={() => void submit('now')}
+        >
+          <ArrowUp size={16} />
+        </button>
+      )}
+      {canStop && (
+        <button type="button" className="btn btn-stop" aria-label="Stop" title="Stop (Esc)" onClick={stop}>
+          <Square size={11} fill="currentColor" aria-hidden="true" /> Stop
+        </button>
+      )}
     </>
   );
 }
