@@ -13,6 +13,8 @@ interface SessionState {
   echoes: { eventId: string; text: string }[];
   /** ChatGPT message ids already matched to an app-sent event (the stream repeats user messages). */
   claimed: Set<string>;
+  /** Call message ids the MCP server records itself; ChatGPT's copy of them is skipped. */
+  ownCalls: Set<string>;
 }
 
 export interface RecorderDeps {
@@ -39,6 +41,13 @@ export class Recorder {
     const state = this.state(sessionId);
     state.echoes.push({ eventId, text: normalized });
     if (state.echoes.length > ECHO_LIMIT) state.echoes.shift();
+  }
+
+  /** The call message `messageId` is one of our MCP calls; its timeline event belongs to the server. */
+  markOwnCall(sessionId: string, messageId: string): void {
+    const own = this.state(sessionId).ownCalls;
+    own.add(messageId);
+    if (own.size > 500) own.delete(own.values().next().value!);
   }
 
   handle(sessionId: string, event: PageEvent): void {
@@ -75,7 +84,7 @@ export class Recorder {
 
   private state(sessionId: string): SessionState {
     let state = this.states.get(sessionId);
-    if (!state) this.states.set(sessionId, (state = { echoes: [], claimed: new Set() }));
+    if (!state) this.states.set(sessionId, (state = { echoes: [], claimed: new Set(), ownCalls: new Set() }));
     return state;
   }
 
@@ -146,6 +155,7 @@ export class Recorder {
   /** A native tool call. Our own connector calls are skipped; the MCP server records those. */
   private onToolCall(sessionId: string, message: ChatMessage): void {
     if (message.recipient === 'api_tool.list_resources') return;
+    if (this.state(sessionId).ownCalls.has(message.id)) return;
 
     const parsed = parseJson(message.text);
     let name = message.recipient;
@@ -178,7 +188,7 @@ export class Recorder {
   }
 
   private onToolResult(sessionId: string, message: ChatMessage): void {
-    if (!message.parentId) return;
+    if (!message.parentId || this.state(sessionId).ownCalls.has(message.parentId)) return;
     const previous = this.store.event(sessionId, toolEventId(message.parentId));
     if (previous?.kind !== 'tool') return;
 

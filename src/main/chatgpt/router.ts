@@ -49,6 +49,8 @@ interface IndexEntry {
 interface PendingCall extends IndexEntry {
   tool: string;
   argsKey: string;
+  /** The streamed call message, or null for an MCP call that arrived before its message. */
+  messageId: string | null;
 }
 
 function canonicalJson(value: unknown): string {
@@ -73,6 +75,8 @@ export class ChatRouter {
   private readonly live = new Map<string, SessionLive>();
   private readonly requestIndex = new Map<string, IndexEntry>();
   private pendingCalls: PendingCall[] = [];
+  /** MCP calls attributed before ChatGPT streamed their call message; that message is ours when it comes. */
+  private earlyCalls: PendingCall[] = [];
   private readonly messageWaiters = new Set<() => void>();
   private readonly pumping = new Set<string>();
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
@@ -169,12 +173,15 @@ export class ChatRouter {
     const deadline = Date.now() + ATTRIBUTION_WAIT_MS;
     for (;;) {
       const entry = this.lookup(requestId, call.tool, argsKey);
-      if (entry) return this.callerFor(entry.sessionId);
+      if (entry) return this.claim(entry, call.tool, argsKey);
       if (Date.now() >= deadline) break;
       await this.nextMessage(Math.max(50, deadline - Date.now()));
     }
     const generating = [...this.live.values()].filter((live) => live.turn === 'generating');
-    if (generating.length === 1) return this.callerFor(generating[0]!.sessionId);
+    if (generating.length === 1) {
+      const sessionId = generating[0]!.sessionId;
+      return this.claim({ sessionId, conversationId: '', at: Date.now() }, call.tool, argsKey);
+    }
     log.info(`unattributed ${call.tool} call (request ${requestId ?? 'none'}, ${generating.length} chats generating)`);
     return null;
   }
@@ -190,12 +197,28 @@ export class ChatRouter {
       const hit = this.requestIndex.get(requestId);
       if (hit && now - hit.at < INDEX_TTL_MS) return hit;
     }
-    const index = this.pendingCalls.findIndex((pending) => pending.tool === tool && pending.argsKey === argsKey);
+    return this.pendingCalls.find((pending) => pending.tool === tool && pending.argsKey === argsKey) ?? null;
+  }
+
+  /**
+   * Builds the caller and ties the call to ChatGPT's streamed call message, so the timeline shows
+   * one event: the server's, under the message's id. A call that beats its message is remembered
+   * and its message is marked as ours on arrival.
+   */
+  private claim(entry: IndexEntry, tool: string, argsKey: string): Caller | null {
+    const caller = this.callerFor(entry.sessionId);
+    if (!caller) return null;
+    const index = this.pendingCalls.findIndex((pending) => pending.sessionId === entry.sessionId && pending.tool === tool && pending.argsKey === argsKey);
     if (index >= 0) {
-      const [hit] = this.pendingCalls.splice(index, 1);
-      return hit!;
+      const [pending] = this.pendingCalls.splice(index, 1);
+      if (pending!.messageId) {
+        this.deps.recorder.markOwnCall(entry.sessionId, pending!.messageId);
+        return { ...caller, streamCallId: pending!.messageId };
+      }
     }
-    return null;
+    this.earlyCalls.push({ sessionId: entry.sessionId, conversationId: caller.conversationId, at: Date.now(), tool, argsKey, messageId: null });
+    this.earlyCalls = this.earlyCalls.slice(-50);
+    return caller;
   }
 
   private callerFor(sessionId: string): Caller | null {
@@ -223,8 +246,13 @@ export class ChatRouter {
       try {
         const parsed = JSON.parse(message.text) as { path?: string; args?: unknown };
         const tool = parsed.path?.split('/').filter(Boolean).at(-1);
-        if (tool && !this.pendingCalls.some((call) => call.at === now && call.tool === tool)) {
-          this.pendingCalls.push({ sessionId, conversationId: message.conversationId, at: now, tool, argsKey: canonicalJson(parsed.args ?? {}) });
+        const argsKey = canonicalJson(parsed.args ?? {});
+        const early = this.earlyCalls.findIndex((call) => call.sessionId === sessionId && call.tool === tool && call.argsKey === argsKey);
+        if (early >= 0) {
+          this.earlyCalls.splice(early, 1);
+          this.deps.recorder.markOwnCall(sessionId, message.id);
+        } else if (tool && !this.pendingCalls.some((call) => call.messageId === message.id)) {
+          this.pendingCalls.push({ sessionId, conversationId: message.conversationId, at: now, tool, argsKey, messageId: message.id });
         }
       } catch {
         // Partial or non-JSON call text; the request id still attributes it.

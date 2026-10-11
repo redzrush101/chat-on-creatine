@@ -297,7 +297,10 @@ export class ConversationStreamParser {
   }
 
   private delta(event: Obj): void {
+    // A bare `{v}` continues the previous operation; an explicit `o` without `p` targets the root
+    // (ChatGPT starts messages with `{"o":"add","v":{"message":…}}` right after text appends).
     if (typeof event.p === 'string') this.lastPath = event.p;
+    else if (typeof event.o === 'string') this.lastPath = '';
     if (typeof event.o === 'string') this.lastOp = event.o;
     this.envelope = applyOp(this.envelope, this.lastPath, this.lastOp, event.v);
 

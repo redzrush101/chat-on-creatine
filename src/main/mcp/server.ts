@@ -1,18 +1,23 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { McpServer, createMcpHandler, fromJsonSchema, type CallToolResult, type JsonSchemaType } from '@modelcontextprotocol/server';
+import { toNodeHandler } from '@modelcontextprotocol/node';
 import { z } from 'zod';
 import type { Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { createLogger } from '../core/log';
 import { serverInstructions } from './instructions';
+import { canAddCodeMode, codeModeTool } from './code-mode/tool';
 import { SURFACE_IDS, SURFACES } from './surfaces';
 import { ToolError, type Caller, type ToolContent, type ToolContext, type ToolResult, type ToolServices, type ToolSpec } from './tool';
+
+/** Who a call is attributed to. Nested calls from code mode reuse the parent's, never re-resolve it. */
+interface Attribution {
+  requestId: string | null;
+  caller: Caller | null;
+  signal: AbortSignal;
+}
 
 const log = createLogger('mcp');
 const SERVER_VERSION = '0.1.0';
@@ -126,6 +131,27 @@ function boundContent(content: ToolContent[]): ToolContent[] {
 export class McpHttpServer {
   private server: http.Server | null = null;
   private port = 0;
+  /**
+   * One SDK handler per surface. It serves both protocol eras: 2026-07-28 (what ChatGPT speaks)
+   * and the stateless 2025 fallback. Each request gets a fresh McpServer from live config.
+   */
+  private readonly handlers = Object.fromEntries(
+    SURFACE_IDS.map((surface) => [
+      surface,
+      toNodeHandler(
+        createMcpHandler(
+          (ctx) =>
+            this.buildServer(
+              surface,
+              requestIdFromHeader(ctx.requestInfo?.headers.get('x-request-id') ?? undefined),
+              ctx.requestInfo?.signal ?? new AbortController().signal
+            ),
+          { responseMode: 'json', maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.warn(`${surface}: ${error.message}`) }
+        ),
+        { maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.error(`${surface} handler failed`, error) }
+      )
+    ])
+  ) as Record<SurfaceId, ReturnType<typeof toNodeHandler>>;
 
   constructor(private readonly options: McpHttpServerOptions) {}
 
@@ -230,71 +256,34 @@ export class McpHttpServer {
       body = parsed.body;
     }
 
-    const requestId = requestIdFromHeader(req.headers['x-request-id']);
-    const abort = new AbortController();
-    res.on('close', () => abort.abort());
-    const mcp = this.buildServer(surface, requestId, abort.signal);
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    res.on('close', () => {
-      void transport.close();
-      void mcp.close();
+    res.on('finish', () => {
+      if (res.statusCode < 400) return;
+      const rpc = body && typeof body === 'object' && 'method' in body ? String((body as { method: unknown }).method) : '-';
+      log.warn(
+        `${surface} ${method} ${rpc} → HTTP ${res.statusCode} (protocol ${req.headers['mcp-protocol-version'] ?? '-'}, accept ${req.headers.accept ?? '-'}, content-type ${req.headers['content-type'] ?? '-'})`
+      );
     });
-    await mcp.connect(transport);
-    await transport.handleRequest(req, res, body);
+    await this.handlers[surface](req, res, body);
   }
 
-  private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer | Server {
+  private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer {
     const config = this.options.getConfig();
-    const tools = this.toolsFor(surface, config);
-    const info = { name: SURFACES[surface].serverName, version: SERVER_VERSION };
-    const instructions = serverInstructions(surface, config);
-    if (tools.some((tool) => tool.jsonSchema)) return this.rawServer(info, instructions, tools, requestId, signal);
-    const server = new McpServer(info, { instructions });
+    const exposed = this.toolsFor(surface, config);
+    const codeMode = canAddCodeMode(exposed);
+    const tools = codeMode ? [...exposed, codeModeTool(surface)] : exposed;
+    const server = new McpServer(
+      { name: SURFACES[surface].serverName, version: SERVER_VERSION },
+      { instructions: serverInstructions(surface, config, codeMode) }
+    );
     for (const tool of tools) {
+      // Plugin tools advertise their upstream JSON Schema verbatim; our own tools declare zod.
+      const inputSchema = tool.jsonSchema ? fromJsonSchema(tool.jsonSchema as JsonSchemaType) : z.object(tool.input);
       server.registerTool(
         tool.name,
-        { title: tool.title, description: tool.description, inputSchema: tool.input, annotations: tool.annotations },
+        { title: tool.title, description: tool.description, inputSchema, annotations: tool.annotations },
         (args: unknown) => this.dispatch(tool, args, requestId, signal)
       );
     }
-    return server;
-  }
-
-  /**
-   * Low-level server for tools that carry their own JSON Schema, which McpServer cannot advertise
-   * verbatim. Zod-declared tools on the same surface are still validated here.
-   */
-  private rawServer(
-    info: { name: string; version: string },
-    instructions: string,
-    tools: ToolSpec[],
-    requestId: string | null,
-    signal: AbortSignal
-  ): Server {
-    const server = new Server(info, { capabilities: { tools: {} }, instructions });
-    const byName = new Map(tools.map((tool) => [tool.name, tool]));
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: tools.map((tool): Tool => ({
-        name: tool.name,
-        title: tool.title,
-        description: tool.description,
-        inputSchema: (tool.jsonSchema ?? z.toJSONSchema(z.object(tool.input))) as Tool['inputSchema'],
-        annotations: tool.annotations
-      }))
-    }));
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const tool = byName.get(request.params.name);
-      if (!tool) return this.toCallResult(toolErrorResult(new ToolError('TOOL_DISABLED', `${request.params.name} is turned off in Settings.`)));
-      let args: unknown = request.params.arguments ?? {};
-      if (!tool.jsonSchema) {
-        const parsed = z.object(tool.input).safeParse(args);
-        if (!parsed.success) {
-          return this.toCallResult(toolErrorResult(new ToolError('INVALID_ARGUMENT', parsed.error.message)));
-        }
-        args = parsed.data;
-      }
-      return this.dispatch(tool, args, requestId, signal);
-    });
     return server;
   }
 
@@ -309,26 +298,14 @@ export class McpHttpServer {
     try {
       if (!tool.exposed(config)) throw new ToolError('TOOL_DISABLED', `${tool.name} is turned off in Settings.`);
       caller = await options.resolveCaller(requestId, { surface: tool.surface, tool: tool.name, args });
-      if ((tool.requiresCaller || !config.browser.allowUnattributed) && !caller) {
-        throw new ToolError('CALLER_IDENTITY_REQUIRED', `${tool.name} needs the chat that issued it, and that chat could not be identified.`);
-      }
+      requireCaller(tool, config, caller);
     } catch (error) {
       if (!(error instanceof ToolError)) log.error(`${tool.name} could not be attributed`, error);
       return this.toCallResult(error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error));
     }
 
-    const call: CallRecord = { id: randomUUID(), surface: tool.surface, tool: tool.name, args, requestId, caller, startedAt: Date.now() };
-    options.hooks?.onCallStart?.(call);
-    const run = tool.run as (input: unknown, ctx: ToolContext) => Promise<ToolResult>;
-    let result: ToolResult;
-    try {
-      result = await run(args, { surface: tool.surface, requestId, caller, config, services: options.services, signal });
-    } catch (error) {
-      if (!(error instanceof ToolError)) log.error(`${tool.name} failed`, error);
-      result = error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
-    }
-    options.hooks?.onCallEnd?.(call, result);
-
+    const result = await this.run(tool, args, { requestId, caller, signal });
+    // Steering is appended once, to the outer call; nested results stay clean.
     const steering = caller ? options.steering(caller) : [];
     const content = [
       ...boundContent(result.content),
@@ -340,12 +317,74 @@ export class McpHttpServer {
     return this.toCallResult({ ...result, content });
   }
 
+  /** A tool call from code mode: the same exposure and permission checks, the parent's identity. */
+  private async runNested(surface: SurfaceId, name: string, args: unknown, attribution: Attribution): Promise<ToolResult> {
+    const config = this.options.getConfig();
+    try {
+      const tool = this.toolsFor(surface, config).find((candidate) => candidate.name === name);
+      if (!tool) throw new ToolError('TOOL_DISABLED', `${name} is turned off in Settings.`);
+      requireCaller(tool, config, attribution.caller);
+      return await this.run(tool, args, attribution);
+    } catch (error) {
+      return error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
+    }
+  }
+
+  /** Executes a tool and records it for hooks. Errors become results so a script keeps running. */
+  private async run(tool: ToolSpec, args: unknown, attribution: Attribution): Promise<ToolResult> {
+    const { options } = this;
+    const call: CallRecord = {
+      id: randomUUID(),
+      surface: tool.surface,
+      tool: tool.name,
+      args,
+      requestId: attribution.requestId,
+      caller: attribution.caller,
+      startedAt: Date.now()
+    };
+    options.hooks?.onCallStart?.(call);
+    const ctx: ToolContext = {
+      surface: tool.surface,
+      requestId: attribution.requestId,
+      caller: attribution.caller,
+      config: options.getConfig(),
+      services: options.services,
+      signal: attribution.signal,
+      nested: {
+        list: () => this.toolsFor(tool.surface, options.getConfig()).map(({ name, description }) => ({ name, description })),
+        // Nested calls are their own timeline events, never ChatGPT's streamed message for the outer call.
+        call: (name, nestedArgs) =>
+          this.runNested(tool.surface, name, nestedArgs, {
+            ...attribution,
+            caller: attribution.caller ? { ...attribution.caller, streamCallId: undefined } : null
+          })
+      }
+    };
+    const run = tool.run as (input: unknown, ctx: ToolContext) => Promise<ToolResult>;
+    let result: ToolResult;
+    try {
+      result = await run(args, ctx);
+    } catch (error) {
+      if (!(error instanceof ToolError)) log.error(`${tool.name} failed`, error);
+      result = error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
+    }
+    options.hooks?.onCallEnd?.(call, result);
+    return result;
+  }
+
   private toCallResult(result: ToolResult): CallToolResult {
     return {
       content: result.content as CallToolResult['content'],
       ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
       isError: result.isError ?? false
     };
+  }
+}
+
+/** Unattributed calls are refused for every tool unless the user allowed them. */
+function requireCaller(tool: ToolSpec, config: Config, caller: Caller | null): void {
+  if ((tool.requiresCaller || !config.browser.allowUnattributed) && !caller) {
+    throw new ToolError('CALLER_IDENTITY_REQUIRED', `${tool.name} needs the chat that issued it, and that chat could not be identified.`);
   }
 }
 

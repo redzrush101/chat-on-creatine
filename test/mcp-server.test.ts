@@ -102,9 +102,9 @@ describe('McpHttpServer', () => {
   it('lists only the exposed tools of the surface whose token is used', async () => {
     const core = await connect('core');
     const names = (await core.listTools()).tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['echo', 'fail', 'plan']);
+    expect(names).toEqual(['echo', 'exec', 'fail', 'plan']);
     const desktop = await connect('desktop');
-    expect((await desktop.listTools()).tools.map((tool) => tool.name)).toEqual(['browse']);
+    expect((await desktop.listTools()).tools.map((tool) => tool.name)).toEqual(['browse', 'exec']);
     await core.close();
     await desktop.close();
   });

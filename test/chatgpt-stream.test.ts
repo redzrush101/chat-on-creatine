@@ -174,6 +174,25 @@ describe('ConversationStreamParser', () => {
     expect(web.text).toBe('result');
   });
 
+  it('starts a new message on an explicit op without a path, right after text appends (live ChatGPT shape)', () => {
+    const tool = { ...assistantMessage, id: 'm4', author: { role: 'tool', name: 'functions.exec', metadata: {} }, content: { content_type: 'text', parts: ['ok'] }, status: 'finished_successfully' };
+    const answer = { ...assistantMessage, id: 'm5' };
+    const { latest } = run(sse([
+      { event: 'delta', data: json({ p: '', o: 'add', v: { message: assistantMessage, conversation_id: CONV, error: null }, c: 0 }) },
+      { event: 'delta', data: json({ p: '/message/content/parts/0', o: 'append', v: 'The word is **' }) },
+      { event: 'delta', data: json({ v: 'x**.' }) },
+      { event: 'delta', data: json({ o: 'patch', v: [{ p: '/message/status', o: 'replace', v: 'finished_successfully' }] }) },
+      { event: 'delta', data: json({ o: 'add', v: { message: tool, conversation_id: CONV, error: null }, c: 1 }) },
+      { event: 'delta', data: json({ v: { message: answer, conversation_id: CONV, error: null }, c: 2 }) },
+      { event: 'delta', data: json({ p: '/message/content/parts/0', o: 'append', v: 'Done' }) },
+      { event: 'delta', data: json({ o: 'add', v: { message: { ...tool, id: 'm6' }, conversation_id: CONV, error: null }, c: 3 }) }
+    ]));
+    expect(latest.get('m3')).toMatchObject({ text: 'The word is **x**.', status: 'finished_successfully' });
+    expect(latest.get('m4')).toMatchObject({ role: 'tool', authorName: 'functions.exec', text: 'ok' });
+    expect(latest.get('m5')?.text).toBe('Done');
+    expect(latest.get('m6')?.role).toBe('tool');
+  });
+
   it('removes array items, reports envelope errors and completes on [DONE] alone', () => {
     const msg = { ...assistantMessage, content: { content_type: 'text', parts: ['a', 'b', 'c'] } };
     const events = sse([

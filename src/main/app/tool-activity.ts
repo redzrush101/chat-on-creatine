@@ -12,6 +12,11 @@ const DISPLAY_TEXT_LIMIT = 8_000;
 const ARGS_TEXT_LIMIT = 20_000;
 const FINISH_WAIT_MS = 25_000;
 
+/** Shares the recorder's id for ChatGPT's streamed call message, so both sides upsert one event. */
+function eventIdOf(call: CallRecord): string {
+  return call.caller?.streamCallId ? `tool:${call.caller.streamCallId}` : `call:${call.id}`;
+}
+
 function boundArgs(args: unknown): unknown {
   const text = JSON.stringify(args ?? null);
   return text.length <= ARGS_TEXT_LIMIT ? args : `${text.slice(0, ARGS_TEXT_LIMIT)}…`;
@@ -48,8 +53,8 @@ export class ToolActivity {
     this.deps.router.noteToolRunning(call.caller.sessionId, 1);
     this.record(call.caller.sessionId, {
       kind: 'tool',
-      id: `call:${call.id}`,
-      at: call.startedAt,
+      id: eventIdOf(call),
+      at: this.deps.store.event(call.caller.sessionId, eventIdOf(call))?.at ?? call.startedAt,
       surface: call.surface,
       name: call.tool,
       args: boundArgs(call.args),
@@ -64,8 +69,8 @@ export class ToolActivity {
     this.deps.router.noteToolRunning(call.caller.sessionId, -1);
     this.record(call.caller.sessionId, {
       kind: 'tool',
-      id: `call:${call.id}`,
-      at: call.startedAt,
+      id: eventIdOf(call),
+      at: this.deps.store.event(call.caller.sessionId, eventIdOf(call))?.at ?? call.startedAt,
       surface: call.surface,
       name: call.tool,
       args: boundArgs(call.args),

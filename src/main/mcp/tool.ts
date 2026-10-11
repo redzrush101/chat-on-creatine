@@ -9,6 +9,8 @@ export interface Caller {
   /** Working directory the session prefers (project folder), already validated against roots. */
   cwd: string | null;
   kind: 'chat' | 'worker' | 'helper';
+  /** ChatGPT's streamed message for this call, when attribution matched it (one timeline event). */
+  streamCallId?: string;
 }
 
 export type ToolContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
@@ -108,6 +110,14 @@ export interface AgentsApi {
   finish(caller: Caller, request: { result: string }): Promise<string>;
 }
 
+/** What code mode (`exec`) needs from its surface: the tools it may call and a nested dispatch. */
+export interface NestedToolHost {
+  /** Tools this surface exposes right now. */
+  list(): Array<{ name: string; description: string }>;
+  /** Runs one tool as a nested call: live permission check, the parent's identity, hooks, no steering. */
+  call(name: string, args: unknown): Promise<ToolResult>;
+}
+
 export interface ToolContext {
   surface: SurfaceId;
   /** `x-request-id` join key, null for local/test calls. */
@@ -116,6 +126,8 @@ export interface ToolContext {
   config: Config;
   services: ToolServices;
   signal: AbortSignal;
+  /** Set by the server for every call; only code mode reads it. */
+  nested?: NestedToolHost;
 }
 
 export interface ToolAnnotations {
