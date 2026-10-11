@@ -40,7 +40,7 @@ export function ContextMeter({ sessionId, tokens, advisory }: { sessionId: strin
         <div className="context-panel">
           <p className="context-title">Context · {percent}%</p>
           <p className="context-figure">
-            About {formatTokens(tokens)} of {formatTokens(advisory)} tokens (local estimate)
+            About {formatTokens(tokens)} of {formatTokens(advisory)} tokens (estimate)
           </p>
           <p className="context-hint">
             {ratio >= 1

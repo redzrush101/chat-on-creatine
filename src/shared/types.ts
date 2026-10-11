@@ -128,6 +128,8 @@ export type SessionEvent =
       status: ToolStatus;
       output: ToolOutputPart[];
       endedAt: number | null;
+      /** Characters of the result the model received; `output` is bounded for display. */
+      resultChars?: number;
     })
   | (EventBase & { kind: 'plan'; explanation: string | null; items: PlanItem[] })
   | (EventBase & { kind: 'turn'; phase: 'start' | 'end'; outcome: 'done' | 'stopped' | 'error' | 'incomplete' | null; error: string | null })

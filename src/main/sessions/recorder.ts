@@ -218,7 +218,13 @@ export class Recorder {
     const sources = [...known, ...message.sources.filter((source) => !known.some((seen) => seen.url === source.url && seen.ref === source.ref))];
     const output: ToolOutputPart[] = sources.length ? [...text, { type: 'sources', sources }] : text;
     this.store.append(sessionId, [
-      { ...previous, status: running ? 'running' : 'ok', output, endedAt: running ? null : Date.now() }
+      {
+        ...previous,
+        status: running ? 'running' : 'ok',
+        output,
+        endedAt: running ? null : Date.now(),
+        resultChars: message.text ? message.text.length : previous.resultChars
+      }
     ]);
   }
 

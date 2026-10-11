@@ -5,6 +5,7 @@ import type { CallRecord } from '../mcp/server';
 import type { Caller, ToolResult } from '../mcp/tool';
 import type { Outbox } from '../sessions/outbox';
 import type { SessionStore } from '../sessions/store';
+import { contextTokens, resultChars } from '../sessions/tokens';
 import type { ConnectionManager } from '../tunnel/connection';
 
 const log = createLogger('tools');
@@ -66,18 +67,25 @@ export class ToolActivity {
 
   onCallEnd(call: CallRecord, result: ToolResult): void {
     if (!call.caller) return;
-    this.deps.router.noteToolRunning(call.caller.sessionId, -1);
-    this.record(call.caller.sessionId, {
+    const { sessionId } = call.caller;
+    this.deps.router.noteToolRunning(sessionId, -1);
+    const event: SessionEvent = {
       kind: 'tool',
       id: eventIdOf(call),
-      at: this.deps.store.event(call.caller.sessionId, eventIdOf(call))?.at ?? call.startedAt,
+      at: this.deps.store.event(sessionId, eventIdOf(call))?.at ?? call.startedAt,
       surface: call.surface,
       name: call.tool,
       args: boundArgs(call.args),
       status: result.isError ? 'error' : 'ok',
       output: displayOf(result),
-      endedAt: Date.now()
-    });
+      endedAt: Date.now(),
+      // A nested call's result stays in its script; only the script's output reaches the model.
+      resultChars: call.nested ? 0 : resultChars(result.content)
+    };
+    this.record(sessionId, event);
+    // The turn's end recounts the whole conversation; until then the meter grows with each result.
+    const meta = this.deps.store.get(sessionId);
+    if (meta && !call.nested) this.deps.store.update(sessionId, { contextTokens: meta.contextTokens + contextTokens([event]) });
   }
 
   /** Messages queued while the model worked ride along with its next tool result, labelled by sender. */

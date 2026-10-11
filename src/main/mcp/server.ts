@@ -18,6 +18,8 @@ interface Attribution {
   requestId: string | null;
   caller: Caller | null;
   signal: AbortSignal;
+  /** Called from a code mode script, whose own output is what reaches the model. */
+  nested?: boolean;
 }
 
 const log = createLogger('mcp');
@@ -36,6 +38,7 @@ export interface CallRecord {
   requestId: string | null;
   caller: Caller | null;
   startedAt: number;
+  nested: boolean;
 }
 
 interface McpHttpServerOptions {
@@ -346,7 +349,8 @@ export class McpHttpServer {
       args,
       requestId: attribution.requestId,
       caller: attribution.caller,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      nested: attribution.nested === true
     };
     options.hooks?.onCallStart?.(call);
     const ctx: ToolContext = {
@@ -362,7 +366,8 @@ export class McpHttpServer {
         call: (name, nestedArgs) =>
           this.runNested(tool.surface, name, nestedArgs, {
             ...attribution,
-            caller: attribution.caller ? { ...attribution.caller, streamCallId: undefined } : null
+            caller: attribution.caller ? { ...attribution.caller, streamCallId: undefined } : null,
+            nested: true
           })
       }
     };

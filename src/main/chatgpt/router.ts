@@ -314,27 +314,28 @@ export class ChatRouter {
 
     const session = this.deps.store.get(sessionId);
     if (!session) return;
-    const tokens = contextTokens(this.deps.store.events(sessionId));
-    const updated = this.deps.store.update(sessionId, { contextTokens: tokens }) ?? session;
-    void this.reconcile(updated);
-    this.followUps.afterTurn(updated, finalOutcome);
-    this.deps.onTurnEnd(updated, finalOutcome);
+    void this.reconcile(session);
+    this.followUps.afterTurn(session, finalOutcome);
+    this.deps.onTurnEnd(session, finalOutcome);
     void this.pump(sessionId);
   }
 
   /**
-   * Re-reads the finished turn from ChatGPT's conversation API and upserts its messages. The
-   * stream is the live view; this is the authoritative final text if a delta was ever misread.
+   * Re-reads the conversation from ChatGPT's API: it upserts the finished turn's messages (the
+   * stream is the live view; this is the authoritative final text if a delta was ever misread) and
+   * recounts the context from ChatGPT's transcript, or from the local record when it cannot be read.
    */
   private async reconcile(session: SessionMeta): Promise<void> {
     const turnId = this.currentTurnIds.get(session.id);
     const tabId = this.sessionTab.get(session.id);
-    if (!turnId || !tabId || !session.conversationId) return;
-    const result = await this.deps.host.command(tabId, { type: 'conversation', conversationId: session.conversationId }, 20_000);
-    if (!result.ok || !Array.isArray(result.value)) return;
-    for (const message of result.value as ChatMessage[]) {
-      if (message.turnId === turnId && message.role !== 'user') this.deps.recorder.handle(session.id, { type: 'message', streamId: null, message });
+    const result = tabId && session.conversationId
+      ? await this.deps.host.command(tabId, { type: 'conversation', conversationId: session.conversationId }, 20_000)
+      : null;
+    const transcript = result?.ok && Array.isArray(result.value) ? (result.value as ChatMessage[]) : null;
+    for (const message of transcript ?? []) {
+      if (turnId && message.turnId === turnId && message.role !== 'user') this.deps.recorder.handle(session.id, { type: 'message', streamId: null, message });
     }
+    this.deps.store.update(session.id, { contextTokens: contextTokens(this.deps.store.events(session.id), transcript) });
   }
 
   private async pump(sessionId: string): Promise<void> {
