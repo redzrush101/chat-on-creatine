@@ -12,7 +12,7 @@ const CODE_MODE_DESCRIPTION =
   'Requires the chat identity or Allow unattributed calls enabled in app settings. ' +
   'Limits: 64k source characters, 32 MiB JS memory, 2s active JS time, 60s total, 32 calls, 8 concurrent calls, 40k text bytes, 4 images. ' +
   'Await every call. Termination stops JavaScript and new calls, not actions already dispatched. Individual tools remain available. ' +
-  'session_finish and agents action=finish must be direct calls. No recursive exec and no persistent globals.';
+  'session_finish must be a direct call. No recursive exec and no persistent globals.';
 
 /** Code mode is added only to a surface with tools, and never replaces a tool that is already named exec. */
 export function canAddCodeMode(tools: readonly { name: string }[]): boolean {
@@ -35,14 +35,10 @@ function unknownToolNote(unknown: readonly string[]): string {
   );
 }
 
-/** Refused inside exec: these must be called directly so their lifecycle is not hidden in a script. */
-function directOnlyRefusal(name: string, args: unknown): ToolResult | null {
-  const finishing = name === 'session_finish' || (name === 'agents' && (args as { action?: unknown } | null)?.action === 'finish');
-  if (!finishing) return null;
-  return {
-    content: [{ type: 'text', text: 'INVALID_ARGUMENT: session_finish and agents action=finish must be called directly, not from exec.' }],
-    isError: true
-  };
+/** Refused inside exec: session_finish holds the turn open, which a script would hide. */
+function directOnlyRefusal(name: string): ToolResult | null {
+  if (name !== 'session_finish') return null;
+  return { content: [{ type: 'text', text: 'INVALID_ARGUMENT: session_finish must be called directly, not from exec.' }], isError: true };
 }
 
 /** `name(required, optional?)` per tool, so a script can call tools without first listing them. */
@@ -62,7 +58,8 @@ export function codeModeTool(surface: SurfaceId, tools: readonly ToolSpec[]): To
     name: 'exec',
     surface,
     title: 'Run JavaScript',
-    description: `${CODE_MODE_DESCRIPTION} Tools here: ${toolSignatures(tools)}.`,
+    // Tools first: ChatGPT may shorten a long description, and the list saves a discovery call.
+    description: `Tools here: ${toolSignatures(tools)}. ${CODE_MODE_DESCRIPTION}`,
     input: {
       code: z.string().min(1).max(CODE_MODE_LIMITS.codeChars).describe('Raw JavaScript source with top-level await. Emit results with text(...) or image(...).')
     },
@@ -75,7 +72,7 @@ export function codeModeTool(surface: SurfaceId, tools: readonly ToolSpec[]): To
       const result = await runCodeMode(
         code,
         tools,
-        async (name, args) => directOnlyRefusal(name, args) ?? host.call(name, args),
+        async (name, args) => directOnlyRefusal(name) ?? host.call(name, args),
         ctx.signal
       );
       const unknown = unknownToolReferences(code, tools.map((tool) => tool.name));

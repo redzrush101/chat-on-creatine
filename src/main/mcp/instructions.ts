@@ -42,7 +42,7 @@ const DESKTOP_GUIDE = `Browser control runs through the companion extension insi
 const CODE_MODE_GUIDE = `Code mode: exec runs JavaScript that calls this connector's tools by their listed names and argument schemas, so one call can batch reads or chain steps. Only text(...) and image(...) reach you; each tool result has content and isError, so check them. Example:
 const [a, b] = await Promise.all([tools.read({paths: ["a.txt"]}), tools.read({paths: ["b.txt"]})]);
 text([a, b].map(result => ({isError: result.isError ?? false, content: result.content})));
-Keep emitted text within 40,000 UTF-8 bytes. Send images with image(...), never as text. Run calls in parallel only when they cannot conflict; await mutations before dependent work. Use direct tools for a single simple call. session_finish and agents action=finish must be called directly, not from exec.`;
+Keep emitted text within 40,000 UTF-8 bytes. Send images with image(...), never as text. Run calls in parallel only when they cannot conflict; await mutations before dependent work. Use direct tools for a single simple call. session_finish must be called directly, not from exec.`;
 
 const PLUGINS_GUIDE = `External MCP tools enabled by the user in Chat on Creatine Settings. Each tool keeps its upstream schema. External servers run with their own permissions; the app's approved folders do not sandbox them. Use them only for the user's requested task. A failed or disconnected call may already have taken effect: never retry a mutation automatically after an ambiguous failure. Disabled tools need the user to re-enable them in Settings. Core and Desktop are separate connectors.`;
 
