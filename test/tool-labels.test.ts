@@ -71,4 +71,12 @@ describe('timeline blocks', () => {
     const blocks = buildBlocks([a, b, assistant('m1', 'commentary'), c, assistant('m2', 'final')], false);
     expect(blocks.map((block) => (block.type === 'work' ? `work:${block.events.length}` : block.event.kind))).toEqual(['work:2', 'assistant', 'work:1', 'assistant']);
   });
+
+  it('leaves a spawn call out when the agent rows it produced follow', () => {
+    const spawn = tool('agents', { action: 'spawn', workers: [{ label: 'alpha', task: 't' }] });
+    const spawned: SessionEvent = { id: 'agent:1', at: 0, kind: 'agent', workerSessionId: 'w1', label: 'alpha', action: 'spawned', text: 't' };
+    const kinds = (events: SessionEvent[]) => buildBlocks(events, false).map((block) => (block.type === 'work' ? 'work' : block.event.kind));
+    expect(kinds([spawn, spawned])).toEqual(['agent']);
+    expect(kinds([tool('exec_command', { cmd: 'ls' }), spawn, spawned])).toEqual(['work', 'agent']);
+  });
 });

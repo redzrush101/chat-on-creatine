@@ -1,8 +1,16 @@
 import type { SessionEvent } from '@shared/types';
+import { toolBaseName } from './tool-labels';
 
 /** Work narration that folds into a group: tool calls and the thinking between them. */
 function isWork(event: SessionEvent): boolean {
   return event.kind === 'tool' || event.kind === 'reasoning';
+}
+
+/** A spawn call says only what the agent rows right after it say again, and say better. */
+function isAgentSpawn(event: SessionEvent): boolean {
+  if (event.kind !== 'tool' || toolBaseName(event.name) !== 'agents') return false;
+  const args = event.args as { action?: unknown; args?: { action?: unknown } } | null;
+  return (args?.action ?? args?.args?.action) === 'spawn';
 }
 
 /** Turn bookkeeping that is not worth a row: starts and clean ends. */
@@ -22,14 +30,19 @@ export function buildBlocks(events: SessionEvent[], live: boolean): TimelineBloc
   const blocks: TimelineBlock[] = [];
   let run: SessionEvent[] = [];
 
-  const flush = (tail: boolean) => {
+  const flush = (tail: boolean, next?: SessionEvent) => {
     if (run.length === 0) return;
+    const tools = run.filter((event) => event.kind === 'tool');
+    if (next?.kind === 'agent' && next.action === 'spawned' && tools.length > 0 && tools.every(isAgentSpawn)) {
+      run = [];
+      return;
+    }
     blocks.push({
       type: 'work',
       id: `work:${run[0]?.id ?? ''}`,
       events: run,
       running: tail && live,
-      tools: run.filter((event) => event.kind === 'tool').length
+      tools: tools.length
     });
     run = [];
   };
@@ -38,7 +51,7 @@ export function buildBlocks(events: SessionEvent[], live: boolean): TimelineBloc
     if (isWork(event)) {
       run.push(event);
     } else if (!isSilent(event)) {
-      flush(false);
+      flush(false, event);
       blocks.push({ type: 'event', event });
     }
   }

@@ -34,12 +34,12 @@ it('passes a running command ID directly from exec_command to write_stdin over M
       workdir: root,
       yield_time_ms: 250
     } });
-    expect(started.isError).toBe(false);
+    expect(started.isError, JSON.stringify(started.content)).toBe(false);
     const { session_id: sessionId } = z.object({ session_id: z.number().int().nonnegative() }).parse(started.structuredContent);
     const finished = await client.callTool({ name: 'write_stdin', arguments: {
       session_id: sessionId, chars: 'roundtrip\n', yield_time_ms: 2000
     } });
-    expect(finished.isError).toBe(false);
+    expect(finished.isError, JSON.stringify(finished.content)).toBe(false);
     const data = z.object({ output: z.string(), exit_code: z.number().optional() }).parse(finished.structuredContent);
     expect(data.output).toBe('received:roundtrip\n');
     const exit = data.exit_code === undefined
