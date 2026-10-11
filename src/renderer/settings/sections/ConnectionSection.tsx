@@ -2,7 +2,8 @@ import type { JSX } from 'react';
 import type { AppState, SurfaceStatus } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { tunnelConfigured } from '../../lib/connection';
-import { ago, Button, ConnectionPill, CopyButton, Group, NumberField, Row, Segmented, TextField, Toggle, useNow, useRun, useSave } from '../controls';
+import { ago, Button, ConnectionPill, CopyButton, Group, NumberField, Row, Segmented, TextField, Toggle, useRun, useSave } from '../controls';
+import { useNow } from '../../lib/hooks';
 import { TunnelFields } from '../TunnelFields';
 import type { Config } from '@shared/config';
 
@@ -17,7 +18,7 @@ export function ConnectionSection({ state }: { state: AppState }): JSX.Element {
   const configured = tunnelConfigured(state);
   const save = useSave();
   const run = useRun();
-  const now = useNow();
+  const now = useNow(true);
   const kind = config.connection.kind;
   const busy = connection.state === 'connected' || connection.state === 'connecting' || connection.state === 'starting';
 

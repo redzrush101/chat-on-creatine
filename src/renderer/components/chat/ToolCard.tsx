@@ -3,6 +3,7 @@ import hljs from 'highlight.js/lib/common';
 import { ChevronDown, ChevronRight, CircleAlert, Copy, Check, Image, LoaderCircle } from 'lucide-react';
 import type { SessionEvent, ToolOutputPart, WebSource } from '@shared/types';
 import { basename, cx, formatDuration } from '../../lib/format';
+import { useCopy } from '../../lib/hooks';
 import { describeTool, diffRows } from './tool-labels';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
@@ -162,18 +163,12 @@ export function DiffBadge({ added, removed }: { added: number; removed: number }
 /** A file diff with line numbers, like the Claude app's edit cards. */
 export function DiffCard({ path, diff }: { path: string; diff: string }) {
   const rows = useMemo(() => diffRows(diff), [diff]);
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard.writeText(path).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    });
-  };
+  const [copied, copy] = useCopy();
   return (
     <div className="diff">
       <div className="diff-head">
         <span className="diff-path" title={path}>{path}</span>
-        <button type="button" className="icon-btn diff-copy" aria-label="Copy path" title="Copy path" onClick={copy}>
+        <button type="button" className="icon-btn diff-copy" aria-label="Copy path" title="Copy path" onClick={() => copy(path)}>
           {copied ? <Check size={13} /> : <Copy size={13} />}
         </button>
       </div>

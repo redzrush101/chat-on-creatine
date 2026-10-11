@@ -2,10 +2,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/common';
 import katex from 'katex';
 import { Marked, type TokenizerAndRendererExtension } from 'marked';
-
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-}
+import { escapeHtml } from './format';
 
 function math(text: string, displayMode: boolean): string {
   return katex.renderToString(text, { displayMode, throwOnError: false, strict: 'ignore' });

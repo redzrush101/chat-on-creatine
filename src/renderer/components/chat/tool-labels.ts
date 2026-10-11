@@ -1,4 +1,5 @@
 import type { SessionEvent } from '@shared/types';
+import { basename } from '../../lib/format';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 
@@ -19,10 +20,6 @@ export interface ToolLabel {
   files: { path: string; added: number; removed: number }[];
   /** Everything the target names, for counting: each file read, each agent started. */
   items: string[];
-}
-
-function basename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
 function singleLine(text: string, max = 140): string {

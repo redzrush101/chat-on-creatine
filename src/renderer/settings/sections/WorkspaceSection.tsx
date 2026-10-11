@@ -5,7 +5,7 @@ import { CAPABILITIES } from '@shared/config';
 import type { Capability } from '@shared/config';
 import type { AppState } from '@shared/types';
 import { invoke } from '../../lib/bridge';
-import { Button, Group, Row, Segmented, TextField, Toggle, useRun, useSave } from '../controls';
+import { Button, Group, Row, Segmented, TextField, Toggle, useAddFolder, useRun, useSave } from '../controls';
 
 const CAPABILITY_HELP: Record<Capability, string> = {
   read: 'Read files inside approved folders.',
@@ -24,13 +24,7 @@ export function WorkspaceSection({ state }: { state: AppState }): JSX.Element {
   const run = useRun();
   const policy = config.commandPolicy;
 
-  const addFolder = () =>
-    run(async () => {
-      const path = await invoke('app:pickFolder');
-      if (path && !config.roots.some((root) => root.path === path)) {
-        save({ roots: [...config.roots, { id: crypto.randomUUID(), path, label: '' }] });
-      }
-    });
+  const addFolder = useAddFolder(config.roots);
 
   const setRules = (rules: string[]) => save({ commandPolicy: { rules } });
 
@@ -66,7 +60,7 @@ export function WorkspaceSection({ state }: { state: AppState }): JSX.Element {
           </Row>
         ))}
         <div className="st-row">
-          <Button variant="primary" onClick={() => void addFolder()}>
+          <Button variant="primary" onClick={addFolder}>
             <Plus size={14} aria-hidden /> Add folder
           </Button>
         </div>

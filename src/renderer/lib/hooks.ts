@@ -21,6 +21,18 @@ export function useStoredState<T>(key: string, fallback: T): [T, (value: T) => v
   return [value, update];
 }
 
+/** Copies text to the clipboard; `copied` stays true for a moment afterwards, for button feedback. */
+export function useCopy(): [boolean, (text: string) => void] {
+  const [copied, setCopied] = useState(false);
+  const copy = (text: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  return [copied, copy];
+}
+
 export function useSystemDark(): boolean {
   return useSyncExternalStore(
     (listener) => {

@@ -1,4 +1,5 @@
 import type { Citation, WebSource } from '@shared/types';
+import { escapeHtml } from './format';
 
 /**
  * ChatGPT writes inline references as private-use markers: U+E200, a kind, U+E202-separated
@@ -8,10 +9,6 @@ import type { Citation, WebSource } from '@shared/types';
 const MARKER = /([a-z_]+)((?:[^]*)*)/g;
 /** The unfinished marker at the end of a streaming answer. */
 const PARTIAL = /[^]*$/;
-
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
-}
 
 function chip(sources: WebSource[]): string {
   const [first] = sources;

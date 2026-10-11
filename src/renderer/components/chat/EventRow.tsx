@@ -1,10 +1,11 @@
-import { memo, useContext, useMemo, useState } from 'react';
+import { memo, useContext, useMemo } from 'react';
 import { Check, CircleAlert, CircleDot, Copy, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
 import type { Citation, SessionEvent, WorkerState } from '@shared/types';
 import { resolveMarkers, stripMarkers } from '../../lib/citations';
 import { renderMarkdown } from '../../lib/markdown';
 import { useAppState } from '../../lib/store';
 import { basename, cx, formatAgo } from '../../lib/format';
+import { useCopy } from '../../lib/hooks';
 import { ToolRow } from './ToolCard';
 import { SourcesContext } from './sources';
 
@@ -143,20 +144,9 @@ function AgentRow({ event, onOpen }: { event: Extract<SessionEvent, { kind: 'age
 }
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy();
   return (
-    <button
-      type="button"
-      className="icon-btn msg-action"
-      aria-label={label}
-      title={copied ? 'Copied' : label}
-      onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        });
-      }}
-    >
+    <button type="button" className="icon-btn msg-action" aria-label={label} title={copied ? 'Copied' : label} onClick={() => copy(text)}>
       {copied ? <Check size={13} /> : <Copy size={13} />}
     </button>
   );

@@ -4,12 +4,11 @@ import { CircleCheck, Circle, PartyPopper } from 'lucide-react';
 import type { AppState, SurfaceStatus } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { tunnelConfigured } from '../../lib/connection';
-import { Button, ConnectionPill, CopyButton, Pill, Row, useRun, useSave } from '../controls';
+import { Button, ConnectionPill, CopyButton, Pill, Row, useAddFolder, useRun } from '../controls';
 import { TunnelFields } from '../TunnelFields';
 
 export function SetupSection({ state }: { state: AppState }): JSX.Element {
   const { config, connection, browser, tools } = state;
-  const save = useSave();
   const run = useRun();
   const [toolResult, setToolResult] = useState<string | null>(null);
 
@@ -21,13 +20,7 @@ export function SetupSection({ state }: { state: AppState }): JSX.Element {
   const folderReady = config.roots.length > 0 || config.yolo;
   const connected = connection.state === 'connected';
 
-  const addFolder = () =>
-    run(async () => {
-      const path = await invoke('app:pickFolder');
-      if (path && !config.roots.some((root) => root.path === path)) {
-        save({ roots: [...config.roots, { id: crypto.randomUUID(), path, label: '' }] });
-      }
-    });
+  const addFolder = useAddFolder(config.roots);
 
   const installTunnel = () =>
     run(async () => {
@@ -63,7 +56,7 @@ export function SetupSection({ state }: { state: AppState }): JSX.Element {
           </ul>
         )}
         <div className="st-actions">
-          <Button variant={folderReady ? 'default' : 'primary'} onClick={() => void addFolder()}>
+          <Button variant={folderReady ? 'default' : 'primary'} onClick={addFolder}>
             Add folder
           </Button>
         </div>

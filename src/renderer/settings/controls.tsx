@@ -5,6 +5,7 @@ import type { DeepPartial, Config } from '@shared/config';
 import type { ConnectionState } from '@shared/types';
 import { invoke } from '../lib/bridge';
 import { connectionView } from '../lib/connection';
+import { useCopy } from '../lib/hooks';
 
 /** Errors from saving settings are shown by the settings shell, not swallowed. */
 export const ReportContext = createContext<(message: string) => void>(() => undefined);
@@ -43,16 +44,6 @@ export function ago(at: number | null, now = Date.now()): string {
   const hours = Math.round(minutes / 60);
   if (hours < 48) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
-}
-
-/** Re-renders once a second so relative times stay honest while a panel is open. */
-export function useNow(intervalMs = 1000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(timer);
-  }, [intervalMs]);
-  return now;
 }
 
 export function Group({ title, description, children }: { title: string; description?: string; children: ReactNode }): JSX.Element {
@@ -332,17 +323,9 @@ export function Button({
 }
 
 export function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }): JSX.Element {
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy();
   return (
-    <Button
-      variant="ghost"
-      onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        });
-      }}
-    >
+    <Button variant="ghost" onClick={() => copy(text)}>
       {copied ? 'Copied' : label}
     </Button>
   );
@@ -384,6 +367,19 @@ export function useRun(): (task: () => Promise<unknown>) => Promise<void> {
     },
     [report]
   );
+}
+
+/** Asks for a folder and approves it, unless it already is. */
+export function useAddFolder(roots: Config['roots']): () => void {
+  const save = useSave();
+  const run = useRun();
+  return () =>
+    void run(async () => {
+      const path = await invoke('app:pickFolder');
+      if (path && !roots.some((root) => root.path === path)) {
+        save({ roots: [...roots, { id: crypto.randomUUID(), path, label: '' }] });
+      }
+    });
 }
 
 const PILL_TONE = { ok: 'ok', progress: 'accent', neutral: 'muted', bad: 'bad' } as const;

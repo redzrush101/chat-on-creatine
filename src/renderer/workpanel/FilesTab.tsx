@@ -1,16 +1,13 @@
-import { errorMessage } from '../lib/format';
+import { basename, errorMessage } from '../lib/format';
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import type { FileEntry } from '@shared/types';
 import type { FileContent } from '@shared/ipc';
 import { invoke } from '../lib/bridge';
+import { useCopy } from '../lib/hooks';
 import { CodeViewer } from './CodeViewer';
 import { Empty, formatBytes, Notice, relativeTo, useAction } from './common';
-
-function basename(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
-}
 
 export function FilesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -106,7 +103,7 @@ function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; 
   const [file, setFile] = useState<FileContent | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, runAction] = useAction();
-  const [copied, setCopied] = useState(false);
+  const [copied, copy] = useCopy();
 
   useEffect(() => {
     let alive = true;
@@ -123,13 +120,6 @@ function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; 
       alive = false;
     };
   }, [path]);
-
-  const copyPath = () => {
-    void navigator.clipboard.writeText(path).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    });
-  };
 
   let body: JSX.Element;
   if (loadError) body = <Notice tone="error">{loadError}</Notice>;
@@ -157,7 +147,7 @@ function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; 
         <button type="button" className="wp-btn is-ghost" aria-label="Reveal in folder" onClick={() => void runAction(() => invoke('app:revealPath', path))}>
           <ExternalLink size={14} aria-hidden />
         </button>
-        <button type="button" className="wp-btn is-ghost" onClick={copyPath}>
+        <button type="button" className="wp-btn is-ghost" onClick={() => copy(path)}>
           <Copy size={14} aria-hidden /> {copied ? 'Copied' : 'Copy path'}
         </button>
       </div>
