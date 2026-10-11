@@ -1,15 +1,15 @@
 import { Fragment, useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { ChevronRight, Ellipsis, FolderPlus, Folder, PanelLeftClose, Pencil, Search, Settings, SquarePen, Trash2, X } from 'lucide-react';
-import type { AppState, SessionMeta, WorkerState } from '@shared/types';
+import { ChevronRight, FolderPlus, PanelLeftClose, Search, Settings, SquarePen, X } from 'lucide-react';
+import type { AppState, SessionMeta } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { cx, errorMessage } from '../../lib/format';
 import { connectionView, tunnelConfigured, type ConnectionView } from '../../lib/connection';
 import { useStoredState } from '../../lib/hooks';
 import { notify, reportError } from '../common/Toasts';
 import { ConfirmDialog } from '../common/ConfirmDialog';
-import { InlineEdit } from '../common/InlineEdit';
-import { MenuButton, type MenuEntry } from '../common/Popover';
 import { SessionRow } from './SessionRow';
+import { ProjectGroup } from './ProjectGroup';
+import { sidebarSessions } from './sidebar-model';
 
 type SearchHit = { sessionId: string; eventId: string; snippet: string };
 
@@ -25,76 +25,9 @@ interface SidebarProps {
   onSessionDeleted(sessionId: string): void;
 }
 
-const byRecent = (a: SessionMeta, b: SessionMeta) => b.updatedAt - a.updatedAt;
-
-export function Sidebar({
-  app,
-  selectedId,
-  searchRef,
-  searchNonce,
-  onSelect,
-  onNewChat,
-  onCollapse,
-  onOpenSettings,
-  onSessionDeleted
-}: SidebarProps) {
+function useSidebarSearch(searchRef: RefObject<HTMLInputElement | null>, onSelect: (sessionId: string) => void) {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
-  const [collapsed, setCollapsed] = useStoredState<Record<string, boolean>>('creatine.sidebar.collapsed', {});
-  const [renamingProject, setRenamingProject] = useState<string | null>(null);
-  const [removingProject, setRemovingProject] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (searchNonce) searchRef.current?.focus();
-  }, [searchNonce, searchRef]);
-
-  const { sessions, projects, live, agents, platform } = app;
-  const sessionById = new Map(sessions.map((session) => [session.id, session]));
-  const chats = sessions.filter((session) => session.kind === 'chat');
-  const projectIds = new Set(projects.map((project) => project.id));
-  const pinned = chats.filter((chat) => chat.pinned).sort(byRecent);
-  const unpinned = chats.filter((chat) => !chat.pinned);
-  const loose = unpinned.filter((chat) => chat.projectId === null || !projectIds.has(chat.projectId)).sort(byRecent);
-
-  const workersOf = new Map<string, SessionMeta[]>();
-  for (const session of sessions) {
-    if (session.kind !== 'worker' || !session.parentId || !sessionById.has(session.parentId)) continue;
-    workersOf.set(session.parentId, [...(workersOf.get(session.parentId) ?? []), session]);
-  }
-  const workerStateOf = (sessionId: string): WorkerState | null => {
-    for (const run of agents) {
-      const worker = run.workers.find((item) => item.sessionId === sessionId);
-      if (worker) return worker.state;
-    }
-    return null;
-  };
-
-  const searching = query.trim().length > 0;
-  const titleMatches = searching ? chats.filter((chat) => chat.title.toLowerCase().includes(query.trim().toLowerCase())) : [];
-
-  const rowFor = (session: SessionMeta, nested = false) => (
-    <SessionRow
-      key={session.id}
-      session={session}
-      live={live[session.id]}
-      projects={projects}
-      workerState={nested ? workerStateOf(session.id) : null}
-      selected={session.id === selectedId}
-      nested={nested}
-      onSelect={onSelect}
-      onDeleted={onSessionDeleted}
-    />
-  );
-
-  const chatBlock = (chat: SessionMeta) => (
-    <Fragment key={chat.id}>
-      {rowFor(chat)}
-      {(workersOf.get(chat.id) ?? []).map((worker) => rowFor(worker, true))}
-    </Fragment>
-  );
-
-  const toggleGroup = (key: string) => setCollapsed({ ...collapsed, [key]: !collapsed[key] });
-
   const runSearch = () => {
     const text = query.trim();
     if (!text) {
@@ -123,6 +56,58 @@ export function Sidebar({
     onSelect(sessionId);
   };
 
+  return { query, setQuery, hits, setHits, onSearchKeyDown, openHit };
+}
+
+export function Sidebar({
+  app,
+  selectedId,
+  searchRef,
+  searchNonce,
+  onSelect,
+  onNewChat,
+  onCollapse,
+  onOpenSettings,
+  onSessionDeleted
+}: SidebarProps) {
+  const { query, setQuery, hits, setHits, onSearchKeyDown, openHit } = useSidebarSearch(searchRef, onSelect);
+  const [collapsed, setCollapsed] = useStoredState<Record<string, boolean>>('creatine.sidebar.collapsed', {});
+  const [renamingProject, setRenamingProject] = useState<string | null>(null);
+  const [removingProject, setRemovingProject] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (searchNonce) searchRef.current?.focus();
+  }, [searchNonce, searchRef]);
+
+  const { projects, live, platform } = app;
+  const { chats, sessionById, pinned, chatsByProject, loose, workersOf, workerStateOf } = sidebarSessions(app);
+
+  const searching = query.trim().length > 0;
+  const titleMatches = searching ? chats.filter((chat) => chat.title.toLowerCase().includes(query.trim().toLowerCase())) : [];
+
+  const rowFor = (session: SessionMeta, nested = false) => (
+    <SessionRow
+      key={session.id}
+      session={session}
+      live={live[session.id]}
+      projects={projects}
+      workerState={nested ? workerStateOf(session.id) : null}
+      selected={session.id === selectedId}
+      nested={nested}
+      onSelect={onSelect}
+      onDeleted={onSessionDeleted}
+    />
+  );
+
+  const chatBlock = (chat: SessionMeta) => (
+    <Fragment key={chat.id}>
+      {rowFor(chat)}
+      {(workersOf.get(chat.id) ?? []).map((worker) => rowFor(worker, true))}
+    </Fragment>
+  );
+
+  const toggleGroup = (key: string) => setCollapsed({ ...collapsed, [key]: !collapsed[key] });
+
   const addProject = () => {
     invoke('app:pickFolder')
       .then((path) => (path ? invoke('projects:add', path) : null))
@@ -131,27 +116,8 @@ export function Sidebar({
   };
 
   const section = (key: string, title: string, actions: ReactNode, children: ReactNode, count?: number) => {
-    const open = !collapsed[key];
-    return (
-      <section className="sidebar-section" aria-label={title}>
-        <div className="sidebar-section-head">
-          <button type="button" className="sidebar-section-toggle" aria-expanded={open} onClick={() => toggleGroup(key)}>
-            <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
-            <span>{title}</span>
-            {count !== undefined && count > 0 && <span className="sidebar-count">{count}</span>}
-          </button>
-          <div className="sidebar-section-actions">{actions}</div>
-        </div>
-        {open && <div className="sidebar-section-body">{children}</div>}
-      </section>
-    );
+    return <SidebarSection title={title} actions={actions} count={count} open={!collapsed[key]} onToggle={() => toggleGroup(key)}>{children}</SidebarSection>;
   };
-
-  const projectMenu = (projectId: string): MenuEntry[] => [
-    { label: 'Rename', icon: Pencil, onSelect: () => setRenamingProject(projectId) },
-    { kind: 'separator' },
-    { label: 'Remove from list', icon: Trash2, danger: true, onSelect: () => setRemovingProject(projectId) }
-  ];
 
   return (
     <nav className="sidebar-inner" aria-label="Chats">
@@ -226,52 +192,25 @@ export function Sidebar({
                 <p className="sidebar-empty">Add a folder to group chats by project.</p>
               ) : (
                 projects.map((project) => {
-                  const projectChats = unpinned.filter((chat) => chat.projectId === project.id).sort(byRecent);
+                  const projectChats = chatsByProject.get(project.id) ?? [];
                   const open = !collapsed[`project:${project.id}`];
                   return (
-                    <div key={project.id} className="project-group">
-                      <div className="project-head">
-                        {renamingProject === project.id ? (
-                          <InlineEdit
-                            label="Project name"
-                            value={project.name}
-                            onCancel={() => setRenamingProject(null)}
-                            onCommit={(name) => {
-                              setRenamingProject(null);
-                              invoke('projects:update', project.id, { name }).catch(reportError);
-                            }}
-                          />
-                        ) : (
-                          <button
-                            type="button"
-                            className="project-toggle"
-                            aria-expanded={open}
-                            title={project.path}
-                            onClick={() => toggleGroup(`project:${project.id}`)}
-                          >
-                            <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
-                            <Folder size={13} aria-hidden="true" />
-                            <span className="project-name">{project.name}</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="icon-btn row-add"
-                          aria-label={`New chat in ${project.name}`}
-                          title={`New chat in ${project.name}`}
-                          onClick={() => onNewChat(project.id)}
-                        >
-                          <SquarePen size={13} />
-                        </button>
-                        <MenuButton entries={projectMenu(project.id)} label={`Actions for ${project.name}`} icon={Ellipsis} className="row-menu" />
-                      </div>
-                      {open && (
-                        <div className="project-chats">
-                          {projectChats.length === 0 && <p className="sidebar-empty is-nested">No chats yet.</p>}
-                          {projectChats.map(chatBlock)}
-                        </div>
-                      )}
-                    </div>
+                    <ProjectGroup
+                      key={project.id}
+                      project={project}
+                      open={open}
+                      renaming={renamingProject === project.id}
+                      chats={projectChats.map(chatBlock)}
+                      onToggle={() => toggleGroup(`project:${project.id}`)}
+                      onNewChat={onNewChat}
+                      onCancelRename={() => setRenamingProject(null)}
+                      onRename={(name) => {
+                        setRenamingProject(null);
+                        invoke('projects:update', project.id, { name }).catch(reportError);
+                      }}
+                      onRenameStart={() => setRenamingProject(project.id)}
+                      onRemove={() => setRemovingProject(project.id)}
+                    />
                   );
                 })
               ),
@@ -318,5 +257,21 @@ function ConnectionPill({ view, detail, onClick }: { view: ConnectionView; detai
       <span className="status-dot" aria-hidden="true" />
       <span>{view.label}</span>
     </button>
+  );
+}
+
+function SidebarSection({ title, actions, children, count, open, onToggle }: { title: string; actions: ReactNode; children: ReactNode; count?: number; open: boolean; onToggle(): void }) {
+  return (
+    <section className="sidebar-section" aria-label={title}>
+      <div className="sidebar-section-head">
+        <button type="button" className="sidebar-section-toggle" aria-expanded={open} onClick={onToggle}>
+          <ChevronRight size={12} className={cx('chevron', open && 'is-open')} aria-hidden="true" />
+          <span>{title}</span>
+          {count !== undefined && count > 0 && <span className="sidebar-count">{count}</span>}
+        </button>
+        <div className="sidebar-section-actions">{actions}</div>
+      </div>
+      {open && <div className="sidebar-section-body">{children}</div>}
+    </section>
   );
 }
