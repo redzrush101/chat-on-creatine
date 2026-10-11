@@ -6,7 +6,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
 import { Home } from './components/home/Home';
 import type { ModelValue } from './components/composer/ModelPicker';
-import type { NewChatDraft } from './components/composer/Composer';
+import type { NewChatDraft } from './components/composer/types';
 import { SettingsView } from './settings/SettingsView';
 import { WorkPanel } from './workpanel/WorkPanel';
 import { useAppState } from './lib/store';

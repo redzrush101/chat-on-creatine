@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { FolderOpen, Settings2 } from 'lucide-react';
 import type { AppState } from '@shared/types';
-import { Composer, type NewChatDraft } from '../composer/Composer';
+import { Composer } from '../composer/Composer';
+import type { NewChatDraft } from '../composer/types';
 import { TopBar } from '../chat/TopBar';
 
 const STARTERS = [

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { AppState, SessionMeta } from '@shared/types';
 import { useSessionEvents } from '../../lib/store';
-import { Composer, type NewChatDraft } from '../composer/Composer';
+import { Composer } from '../composer/Composer';
+import type { NewChatDraft } from '../composer/types';
 import { TopBar } from './TopBar';
 import { Timeline } from './Timeline';
 
