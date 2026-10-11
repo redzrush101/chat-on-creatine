@@ -1,14 +1,16 @@
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import { ChevronDown, FileDiff, FolderOpen, Layers, ListChecks, Maximize2, Minimize2, SquareTerminal, X } from 'lucide-react';
 import { chatFolder } from '../lib/folders';
 import { useAppState } from '../lib/store';
 import { Menu } from '../components/common/Popover';
 import { ChangesTab } from './ChangesTab';
-import { FilesTab } from './FilesTab';
 import { PlanTab } from './PlanTab';
 import { TasksTab } from './TasksTab';
-import { TerminalTab } from './TerminalTab';
 import './workpanel.css';
+
+// The file viewer (CodeMirror) and the terminal (xterm) are most of the app's code; load them when opened.
+const FilesTab = lazy(() => import('./FilesTab').then((module) => ({ default: module.FilesTab })));
+const TerminalTab = lazy(() => import('./TerminalTab').then((module) => ({ default: module.TerminalTab })));
 
 export type PanelTab = 'tasks' | 'plan' | 'files' | 'changes' | 'terminal';
 
@@ -65,9 +67,11 @@ export function WorkPanel({ sessionId, tab, wide, onTab, onToggleWide, onClose, 
       <div className="wp-body" role="region" aria-label={current.label}>
         {tab === 'tasks' && <TasksTab sessionId={sessionId} onOpenSession={onOpenSession} />}
         {tab === 'plan' && <PlanTab sessionId={sessionId} />}
-        {tab === 'files' && <FilesTab rootDir={rootDir} />}
-        {tab === 'changes' && <ChangesTab rootDir={rootDir} />}
-        {tab === 'terminal' && <TerminalTab rootDir={rootDir} />}
+        <Suspense fallback={null}>
+          {tab === 'files' && <FilesTab rootDir={rootDir} />}
+          {tab === 'changes' && <ChangesTab rootDir={rootDir} />}
+          {tab === 'terminal' && <TerminalTab rootDir={rootDir} />}
+        </Suspense>
       </div>
     </aside>
   );
