@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { defaultConfig, type Config } from '@shared/config';
+import { defaultConfig, effectiveCapabilities, CAPABILITIES, type Config } from '@shared/config';
 import { RootGuard, isInside } from '../src/main/fs/roots';
 import { ToolError } from '../src/main/mcp/tool';
 
@@ -103,6 +103,13 @@ describe('RootGuard', () => {
     await expectToolError(guard.resolve('a\0b', { cwd: root, mustExist: true }), 'INVALID_ARGUMENT');
   });
 
+  it('reaches any folder in YOLO mode, with or without approved folders', async () => {
+    for (const roots of [config.roots, []]) {
+      config = { ...config, roots, yolo: true };
+      expect(await guard.resolve(path.join(outside, 'secret.txt'), { cwd: null, mustExist: true })).toBe(path.join(outside, 'secret.txt'));
+    }
+  });
+
   it('tells the user to approve a folder when no roots are configured', async () => {
     config = defaultConfig();
     expect(guard.roots()).toEqual([]);
@@ -134,5 +141,12 @@ describe('isInside', () => {
     expect(isInside('/a/root', '/a/rootx')).toBe(false);
     expect(isInside('/a/root', '/a')).toBe(false);
     expect(isInside('/a/root', '/a/root/../other')).toBe(false);
+  });
+});
+
+describe('effectiveCapabilities', () => {
+  it('turns every capability on in YOLO mode, over read-only and switched-off ones', () => {
+    const config = { ...defaultConfig(), yolo: true, readOnly: true, capabilities: { ...defaultConfig().capabilities, exec: false, browser: false } };
+    expect(CAPABILITIES.filter((name) => !effectiveCapabilities(config)[name])).toEqual([]);
   });
 });

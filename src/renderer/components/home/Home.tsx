@@ -35,7 +35,7 @@ export function Home({
   onOpenSettings
 }: HomeProps) {
   const [prefill, setPrefill] = useState<{ id: number; text: string } | undefined>();
-  const needsSetup = app.config.roots.length === 0 || app.connection.state !== 'connected';
+  const needsSetup = (app.config.roots.length === 0 && !app.config.yolo) || app.connection.state !== 'connected';
 
   return (
     <section className="home" aria-label="New chat">

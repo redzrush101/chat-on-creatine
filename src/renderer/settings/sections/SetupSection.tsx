@@ -18,7 +18,7 @@ export function SetupSection({ state }: { state: AppState }): JSX.Element {
   const enabledSurfaces = connection.surfaces.filter((surface) => surface.enabled);
   const appAdded = enabledSurfaces.some((surface) => surface.handshakeAt !== null);
   const signedIn = browser.signedIn === true;
-  const folderReady = config.roots.length > 0;
+  const folderReady = config.roots.length > 0 || config.yolo;
   const connected = connection.state === 'connected';
 
   const addFolder = () =>

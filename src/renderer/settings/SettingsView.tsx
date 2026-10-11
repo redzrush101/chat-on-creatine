@@ -42,7 +42,7 @@ interface SectionDef {
 
 const SECTIONS: readonly SectionDef[] = [
   { id: 'setup', label: 'Setup', icon: Rocket, keywords: 'tunnel connect sign in folder connector start', render: (p) => <SetupSection {...p} /> },
-  { id: 'workspace', label: 'Workspace', icon: FolderOpen, keywords: 'folders roots capabilities read write exec command policy read-only', render: (p) => <WorkspaceSection {...p} /> },
+  { id: 'workspace', label: 'Workspace', icon: FolderOpen, keywords: 'folders roots capabilities read write exec command policy read-only yolo', render: (p) => <WorkspaceSection {...p} /> },
   { id: 'connection', label: 'Connection', icon: Plug, keywords: 'tunnel api key port connector cloudflare manual', render: (p) => <ConnectionSection {...p} /> },
   { id: 'chatgpt', label: 'ChatGPT', icon: Globe, keywords: 'browser model reasoning sign in extension window usage', render: (p) => <ChatGptSection {...p} /> },
   { id: 'agents', label: 'Agents', icon: Users, keywords: 'workers automation goal loop api helper steps', render: (p) => <AgentsSection {...p} /> },

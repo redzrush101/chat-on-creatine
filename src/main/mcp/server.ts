@@ -398,7 +398,7 @@ function toolInputSchema(tool: ToolSpec) {
 
 /** Unattributed calls are refused for every tool unless the user allowed them. */
 function requireCaller(tool: ToolSpec, config: Config, caller: Caller | null): void {
-  if ((tool.requiresCaller || !config.browser.allowUnattributed) && !caller) {
+  if ((tool.requiresCaller || !(config.browser.allowUnattributed || config.yolo)) && !caller) {
     throw new ToolError('CALLER_IDENTITY_REQUIRED', `${tool.name} needs the chat that issued it, and that chat could not be identified.`);
   }
 }

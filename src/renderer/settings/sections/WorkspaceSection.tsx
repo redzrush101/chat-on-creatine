@@ -36,7 +36,10 @@ export function WorkspaceSection({ state }: { state: AppState }): JSX.Element {
 
   return (
     <div className="st-stack">
-      <Group title="Approved folders" description="File tools reach only these folders and everything inside them.">
+      <Group
+        title="Approved folders"
+        description={config.yolo ? 'YOLO mode is on: file tools reach every folder. The first folder is still where new chats start.' : 'File tools reach only these folders and everything inside them.'}
+      >
         {config.roots.length === 0 && <Row label="No folders yet" hint="Add a project folder so ChatGPT can work with its files." />}
         {config.roots.map((root) => (
           <Row key={root.id} stacked label={root.path}>
@@ -67,6 +70,15 @@ export function WorkspaceSection({ state }: { state: AppState }): JSX.Element {
             <Plus size={14} aria-hidden /> Add folder
           </Button>
         </div>
+      </Group>
+
+      <Group title="YOLO mode">
+        <Row
+          label="YOLO"
+          hint="Every capability on, file tools reach any path on this computer, no command policy, and calls from unidentified chats are accepted. Overrides everything below. Use it only on a machine and account you are willing to let ChatGPT change freely."
+        >
+          <Toggle label="YOLO mode" checked={config.yolo} onChange={(yolo) => save({ yolo })} />
+        </Row>
       </Group>
 
       <Group title="Read-only mode">

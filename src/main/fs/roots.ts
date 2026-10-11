@@ -104,7 +104,7 @@ export class RootGuard implements PathGuard {
     const { real, exists } = await canonicalize(nodePath.resolve(absolute));
     // Containment is decided before existence so a caller cannot probe outside the roots.
     const roots = this.roots();
-    if (!roots.some((root) => isInside(root, real))) throw new ToolError('PATH_NOT_ALLOWED', this.outsideMessage());
+    if (!this.getConfig().yolo && !roots.some((root) => isInside(root, real))) throw new ToolError('PATH_NOT_ALLOWED', this.outsideMessage());
     if (options.mustExist && !exists) throw new ToolError('NOT_FOUND', `${input} does not exist`);
     return real;
   }

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
 import { safeStorage } from 'electron';
 import type { Config, SecretKey } from '@shared/config';
@@ -126,7 +127,9 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
 
   const sessionCwd = (session: SessionMeta): string | null => {
     const candidate = session.cwd ?? (session.projectId ? projects.get(session.projectId)?.path ?? null : null);
-    return candidate && existsSync(candidate) ? candidate : (getConfig().roots[0]?.path ?? null);
+    if (candidate && existsSync(candidate)) return candidate;
+    // YOLO mode needs no approved folder; a chat without one works in the home folder.
+    return getConfig().roots[0]?.path ?? (getConfig().yolo ? os.homedir() : null);
   };
 
   // Router, agents and automation reference each other through these late-bound closures.

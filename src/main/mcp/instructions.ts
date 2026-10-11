@@ -50,6 +50,9 @@ function enabledCapabilityLine(config: Config): string {
   const caps = effectiveCapabilities(config);
   const on = CAPABILITIES.filter((name) => caps[name]);
   const list = on.length ? on.join(', ') : 'none';
+  if (config.yolo) {
+    return `Enabled capabilities: ${list}. YOLO mode is on: file tools accept any path on this computer, not only approved folders, and commands are not restricted.`;
+  }
   return `Enabled capabilities: ${list}.${config.readOnly ? ' Read-only mode is on: file changes and commands are blocked.' : ''}`;
 }
 

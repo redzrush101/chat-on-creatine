@@ -110,8 +110,10 @@ export const execCommandTool = defineTool({
         ? chatFolder
         : await ctx.services.paths.resolve(args.workdir, { cwd: chatFolder, mustExist: true });
 
+    // YOLO mode runs every command; otherwise the user's policy decides.
+    const policy = ctx.config.yolo ? { ...ctx.config.commandPolicy, enabled: false } : ctx.config.commandPolicy;
     for (const [index, command] of commands.entries()) {
-      const decision = checkCommandPolicy(ctx.config.commandPolicy, command);
+      const decision = checkCommandPolicy(policy, command);
       if (!decision.allowed) {
         const where = commands.length > 1 ? ` in command ${index + 1}` : '';
         throw new ToolError('COMMAND_NOT_ALLOWED', `Command${where} is not allowed: ${decision.reason} No command was run.`);

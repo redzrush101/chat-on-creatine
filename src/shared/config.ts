@@ -49,6 +49,8 @@ export const configSchema = z.object({
   roots: z.array(rootSchema).default([]),
   capabilities: capabilitiesSchema.default(() => capabilitiesSchema.parse({})),
   readOnly: z.boolean().default(false),
+  /** YOLO mode: every capability on, file tools reach any path, no command policy, unattributed calls allowed. */
+  yolo: z.boolean().default(false),
   commandPolicy: z
     .object({
       enabled: z.boolean().default(false),
@@ -210,8 +212,9 @@ export function handoffPrompt(config: Config): string {
   return config.context.handoffPrompt.trim() || DEFAULT_HANDOFF_PROMPT;
 }
 
-/** Effective capabilities after read-only mode masks every mutating permission. */
+/** Effective capabilities: YOLO mode turns every one on; read-only mode masks the mutating ones. */
 export function effectiveCapabilities(config: Config): Capabilities {
+  if (config.yolo) return Object.fromEntries(CAPABILITIES.map((name) => [name, true])) as Capabilities;
   const caps = { ...config.capabilities };
   if (config.readOnly) {
     caps.write = caps.create = caps.delete = caps.move = caps.exec = false;

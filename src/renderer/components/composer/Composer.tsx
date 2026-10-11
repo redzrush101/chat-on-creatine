@@ -1,4 +1,4 @@
-import { Check, CircleAlert, CornerDownLeft, LoaderCircle, Paperclip, Plug, Plus, Square, WifiOff, X } from 'lucide-react';
+import { Check, CircleAlert, CornerDownLeft, LoaderCircle, Paperclip, Plug, Plus, Square, WifiOff, X, Zap } from 'lucide-react';
 import { invoke } from '../../lib/bridge';
 import { basename, cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
@@ -83,6 +83,16 @@ export function Composer(props: ComposerProps) {
         {hero && toolsOffline && (
           <button type="button" className="link-btn composer-offline" onClick={() => onOpenSettings('connection')}>
             <Plug size={11} aria-hidden="true" /> Local tools offline
+          </button>
+        )}
+        {app.config.yolo && (
+          <button
+            type="button"
+            className="composer-yolo"
+            title="YOLO mode: every tool permission is on and file tools reach any path. Open Workspace settings."
+            onClick={() => onOpenSettings('workspace')}
+          >
+            <Zap size={11} aria-hidden="true" /> YOLO
           </button>
         )}
         <span className="composer-spacer" />
