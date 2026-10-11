@@ -45,6 +45,17 @@ describe('page model selection', () => {
     expect(selectModel).not.toHaveBeenCalled();
   });
 
+  it('skips the picker for a choice it already confirmed until the user opens the picker', async () => {
+    const page = commands();
+    const select = () => page.run({ type: 'select-model', model: 'think', effort: 'high' });
+    await select();
+    await select();
+    expect(selectModel).toHaveBeenCalledOnce();
+    page.forgetSelection();
+    await select();
+    expect(selectModel).toHaveBeenCalledTimes(2);
+  });
+
   it('reports failure when the native picker cannot confirm the selection', async () => {
     selectModel.mockResolvedValue(false);
     await expect(commands().run({ type: 'select-model', model: 'think', effort: 'high' })).resolves.toMatchObject({

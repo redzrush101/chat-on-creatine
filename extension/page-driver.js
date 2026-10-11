@@ -576,6 +576,14 @@
     }
     return null;
   }
+  function onUserModelPick(listener) {
+    const picker = `${SELECTORS.modelTrigger.join(", ")}, [role="menu"]`;
+    const handle = (event) => {
+      if (event.isTrusted && event.target instanceof Element && event.target.closest(picker)) listener();
+    };
+    document.addEventListener("pointerdown", handle, true);
+    document.addEventListener("keydown", handle, true);
+  }
   async function selectModel(model, effort, presetIndex) {
     const findTrigger = () => first(
       [
@@ -765,6 +773,15 @@
       this.streams = streams;
     }
     models = null;
+    /**
+     * The picker choice this page last confirmed. Opening the picker costs a few hundred
+     * milliseconds per send, so it is skipped until the user touches the picker themselves.
+     */
+    selection = null;
+    /** The user changed ChatGPT's picker themselves, so the next selection must use it again. */
+    forgetSelection() {
+      this.selection = null;
+    }
     async loadModels() {
       this.models = parseModels(await this.backend.request(MODELS_PATH));
       return this.models;
@@ -806,8 +823,12 @@
       if (effort !== null && !option.efforts.includes(effort)) {
         return fail("not-found", `${option.label} does not offer the ${effort} thinking level. Choose an available level.`);
       }
+      const reasoning = preset?.reasoning ?? effort;
+      const key = `${option.label}|${reasoning ?? ""}|${preset?.index ?? ""}`;
+      if (this.selection === key) return DONE;
       if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
-      return await selectModel(option.label, preset?.reasoning ?? effort, preset?.index) ? DONE : fail("not-found", `Could not confirm ${option.label}${effort ? ` (${effort})` : ""} in ChatGPT's picker. Open ChatGPT and try again.`);
+      this.selection = await selectModel(option.label, reasoning, preset?.index) ? key : null;
+      return this.selection ? DONE : fail("not-found", `Could not confirm ${option.label}${effort ? ` (${effort})` : ""} in ChatGPT's picker. Open ChatGPT and try again.`);
     }
     async run(command) {
       try {
@@ -988,6 +1009,7 @@
     const backend = createBackend();
     const streams = new StreamRelay(emit, () => conversationIdFromUrl(location.href));
     const commands = new PageCommands(backend, streams);
+    onUserModelPick(() => commands.forgetSelection());
     window.addEventListener("message", (event) => {
       if (event.source !== window || event.origin !== location.origin) return;
       const data = event.data;

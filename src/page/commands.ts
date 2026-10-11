@@ -34,8 +34,18 @@ async function waitFor(predicate: () => boolean, ms: number): Promise<boolean> {
 
 export class PageCommands {
   private models: ModelsValue | null = null;
+  /**
+   * The picker choice this page last confirmed. Opening the picker costs a few hundred
+   * milliseconds per send, so it is skipped until the user touches the picker themselves.
+   */
+  private selection: string | null = null;
 
   constructor(private readonly backend: ReturnType<typeof createBackend>, private readonly streams: StreamRelay) {}
+
+  /** The user changed ChatGPT's picker themselves, so the next selection must use it again. */
+  forgetSelection(): void {
+    this.selection = null;
+  }
 
   private async loadModels(): Promise<ModelsValue> {
     this.models = parseModels(await this.backend.request(MODELS_PATH));
@@ -85,8 +95,12 @@ export class PageCommands {
     if (effort !== null && !option.efforts.includes(effort)) {
       return fail('not-found', `${option.label} does not offer the ${effort} thinking level. Choose an available level.`);
     }
+    const reasoning = preset?.reasoning ?? effort;
+    const key = `${option.label}|${reasoning ?? ''}|${preset?.index ?? ''}`;
+    if (this.selection === key) return DONE;
     if (!(await waitFor(() => dom.findComposer() !== null, 15_000))) return fail('not-ready', 'composer not found');
-    return (await dom.selectModel(option.label, preset?.reasoning ?? effort, preset?.index))
+    this.selection = (await dom.selectModel(option.label, reasoning, preset?.index)) ? key : null;
+    return this.selection
       ? DONE : fail('not-found', `Could not confirm ${option.label}${effort ? ` (${effort})` : ''} in ChatGPT's picker. Open ChatGPT and try again.`);
   }
 

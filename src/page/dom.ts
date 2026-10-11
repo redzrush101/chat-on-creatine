@@ -215,6 +215,16 @@ export function readErrorNotice(): ErrorNotice | null {
  * Selects a picker family and confirms its native intelligence slider before dismissing it.
  * Older category pickers expose effort menu items instead of a slider.
  */
+/** Calls `listener` whenever the user (not a script) operates ChatGPT's model picker or a menu. */
+export function onUserModelPick(listener: () => void): void {
+  const picker = `${SELECTORS.modelTrigger.join(', ')}, [role="menu"]`;
+  const handle = (event: Event): void => {
+    if (event.isTrusted && event.target instanceof Element && event.target.closest(picker)) listener();
+  };
+  document.addEventListener('pointerdown', handle, true);
+  document.addEventListener('keydown', handle, true);
+}
+
 export async function selectModel(model: string, effort: ReasoningEffort | null, presetIndex?: number): Promise<boolean> {
   const findTrigger = () => first(
     [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')),

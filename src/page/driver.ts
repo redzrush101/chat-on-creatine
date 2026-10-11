@@ -11,6 +11,7 @@ import {
 } from '@shared/page-protocol';
 import { createBackend } from './backend';
 import { PageCommands } from './commands';
+import { onUserModelPick } from './dom';
 import { observePage } from './observe';
 import { StreamRelay, type TapMessage } from './streams';
 
@@ -28,6 +29,7 @@ export function startDriver(transport: DriverTransport, tapChannel: string): voi
   const backend = createBackend();
   const streams = new StreamRelay(emit, () => conversationIdFromUrl(location.href));
   const commands = new PageCommands(backend, streams);
+  onUserModelPick(() => commands.forgetSelection());
 
   window.addEventListener('message', (event: MessageEvent) => {
     if (event.source !== window || event.origin !== location.origin) return;
