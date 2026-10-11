@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.1] - 2026-10-11
 
 - Opening a message search result scrolls the chat to that message and marks it, instead of
   opening the chat at the bottom.
