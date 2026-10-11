@@ -1,0 +1,56 @@
+{
+  "name": "chat-on-creatine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop coding workspace that drives ChatGPT and serves local tools over MCP.",
+  "license": "MIT",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "verify": "npm run typecheck && npm run test && npm run build",
+    "tunnel-client": "node scripts/fetch-tunnel-client.mjs",
+    "rebuild-native": "node scripts/rebuild-native.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "node-pty": "1.1.0",
+    "ws": "8.22.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/merge": "^6.12.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.38.0",
+    "@codemirror/theme-one-dark": "^6.1.3",
+    "@types/node": "^24.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/ws": "8.18.1",
+    "@vitejs/plugin-react": "^5.1.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "codemirror": "^6.0.2",
+    "dompurify": "^3.4.16",
+    "electron": "44.5.1",
+    "electron-vite": "^5.0.0",
+    "highlight.js": "^11.12.0",
+    "katex": "^0.19.0",
+    "lucide-react": "^0.545.0",
+    "marked": "^18.0.14",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^5.0.2"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "node-pty@1.1.0": true
+  }
+}

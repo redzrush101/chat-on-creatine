@@ -1,0 +1,148 @@
+import type { z } from 'zod';
+import type { Config } from '@shared/config';
+import type { PlanItem, SurfaceId, ToolOutputPart } from '@shared/types';
+
+/** The chat a tool call was attributed to. */
+export interface Caller {
+  sessionId: string;
+  conversationId: string;
+  /** Working directory the session prefers (project folder), already validated against roots. */
+  cwd: string | null;
+  kind: 'chat' | 'worker' | 'helper';
+}
+
+export type ToolContent = { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string };
+
+export interface ToolResult {
+  content: ToolContent[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+  /** What the app records and shows for this call; defaults to the text content. */
+  display?: ToolOutputPart[];
+}
+
+export type ToolErrorCode =
+  | 'TOOL_DISABLED'
+  | 'PATH_NOT_ALLOWED'
+  | 'NOT_FOUND'
+  | 'INVALID_ARGUMENT'
+  | 'PATCH_FAILED'
+  | 'COMMAND_NOT_ALLOWED'
+  | 'UNKNOWN_SESSION'
+  | 'CALLER_IDENTITY_REQUIRED'
+  | 'CHAT_BLOCKED'
+  | 'LIMIT_EXCEEDED'
+  | 'FAILED';
+
+/** Thrown by tools for expected failures; the server turns it into an `isError` result. */
+export class ToolError extends Error {
+  constructor(readonly code: ToolErrorCode, message: string) {
+    super(message);
+  }
+}
+
+/** Path access decisions; implemented by `fs/roots.ts`. */
+export interface PathGuard {
+  /**
+   * Resolves a model-supplied path (absolute, `~`, or relative to `cwd`) to a canonical real path
+   * inside an approved root, or throws `ToolError('PATH_NOT_ALLOWED')`. `mustExist` false allows
+   * a not-yet-existing file whose parent chain resolves inside a root.
+   */
+  resolve(path: string, options: { cwd: string | null; mustExist: boolean }): Promise<string>;
+  /** Approved root paths (canonical). */
+  roots(): string[];
+}
+
+/** Implemented by `exec/process-manager.ts`. */
+export interface ProcessRunner {
+  exec(request: ExecRequest, owner: string): Promise<ExecResult>;
+  writeStdin(request: WriteStdinRequest, owner: string): Promise<ExecResult>;
+}
+
+export interface ExecRequest {
+  /** Exactly one of `cmd` / `cmds`. */
+  cmd?: string;
+  cmds?: string[];
+  workdir: string | null;
+  shell?: string;
+  tty?: boolean;
+  yieldTimeMs?: number;
+  maxOutputTokens?: number;
+}
+
+export interface WriteStdinRequest {
+  sessionId: string;
+  chars: string;
+  yieldTimeMs?: number;
+  maxOutputTokens?: number;
+}
+
+export interface ExecResult {
+  /** Present while the process keeps running; pass it to write_stdin. */
+  sessionId: string | null;
+  exitCode: number | null;
+  output: string;
+  wallTimeMs: number;
+  /** Original token estimate when the output was truncated. */
+  originalTokenCount: number | null;
+  command: string;
+  cwd: string | null;
+}
+
+/** Everything tools may touch, injected by the server so tools stay unit-testable. */
+export interface ToolServices {
+  paths: PathGuard;
+  processes: ProcessRunner;
+  /** Records a plan for the caller's session (update_plan). */
+  setPlan(caller: Caller, explanation: string | null, items: PlanItem[]): void;
+  /** Multi-agent controller; null when multi-agent is unavailable. */
+  agents: AgentsApi | null;
+  /** Holds a finishing turn open and returns queued user instructions (session_finish). */
+  finish: ((caller: Caller, signal: AbortSignal) => Promise<string>) | null;
+}
+
+export interface AgentsApi {
+  spawn(caller: Caller, request: { context: string; workers: { label?: string; task: string; model?: string | null; reasoning_effort?: string | null }[] }): Promise<string>;
+  message(caller: Caller, request: { messages: { to: string; text: string }[] }): Promise<string>;
+  status(caller: Caller): Promise<string>;
+  finish(caller: Caller, request: { result: string }): Promise<string>;
+}
+
+export interface ToolContext {
+  surface: SurfaceId;
+  /** `x-request-id` join key, null for local/test calls. */
+  requestId: string | null;
+  caller: Caller | null;
+  config: Config;
+  services: ToolServices;
+  signal: AbortSignal;
+}
+
+export interface ToolAnnotations {
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
+
+export interface ToolSpec<Shape extends z.ZodRawShape = z.ZodRawShape> {
+  name: string;
+  surface: SurfaceId;
+  title: string;
+  description: string;
+  input: Shape;
+  annotations?: ToolAnnotations;
+  /** Whether the tool is advertised under this config. Handlers still re-check permissions. */
+  exposed(config: Config): boolean;
+  /** Tools that act on a chat's behalf (plans, agents) need an attributed caller. */
+  requiresCaller?: boolean;
+  run(args: z.infer<z.ZodObject<Shape>>, ctx: ToolContext): Promise<ToolResult>;
+}
+
+export function defineTool<Shape extends z.ZodRawShape>(spec: ToolSpec<Shape>): ToolSpec<Shape> {
+  return spec;
+}
+
+export function textResult(text: string, extra: Partial<ToolResult> = {}): ToolResult {
+  return { content: [{ type: 'text', text }], ...extra };
+}
