@@ -84,6 +84,11 @@ export class ChatRouter {
   private readonly incompleteTurns = new Set<string>();
   /** Sessions whose running turn the user stopped; that turn ends as `stopped` whatever the page says. */
   private readonly userStopped = new Set<string>();
+  /** Conversation streams that started and have not ended, per session. */
+  private readonly openStreams = new Map<string, Set<string>>();
+  /** Inputs steered into tool results during the running turn, and whether ChatGPT's code runner was used. */
+  private readonly steeredThisTurn = new Map<string, InputItem[]>();
+  private readonly codeRunnerTurns = new Set<string>();
   /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
   private readonly currentTurnIds = new Map<string, string>();
   private gcTimer: NodeJS.Timeout | null = null;
@@ -189,6 +194,32 @@ export class ChatRouter {
     }
     log.info(`unattributed ${call.tool} call (request ${requestId ?? 'none'}, ${generating.length} chats generating)`);
     return null;
+  }
+
+  /** Inputs handed to the model inside a tool result during the current turn. */
+  noteSteered(sessionId: string, items: InputItem[]): void {
+    this.steeredThisTurn.set(sessionId, [...(this.steeredThisTurn.get(sessionId) ?? []), ...items]);
+  }
+
+  /**
+   * When ChatGPT ran its own code runner, tool results land in its sandbox and the model only sees
+   * what its code prints, so a steered message may never have been read. Send it again as a normal
+   * follow-up, worded so a model that already handled it just confirms.
+   */
+  private resendUnseenSteering(session: SessionMeta): void {
+    const steered = this.steeredThisTurn.get(session.id) ?? [];
+    this.steeredThisTurn.delete(session.id);
+    const codeRunner = this.codeRunnerTurns.delete(session.id);
+    if (!codeRunner) return;
+    for (const item of steered) {
+      this.deps.outbox.enqueue({
+        sessionId: session.id,
+        text: `While you were working I sent this message; if you have not handled it yet, do it now, otherwise just confirm:\n\n${item.text}`,
+        attachments: [],
+        delivery: 'after-turn',
+        source: 'automation'
+      });
+    }
   }
 
   noteToolRunning(sessionId: string, delta: 1 | -1): void {
@@ -302,15 +333,18 @@ export class ChatRouter {
 
     switch (event.type) {
       case 'turn-start':
+        this.streamsOf(sessionId).add(event.streamId);
         this.patchLive(sessionId, { turn: 'generating', lastActivityAt: Date.now() });
         break;
       case 'message':
         this.indexMessage(sessionId, event.message);
         if (event.message.turnId) this.currentTurnIds.set(sessionId, event.message.turnId);
+        if (event.message.authorName === 'functions.exec' || event.message.recipient === 'functions.exec') this.codeRunnerTurns.add(sessionId);
         if (event.message.role === 'assistant' && /partial|incomplete/.test(event.message.status)) this.incompleteTurns.add(sessionId);
         this.patchLive(sessionId, { lastActivityAt: Date.now() });
         break;
       case 'turn-end':
+        this.streamsOf(sessionId).delete(event.streamId);
         this.deps.recorder.handle(sessionId, event);
         this.finishTurn(sessionId, event.outcome === 'complete' ? 'done' : event.outcome === 'aborted' ? 'stopped' : 'error');
         return;
@@ -337,7 +371,8 @@ export class ChatRouter {
     const timer = setTimeout(() => {
       this.settleTimers.delete(sessionId);
       const live = this.live.get(sessionId);
-      if (live?.turn === 'generating' && live.runningTools === 0) this.finishTurn(sessionId, 'done');
+      // An open conversation stream means ChatGPT is still working (e.g. thinking between tools).
+      if (live?.turn === 'generating' && live.runningTools === 0 && this.streamsOf(sessionId).size === 0) this.finishTurn(sessionId, 'done');
     }, GENERATING_SETTLE_MS);
     this.settleTimers.set(sessionId, timer);
   }
@@ -357,6 +392,7 @@ export class ChatRouter {
     const tokens = contextTokens(this.deps.store.events(sessionId));
     const updated = this.deps.store.update(sessionId, { contextTokens: tokens }) ?? session;
     void this.reconcile(updated);
+    this.resendUnseenSteering(updated);
     this.maybeAutoContinue(updated, finalOutcome);
     this.deps.onTurnEnd(updated, finalOutcome);
     void this.pump(sessionId);
@@ -474,6 +510,7 @@ export class ChatRouter {
     this.tabSession.delete(tabId);
     if (sessionId && this.sessionTab.get(sessionId) === tabId) {
       this.sessionTab.delete(sessionId);
+      this.openStreams.delete(sessionId);
       const live = this.live.get(sessionId);
       // A tab that disappears mid-turn cannot finish it.
       this.patchLive(sessionId, { tabOpen: false, turn: live?.turn === 'compacting' ? 'compacting' : 'idle', runningTools: 0 });
@@ -502,6 +539,12 @@ export class ChatRouter {
 
   private record(sessionId: string, events: SessionEvent[]): void {
     this.deps.store.append(sessionId, events);
+  }
+
+  private streamsOf(sessionId: string): Set<string> {
+    let streams = this.openStreams.get(sessionId);
+    if (!streams) this.openStreams.set(sessionId, (streams = new Set()));
+    return streams;
   }
 
   private ensureLive(sessionId: string): SessionLive {

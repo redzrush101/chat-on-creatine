@@ -214,7 +214,8 @@ export async function attachFiles(files: File[], timeoutMs = 120_000): Promise<b
   while (Date.now() < deadline) {
     const current = composerForm();
     const labels = [...(current?.querySelectorAll<HTMLElement>('button[aria-label]') ?? [])].map((b) => b.getAttribute('aria-label') ?? '');
-    const tiled = files.every((file) => labels.some((label) => label.includes(file.name)));
+    // ChatGPT renames repeat uploads ("notes(1).txt"), so match on the name without extension.
+    const tiled = files.every((file) => labels.some((label) => label.includes(file.name.replace(/\.[^.]*$/, ''))));
     const busy = current?.querySelector(SELECTORS.uploadBusy) != null;
     if (tiled && !busy) return true;
     await new Promise((resolve) => setTimeout(resolve, 250));

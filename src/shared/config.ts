@@ -42,7 +42,8 @@ export const DEFAULT_HANDOFF_PROMPT =
   '(roughly 2,000-6,000 tokens for substantial work) that lets a new assistant continue without this conversation: ' +
   'the user\'s goal and constraints in their own words, the current state of the work, decisions made and why, files ' +
   'touched, commands and checks that matter, open problems, and the exact next steps. Prefer facts over chronology. ' +
-  'Reply with the brief only.';
+  'Use only this conversation: ignore saved memories and other chats, and do not invent work that did not happen here. ' +
+  'If little was done, keep the brief short. Reply with the brief only.';
 
 export const configSchema = z.object({
   version: z.literal(1).default(1),

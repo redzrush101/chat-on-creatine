@@ -84,6 +84,7 @@ export class ToolActivity {
   steering(caller: Caller): string[] {
     const items = this.deps.outbox.takeSteerable(caller.sessionId);
     if (!items.length) return [];
+    this.deps.router.noteSteered(caller.sessionId, items);
     this.deps.store.append(
       caller.sessionId,
       items.map((item): SessionEvent => ({
