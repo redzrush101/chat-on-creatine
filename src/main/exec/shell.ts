@@ -1,4 +1,5 @@
 import { accessSync, constants, statSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 type ShellType = 'zsh' | 'bash' | 'sh' | 'powershell' | 'cmd';
@@ -51,15 +52,29 @@ function findOnPath(name: string): string | null {
   return null;
 }
 
-/** The shell a command runs in when the caller names none: $SHELL on POSIX, PowerShell on Windows. */
+/** The account's login shell from the user database, or null where there is none. */
+function loginShell(): string | null {
+  try {
+    return os.userInfo().shell;
+  } catch {
+    // No passwd entry (some containers); $SHELL is the best remaining guess.
+    return null;
+  }
+}
+
+/**
+ * The shell a command runs in when the caller names none: PowerShell on Windows; on POSIX the
+ * account's login shell, as a terminal app would start, then $SHELL. $SHELL alone is not enough:
+ * a dev environment such as `nix develop` points it at a bash built without readline.
+ */
 export function defaultShell(): ShellSpec {
   if (process.platform === 'win32') {
     const found = findOnPath('pwsh') ?? findOnPath('powershell');
     return found ? { type: shellTypeOf(found) ?? 'powershell', path: found } : { type: 'cmd', path: process.env['ComSpec'] ?? 'cmd.exe' };
   }
-  const configured = process.env['SHELL'];
   const candidates = [
-    configured,
+    loginShell(),
+    process.env['SHELL'],
     ...(process.platform === 'darwin' ? ['/bin/zsh', '/bin/bash'] : ['/bin/bash', '/bin/zsh'])
   ];
   for (const candidate of candidates) {

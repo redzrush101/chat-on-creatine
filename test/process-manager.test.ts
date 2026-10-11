@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { ToolError, type ExecResult } from '../src/main/mcp/tool';
 import { ProcessManager } from '../src/main/exec/process-manager';
 import { HeadTailBuffer, truncateToTokens } from '../src/main/exec/output';
+import { defaultShell } from '../src/main/exec/shell';
 import os from 'node:os';
 
 const manager = new ProcessManager();
@@ -112,5 +113,19 @@ describe('output buffers', () => {
 
   it('leaves text within the budget untouched', () => {
     expect(truncateToTokens('short', 100)).toEqual({ text: 'short', originalTokenCount: null });
+  });
+});
+
+describe('defaultShell', () => {
+  const login = process.platform === 'win32' ? '' : os.userInfo().shell ?? '';
+  // Only meaningful where the account's login shell is a POSIX shell other than /bin/sh.
+  it.runIf(/\/(zsh|bash)$/.test(login))('starts the account login shell even when $SHELL points elsewhere', () => {
+    const saved = process.env.SHELL;
+    process.env.SHELL = '/bin/sh';
+    try {
+      expect(defaultShell().path).toBe(login);
+    } finally {
+      process.env.SHELL = saved;
+    }
   });
 });
