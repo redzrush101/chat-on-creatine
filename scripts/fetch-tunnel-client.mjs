@@ -31,8 +31,13 @@ try {
 
   const extracted = path.join(work, 'out');
   await mkdir(extracted);
-  if (process.platform === 'win32') execFileSync('tar.exe', ['-xf', zip, '-C', extracted], { stdio: 'inherit' });
-  else execFileSync('unzip', ['-q', '-o', zip, '-d', extracted], { stdio: 'inherit' });
+  // Windows' own bsdtar reads zips; a Git Bash PATH would find GNU tar, which takes C: for a remote host.
+  if (process.platform === 'win32') {
+    const tar = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+    execFileSync(tar, ['-xf', zip, '-C', extracted], { stdio: 'inherit' });
+  } else {
+    execFileSync('unzip', ['-q', '-o', zip, '-d', extracted], { stdio: 'inherit' });
+  }
 
   const entries = await readdir(extracted, { withFileTypes: true });
   const dir = entries.length === 1 && entries[0].isDirectory() ? path.join(extracted, entries[0].name) : extracted;
