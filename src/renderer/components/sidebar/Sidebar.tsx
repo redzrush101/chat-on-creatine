@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { ChevronRight, Ellipsis, FolderPlus, Folder, PanelLeftClose, Pencil, Search, Settings, SquarePen, Trash2, X } from 'lucide-react';
-import type { AppState, ConnectionState, SessionMeta, WorkerState } from '@shared/types';
+import type { AppState, SessionMeta, WorkerState } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { cx, errorMessage } from '../../lib/format';
+import { connectionView, tunnelConfigured, type ConnectionView } from '../../lib/connection';
 import { useStoredState } from '../../lib/hooks';
 import { notify, reportError } from '../common/Toasts';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -298,7 +299,11 @@ export function Sidebar({
       )}
 
       <div className="sidebar-footer">
-        <ConnectionPill state={app.connection.state} detail={app.connection.detail} onClick={() => onOpenSettings('connection')} />
+        <ConnectionPill
+          view={connectionView(app.connection.state, tunnelConfigured(app))}
+          detail={app.connection.detail}
+          onClick={() => onOpenSettings('connection')}
+        />
         <button type="button" className="icon-btn" aria-label="Settings" title="Settings (Ctrl+,)" onClick={() => onOpenSettings()}>
           <Settings size={15} />
         </button>
@@ -307,21 +312,11 @@ export function Sidebar({
   );
 }
 
-const CONNECTION_LABEL: Record<ConnectionState, string> = {
-  connected: 'Connected',
-  starting: 'Starting',
-  connecting: 'Connecting',
-  offline: 'Offline',
-  disconnected: 'Not connected',
-  'auth-failed': 'Sign-in failed',
-  error: 'Error'
-};
-
-function ConnectionPill({ state, detail, onClick }: { state: ConnectionState; detail: string; onClick(): void }) {
+function ConnectionPill({ view, detail, onClick }: { view: ConnectionView; detail: string; onClick(): void }) {
   return (
-    <button type="button" className={cx('connection-pill', `is-${state}`)} title={detail || CONNECTION_LABEL[state]} onClick={onClick}>
+    <button type="button" className={cx('connection-pill', `is-${view.tone}`)} title={detail || view.label} onClick={onClick}>
       <span className="status-dot" aria-hidden="true" />
-      <span>{CONNECTION_LABEL[state]}</span>
+      <span>{view.label}</span>
     </button>
   );
 }

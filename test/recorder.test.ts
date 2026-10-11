@@ -72,6 +72,8 @@ describe('Recorder', () => {
         text: '<creatine_context>\nworkspace notes\n</creatine_context>\n\nfix the bug'
       })
     );
+    // The stream repeats the user message (delta + input_message); the repeat must not record it again.
+    recorder.handle(sessionId, message({ id: 'u1', role: 'user', recipient: 'all', channel: null, text: 'fix the bug' }));
 
     expect(events()).toHaveLength(1);
     expect(events()[0]).toMatchObject({ id: 'input:1', source: 'app' });

@@ -445,18 +445,19 @@
   background: var(--text-faint);
 }
 
-.connection-pill.is-connected .status-dot {
+.connection-pill.is-ok .status-dot {
   background: var(--success);
 }
 
-.connection-pill.is-connecting .status-dot,
-.connection-pill.is-starting .status-dot,
-.connection-pill.is-offline .status-dot {
+.connection-pill.is-progress .status-dot {
   background: var(--warning);
 }
 
-.connection-pill.is-error .status-dot,
-.connection-pill.is-auth-failed .status-dot {
+.connection-pill.is-bad {
+  color: var(--danger);
+}
+
+.connection-pill.is-bad .status-dot {
   background: var(--danger);
 }
 
@@ -489,6 +490,20 @@
   padding: 0 var(--space-3) 0 var(--space-4);
   border-bottom: 1px solid var(--border);
   flex: none;
+  container-type: inline-size;
+}
+
+/* Narrow chat columns drop secondary chips and labels first; the title and icons stay. */
+@container (max-width: 720px) {
+  .topbar .topbar-optional {
+    display: none;
+  }
+}
+
+@container (max-width: 600px) {
+  .topbar .topbar-label {
+    display: none;
+  }
 }
 
 .topbar.is-sidebar-hidden {
@@ -508,6 +523,8 @@
 }
 
 .title {
+  flex: 0 1 auto;
+  min-width: 96px;
   max-width: 320px;
   height: 26px;
   padding: 0 var(--space-2);

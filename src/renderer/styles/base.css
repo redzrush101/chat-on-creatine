@@ -500,8 +500,9 @@ kbd {
 /* Banners */
 .banner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-3);
   margin-bottom: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
@@ -526,12 +527,18 @@ kbd {
 
 .banner-icon {
   display: inline-flex;
+  flex: none;
   color: var(--warning);
 }
 
 .banner-text {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
+  line-height: 1.4;
+}
+
+.banner .btn {
+  flex: none;
 }
 
 /* Resize handles */

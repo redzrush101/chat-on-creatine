@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ButtonHTMLAttributes, JSX, ReactNode } from 'react';
 import type { DeepPartial, Config } from '@shared/config';
+import type { ConnectionState } from '@shared/types';
 import { invoke } from '../lib/bridge';
+import { connectionView } from '../lib/connection';
 
 /** Errors from saving settings are shown by the settings shell, not swallowed. */
 export const ReportContext = createContext<(message: string) => void>(() => undefined);
@@ -391,7 +393,9 @@ export function useRun(): (task: () => Promise<unknown>) => Promise<void> {
   );
 }
 
-export function ConnectionPill({ state }: { state: string }): JSX.Element {
-  const tone = state === 'connected' ? 'ok' : state === 'starting' || state === 'connecting' ? 'accent' : state === 'disconnected' ? 'muted' : 'bad';
-  return <Pill tone={tone}>{state.replace('-', ' ')}</Pill>;
+const PILL_TONE = { ok: 'ok', progress: 'accent', neutral: 'muted', bad: 'bad' } as const;
+
+export function ConnectionPill({ state, configured = true }: { state: ConnectionState; configured?: boolean }): JSX.Element {
+  const view = connectionView(state, configured);
+  return <Pill tone={PILL_TONE[view.tone]}>{view.label}</Pill>;
 }

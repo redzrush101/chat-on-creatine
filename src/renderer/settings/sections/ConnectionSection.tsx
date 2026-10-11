@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import type { AppState, SurfaceStatus } from '@shared/types';
 import { invoke } from '../../lib/bridge';
+import { tunnelConfigured } from '../../lib/connection';
 import { ago, Button, ConnectionPill, CopyButton, Group, NumberField, Row, Segmented, TextField, Toggle, useNow, useRun, useSave } from '../controls';
 import { TunnelFields } from '../TunnelFields';
 import type { Config } from '@shared/config';
@@ -13,6 +14,7 @@ const KINDS = [
 
 export function ConnectionSection({ state }: { state: AppState }): JSX.Element {
   const { config, connection, tools } = state;
+  const configured = tunnelConfigured(state);
   const save = useSave();
   const run = useRun();
   const now = useNow();
@@ -24,7 +26,7 @@ export function ConnectionSection({ state }: { state: AppState }): JSX.Element {
       <Group title="Status" description="The local MCP listener and its tunnel. Changes take effect on the next connect.">
         <Row label="Connection" hint={connection.detail || undefined}>
           <span className="st-inline">
-            <ConnectionPill state={connection.state} />
+            <ConnectionPill state={connection.state} configured={configured} />
             {busy ? (
               <Button onClick={() => void run(() => invoke('connection:disconnect'))}>Disconnect</Button>
             ) : (
@@ -113,14 +115,14 @@ export function ConnectionSection({ state }: { state: AppState }): JSX.Element {
           <p>Each enabled connector is a separate app in ChatGPT. Ages update live.</p>
         </header>
         {connection.surfaces.map((surface) => (
-          <SurfaceCard key={surface.id} surface={surface} now={now} />
+          <SurfaceCard key={surface.id} surface={surface} now={now} configured={configured} />
         ))}
       </section>
     </div>
   );
 }
 
-function SurfaceCard({ surface, now }: { surface: SurfaceStatus; now: number }): JSX.Element {
+function SurfaceCard({ surface, now, configured }: { surface: SurfaceStatus; now: number; configured: boolean }): JSX.Element {
   const title = surface.id === 'core' ? 'Core' : surface.id === 'desktop' ? 'Desktop' : 'Plugins';
   return (
     <div className="st-card st-surface">
@@ -131,7 +133,7 @@ function SurfaceCard({ surface, now }: { surface: SurfaceStatus; now: number }):
         </div>
         <span className="st-inline">
           {!surface.enabled && <span className="st-pill is-muted">Disabled</span>}
-          <ConnectionPill state={surface.state} />
+          <ConnectionPill state={surface.state} configured={configured} />
         </span>
       </div>
       {surface.detail && <p className="st-muted">{surface.detail}</p>}

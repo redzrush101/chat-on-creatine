@@ -10,10 +10,13 @@ import type { NewChatDraft } from './components/composer/Composer';
 import { SettingsView } from './settings/SettingsView';
 import { WorkPanel } from './workpanel/WorkPanel';
 import { useAppState } from './lib/store';
-import { useResize, useStoredState, useSystemDark } from './lib/hooks';
+import { useResize, useStoredState, useSystemDark, useViewportWidth } from './lib/hooks';
 
 const DEFAULT_SIDEBAR_WIDTH = 272;
 const DEFAULT_PANEL_WIDTH = 420;
+/** The chat column keeps at least this much width; the work panel gives way before it does. */
+const MIN_MAIN_WIDTH = 480;
+const MIN_PANEL_WIDTH = 280;
 
 /** New-chat choices; `model` stays null until the user picks one, so config defaults apply. */
 interface DraftChoices {
@@ -25,6 +28,7 @@ interface DraftChoices {
 export function App() {
   const app = useAppState();
   const systemDark = useSystemDark();
+  const viewport = useViewportWidth();
   const [selectedId, setSelectedId] = useStoredState<string | null>('creatine.selected', null);
   const [sidebarOpen, setSidebarOpen] = useStoredState('creatine.sidebarOpen', true);
   const [settings, setSettings] = useState<{ section?: string } | null>(null);
@@ -40,7 +44,7 @@ export function App() {
     onCommit: (width) => void invoke('config:update', { ui: { sidebarWidth: width } }).catch(reportError)
   });
   const panel = useResize(app?.config.ui.workPanelWidth ?? DEFAULT_PANEL_WIDTH, {
-    min: 280,
+    min: MIN_PANEL_WIDTH,
     max: 900,
     direction: -1,
     onCommit: (width) => void invoke('config:update', { ui: { workPanelWidth: width } }).catch(reportError)
@@ -122,6 +126,9 @@ export function App() {
   };
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
   const toggleWorkPanel = () => setWorkPanel(!workPanelOpen);
+  // The panel only shows beside a chat, and only when the chat column keeps its minimum width.
+  const panelWidth = Math.min(panel.width, viewport - (sidebarOpen ? sidebar.width : 0) - MIN_MAIN_WIDTH);
+  const panelVisible = workPanelOpen && !settings && session !== null && panelWidth >= MIN_PANEL_WIDTH;
 
   return (
     <div className="shell">
@@ -187,8 +194,8 @@ export function App() {
         )}
       </main>
 
-      {workPanelOpen && !settings && (
-        <aside className="panel" style={{ width: panel.width }} aria-label="Work panel">
+      {panelVisible && (
+        <aside className="panel" style={{ width: panelWidth }} aria-label="Work panel">
           <Resizer
             side="left"
             label="Work panel width"

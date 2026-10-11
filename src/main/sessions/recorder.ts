@@ -11,6 +11,8 @@ const CONTEXT_FRAME = /^\s*<creatine_context>[\s\S]*?<\/creatine_context>/;
 interface SessionState {
   /** App-sent user texts waiting for ChatGPT's echo, oldest first. */
   echoes: { eventId: string; text: string }[];
+  /** ChatGPT message ids already matched to an app-sent event (the stream repeats user messages). */
+  claimed: Set<string>;
 }
 
 export interface RecorderDeps {
@@ -73,7 +75,7 @@ export class Recorder {
 
   private state(sessionId: string): SessionState {
     let state = this.states.get(sessionId);
-    if (!state) this.states.set(sessionId, (state = { echoes: [] }));
+    if (!state) this.states.set(sessionId, (state = { echoes: [], claimed: new Set() }));
     return state;
   }
 
@@ -115,15 +117,18 @@ export class Recorder {
 
   private onUserMessage(sessionId: string, message: ChatMessage): void {
     if (message.hidden) return;
+    const state = this.state(sessionId);
+    if (state.claimed.has(message.id)) return;
     const text = message.text.replace(CONTEXT_FRAME, '').trim();
     const incoming = normalize(text);
 
-    const state = this.state(sessionId);
     const index = state.echoes.findIndex(
       (echo) => incoming === echo.text || incoming.endsWith(echo.text)
     );
     if (index >= 0) {
       state.echoes.splice(index, 1);
+      state.claimed.add(message.id);
+      if (state.claimed.size > 200) state.claimed.delete(state.claimed.values().next().value!);
       return;
     }
 

@@ -67,8 +67,8 @@ export const EventRow = memo(function EventRow({ event, onOpenSession }: EventRo
       if (event.outcome === null || event.outcome === 'done' || event.phase === 'start') return null;
       return (
         <div className={cx('turn-end', `is-${event.outcome}`)} role="status">
-          {event.outcome === 'stopped' ? 'Stopped' : event.outcome === 'incomplete' ? 'Answer cut off' : 'Turn failed'}
-          {event.error && <span className="turn-error">: {event.error}</span>}
+          <span>{event.outcome === 'stopped' ? 'Stopped' : event.outcome === 'incomplete' ? 'Answer cut off' : 'Turn failed'}</span>
+          {event.error && <span className="turn-error">{event.error}</span>}
         </div>
       );
     case 'notice': {

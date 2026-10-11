@@ -30,11 +30,12 @@ export function TopBar({ app, session, sidebarOpen, workPanelOpen, onToggleSideb
         {session && (
           <>
             <TitleEditor key={session.id} session={session} />
-            <span className="chip" title={session.cwd ?? project?.path ?? 'No project folder'}>
+            <span className="chip topbar-optional" title={session.cwd ?? project?.path ?? 'No project folder'}>
               <Folder size={12} aria-hidden="true" />
               <span className="chip-text">{project?.name ?? 'No project'}</span>
             </span>
             <ModelPicker
+              className="topbar-optional"
               value={{ model: session.model, reasoning: session.reasoning }}
               catalog={app.models}
               onChange={(value) => {
@@ -52,11 +53,12 @@ export function TopBar({ app, session, sidebarOpen, workPanelOpen, onToggleSideb
             <button
               type="button"
               className="btn btn-ghost"
+              aria-label="Show ChatGPT"
               title="Open the ChatGPT page for this chat"
               onClick={() => invoke('browser:show', session.id).catch(reportError)}
             >
               <Globe size={14} aria-hidden="true" />
-              <span>Show ChatGPT</span>
+              <span className="topbar-label">Show ChatGPT</span>
             </button>
           </>
         )}

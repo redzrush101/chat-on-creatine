@@ -3,22 +3,18 @@ import type { JSX, ReactNode } from 'react';
 import { CircleCheck, Circle, PartyPopper } from 'lucide-react';
 import type { AppState, SurfaceStatus } from '@shared/types';
 import { invoke } from '../../lib/bridge';
+import { tunnelConfigured } from '../../lib/connection';
 import { Button, ConnectionPill, CopyButton, Pill, Row, useRun, useSave } from '../controls';
 import { TunnelFields } from '../TunnelFields';
 
 export function SetupSection({ state }: { state: AppState }): JSX.Element {
-  const { config, connection, browser, tools, secretsSet } = state;
+  const { config, connection, browser, tools } = state;
   const save = useSave();
   const run = useRun();
   const [toolResult, setToolResult] = useState<string | null>(null);
 
   const kind = config.connection.kind;
-  const credentialsReady =
-    kind === 'openai'
-      ? secretsSet.includes('tunnelApiKey') && config.connection.tunnelId !== ''
-      : kind === 'cloudflared'
-        ? tools.cloudflared !== null
-        : true;
+  const credentialsReady = tunnelConfigured(state);
   const enabledSurfaces = connection.surfaces.filter((surface) => surface.enabled);
   const appAdded = enabledSurfaces.some((surface) => surface.handshakeAt !== null);
   const signedIn = browser.signedIn === true;
@@ -100,7 +96,7 @@ export function SetupSection({ state }: { state: AppState }): JSX.Element {
         )}
 
         <div className="st-status-line">
-          <ConnectionPill state={connection.state} />
+          <ConnectionPill state={connection.state} configured={credentialsReady} />
           <span className="st-muted">{connection.detail}</span>
           <span className="st-spacer" />
           {connected || connection.state === 'connecting' || connection.state === 'starting' ? (
@@ -132,7 +128,7 @@ export function SetupSection({ state }: { state: AppState }): JSX.Element {
               <li>Name the app exactly as shown, then create it and enable its actions.</li>
             </ol>
             {enabledSurfaces.map((surface) => (
-              <ConnectorCard key={surface.id} surface={surface} kind={kind} />
+              <ConnectorCard key={surface.id} surface={surface} kind={kind} configured={credentialsReady} />
             ))}
           </>
         )}
@@ -177,12 +173,20 @@ function Step({ index, title, done, children }: { index: number; title: string; 
   );
 }
 
-function ConnectorCard({ surface, kind }: { surface: SurfaceStatus; kind: AppState['config']['connection']['kind'] }): JSX.Element {
+function ConnectorCard({
+  surface,
+  kind,
+  configured
+}: {
+  surface: SurfaceStatus;
+  kind: AppState['config']['connection']['kind'];
+  configured: boolean;
+}): JSX.Element {
   return (
     <div className="st-card is-inset st-connector">
       <div className="st-connector-head">
         <strong>{surface.id === 'core' ? 'Core' : surface.id === 'desktop' ? 'Desktop' : 'Plugins'}</strong>
-        <ConnectionPill state={surface.state} />
+        <ConnectionPill state={surface.state} configured={configured} />
       </div>
       <Row stacked label="Connector name">
         <div className="st-copy-line">

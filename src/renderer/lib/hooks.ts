@@ -96,3 +96,14 @@ export function useResize(committed: number, { min, max, direction, onCommit }: 
 
   return { width, onPointerDown, onKeyDown };
 }
+
+/** Current window width, updated on resize. */
+export function useViewportWidth(): number {
+  return useSyncExternalStore(
+    (listener) => {
+      window.addEventListener('resize', listener);
+      return () => window.removeEventListener('resize', listener);
+    },
+    () => window.innerWidth
+  );
+}
