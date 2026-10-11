@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+- Opening a message search result scrolls the chat to that message and marks it, instead of
+  opening the chat at the bottom.
+- The Changes panel stays current while the model works (like the repository bar), shows
+  diffs with line numbers like the edit cards in the chat, and, for a chat folder inside a
+  larger repository, lists only that folder's changes; opening one of them no longer fails.
+- Windows: file paths in the Files panel are shown relative to the chat folder, and the
+  in-app tunnel-client install no longer picks up Git Bash's tar. Linux: a missing `unzip`
+  is named instead of failing with "spawn unzip ENOENT".
+- Settings and the work panel show IPC failures without Electron's "Error invoking remote
+  method" prefix, and the worker reasoning list uses ChatGPT's own effort names.
+
 ## [0.2.0] - 2026-10-11
 
 - Faster turns: a new chat or worker starts in a preloaded ChatGPT tab (about 3 s saved),
