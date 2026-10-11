@@ -1,4 +1,4 @@
-import type { CdpEvent } from './cdp';
+import type { CdpEvent, RemoteObject } from './cdp';
 
 const RING_SIZE = 200;
 
@@ -65,7 +65,7 @@ function logLevel(level: string): ConsoleEntry['level'] {
   return 'info';
 }
 
-function argText(arg: { type?: string; value?: unknown; description?: string }): string {
+function argText(arg: RemoteObject): string {
   if (arg.value !== undefined) return typeof arg.value === 'string' ? arg.value : JSON.stringify(arg.value);
   return arg.description ?? arg.type ?? '';
 }

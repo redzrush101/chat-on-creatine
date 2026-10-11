@@ -193,8 +193,6 @@ export class ExtensionHost implements ChatHost {
     // Nothing to hide: the browser window is the user's.
   }
 
-  // ------------------------------------------------------------------ connections
-
   private accept(socket: WebSocket): void {
     let authorized = false;
     const helloTimer = setTimeout(() => socket.close(CLOSE_UNAUTHORIZED, 'no hello'), HELLO_TIMEOUT_MS);
@@ -303,8 +301,6 @@ export class ExtensionHost implements ChatHost {
       pending.resolve({ ok: false, error, code });
     }
   }
-
-  // ------------------------------------------------------------------ tabs and page events
 
   private requireTab(tabId: string): Tab {
     const tab = this.tabsById.get(tabId);

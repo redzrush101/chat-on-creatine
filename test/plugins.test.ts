@@ -27,6 +27,19 @@ await server.connect(new StdioServerTransport());
 `;
 
 const SECRET = 'secret-value';
+const PAGINATED_SERVER_SCRIPT = `
+import { Server } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
+const server = new Server({ name: 'pages', version: '1.0.0' }, { capabilities: { tools: {} } });
+server.setRequestHandler('tools/list', async (request) => {
+  const page = Number(request.params?.cursor ?? 0);
+  return {
+    tools: [{ name: 'page_' + page, inputSchema: { type: 'object' } }],
+    ...(page < 64 ? { nextCursor: String(page + 1) } : {})
+  };
+});
+await server.connect(new StdioServerTransport());
+`;
 let dir = '';
 let script = '';
 
@@ -36,6 +49,7 @@ beforeAll(() => {
   symlinkSync(fileURLToPath(new URL('../node_modules', import.meta.url)), join(dir, 'node_modules'), 'dir');
   script = join(dir, 'echo-server.mjs');
   writeFileSync(script, SERVER_SCRIPT);
+  writeFileSync(join(dir, 'pages.mjs'), PAGINATED_SERVER_SCRIPT);
 });
 
 afterAll(() => {
@@ -95,6 +109,19 @@ function toolContext(config: Config): ToolContext {
 }
 
 describe('PluginManager', () => {
+  it('loads catalogs beyond the SDK default page limit', async () => {
+    const { manager } = createManager([stdioServer('pages', { args: [join(dir, 'pages.mjs')] })]);
+    manager.start();
+    try {
+      await waitFor(() => manager.status()[0]?.state === 'running', 'all catalog pages');
+      const names = manager.tools().map((tool) => tool.name);
+      expect(names).toHaveLength(65);
+      expect(names.at(-1)).toBe('page_64');
+    } finally {
+      await manager.stop();
+    }
+  });
+
   it('connects a stdio server, exposes its tools and calls them with the secret env', async () => {
     const { manager, state } = createManager([stdioServer('alpha')]);
     manager.start();

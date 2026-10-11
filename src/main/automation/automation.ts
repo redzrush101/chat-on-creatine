@@ -101,8 +101,6 @@ export class Automation {
     this.startCompaction(sessionId);
   }
 
-  // ------------------------------------------------------------------ Goal / Loop
-
   private runGoal(sessionId: string): void {
     if (this.deciding.has(sessionId)) return;
     this.deciding.add(sessionId);
@@ -250,8 +248,6 @@ export class Automation {
     this.deps.store.update(sessionId, { goal: { ...meta.goal, ...patch } });
   }
 
-  // ------------------------------------------------------------------ Compact & Resume
-
   private shouldAutoCompact(meta: SessionMeta): boolean {
     const { context } = this.deps.getConfig();
     return (
@@ -343,8 +339,6 @@ export class Automation {
     this.deps.setTurn(meta.id, 'idle');
     this.notify(meta.id, 'info', 'Compacted: continuing in a fresh chat.');
   }
-
-  // ------------------------------------------------------------------ helpers
 
   private hasQueued(sessionId: string): boolean {
     return this.deps.outbox.list(sessionId).some((item) => item.state === 'queued');

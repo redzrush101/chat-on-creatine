@@ -1,7 +1,5 @@
 import type { Config, ReasoningEffort } from './config';
 
-// ---------------------------------------------------------------- projects
-
 export interface Project {
   id: string;
   name: string;
@@ -9,8 +7,6 @@ export interface Project {
   path: string;
   createdAt: number;
 }
-
-// ---------------------------------------------------------------- sessions
 
 /** `chat`: a user-facing chat. `worker`: spawned by a prime chat. `helper`: Goal/Loop/handoff helper. */
 type SessionKind = 'chat' | 'worker' | 'helper';
@@ -123,8 +119,6 @@ export type SessionEvent =
 
 export type SessionEventKind = SessionEvent['kind'];
 
-// ---------------------------------------------------------------- outbox
-
 export type InputDelivery = 'now' | 'after-turn';
 export type InputState = 'queued' | 'sending' | 'sent' | 'steered' | 'failed' | 'cancelled';
 
@@ -140,8 +134,6 @@ export interface InputItem {
   sentAt: number | null;
   error: string | null;
 }
-
-// ---------------------------------------------------------------- connection
 
 export type SurfaceId = 'core' | 'desktop' | 'plugins';
 
@@ -178,8 +170,6 @@ export interface ConnectionStatus {
   surfaces: SurfaceStatus[];
 }
 
-// ---------------------------------------------------------------- ChatGPT browser
-
 export interface ModelOption {
   /** ChatGPT model slug, e.g. `gpt-6-thinking`. */
   id: string;
@@ -214,8 +204,6 @@ interface UsageInfo {
   fetchedAt: number | null;
 }
 
-// ---------------------------------------------------------------- agents
-
 export type WorkerState = 'queued' | 'working' | 'asleep' | 'finished' | 'failed';
 
 export interface WorkerInfo {
@@ -234,8 +222,6 @@ export interface AgentRun {
   workers: WorkerInfo[];
 }
 
-// ---------------------------------------------------------------- skills & plugins
-
 export interface Skill {
   id: string;
   name: string;
@@ -251,8 +237,6 @@ export interface PluginStatus {
   detail: string;
   tools: { name: string; description: string; enabled: boolean }[];
 }
-
-// ---------------------------------------------------------------- project files
 
 export interface FileEntry {
   name: string;
@@ -274,8 +258,6 @@ export interface GitStatus {
   behind: number;
   changes: GitFileChange[];
 }
-
-// ---------------------------------------------------------------- app state
 
 export interface LogEntry {
   at: number;

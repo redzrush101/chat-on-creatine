@@ -11,7 +11,7 @@ export function sidebarSessions(app: AppState) {
   const unpinned = chats.filter((chat) => !chat.pinned);
   const chatsByProject = new Map<string, SessionMeta[]>();
   for (const chat of unpinned) {
-    if (!chat.projectId) continue;
+    if (chat.projectId === null) continue;
     const bucket = chatsByProject.get(chat.projectId) ?? [];
     bucket.push(chat);
     chatsByProject.set(chat.projectId, bucket);

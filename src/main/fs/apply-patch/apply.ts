@@ -186,8 +186,6 @@ async function writeFileAtomic(target: string, content: string): Promise<void> {
   }
 }
 
-// ----------------------------------------------------------------- chunks
-
 interface SourceLine {
   text: string;
   /** Line terminator as written in the file; empty only for an unterminated last line. */
@@ -295,8 +293,6 @@ function splitLines(content: string): SourceLine[] {
   }
   return lines;
 }
-
-// ------------------------------------------------------------------- diff
 
 const CONTEXT = 3;
 /** Above this many cells the LCS table is skipped and the middle is shown as a full replacement. */

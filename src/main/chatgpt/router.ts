@@ -122,8 +122,6 @@ export class ChatRouter {
     return this.live.get(sessionId)?.turn ?? 'idle';
   }
 
-  // ------------------------------------------------------------------ public actions
-
   /** Shows the session's ChatGPT tab (opening it when needed), or the browser window. */
   async show(sessionId: string | null): Promise<void> {
     if (!sessionId) {
@@ -171,8 +169,6 @@ export class ChatRouter {
     this.bind(tabId, session.id);
     return tabId;
   }
-
-  // ------------------------------------------------------------------ attribution
 
   /**
    * Finds the chat behind an MCP tool call. The `x-request-id` join key matches the
@@ -300,8 +296,6 @@ export class ChatRouter {
     for (const waiter of [...this.messageWaiters]) waiter();
   }
 
-  // ------------------------------------------------------------------ page events
-
   private onPage(tabId: string, event: PageEvent): void {
     let sessionId = this.tabSession.get(tabId) ?? null;
     const eventConversation =
@@ -428,8 +422,6 @@ export class ChatRouter {
     }
   }
 
-  // ------------------------------------------------------------------ delivery
-
   private async pump(sessionId: string): Promise<void> {
     if (this.pumping.has(sessionId)) return;
     this.pumping.add(sessionId);
@@ -487,8 +479,6 @@ export class ChatRouter {
     }
   }
 
-  // ------------------------------------------------------------------ tabs
-
   private bind(tabId: string, sessionId: string): void {
     const previous = this.sessionTab.get(sessionId);
     if (previous && previous !== tabId) this.tabSession.delete(previous);
@@ -526,8 +516,6 @@ export class ChatRouter {
       await this.deps.host.closeTab(tab.tabId);
     }
   }
-
-  // ------------------------------------------------------------------ helpers
 
   private record(sessionId: string, events: SessionEvent[]): void {
     this.deps.store.append(sessionId, events);

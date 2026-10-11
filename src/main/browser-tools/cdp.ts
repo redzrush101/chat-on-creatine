@@ -53,7 +53,6 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, what: string): P
   return Promise.race([promise, limit]).finally(() => clearTimeout(timer));
 }
 
-
 export async function viewportSize(tab: { wc: WebContents }): Promise<{ width: number; height: number }> {
   const metrics = await send(tab, 'Page.getLayoutMetrics');
   return { width: Math.round(metrics.cssVisualViewport.clientWidth), height: Math.round(metrics.cssVisualViewport.clientHeight) };

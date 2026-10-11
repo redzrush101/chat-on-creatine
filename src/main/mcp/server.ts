@@ -376,7 +376,7 @@ export class McpHttpServer {
 
   private toCallResult(result: ToolResult): CallToolResult {
     return {
-      content: result.content as CallToolResult['content'],
+      content: result.content,
       ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
       isError: result.isError ?? false
     };

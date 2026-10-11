@@ -216,8 +216,6 @@ export class AgentController implements AgentsApi {
     this.deps.onChange();
   }
 
-  // ------------------------------------------------------------------ helpers
-
   private dispatch(step: Step): string {
     const { from, to, text } = step;
     if (from.kind === 'worker') {

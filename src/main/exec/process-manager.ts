@@ -26,13 +26,6 @@ interface ProcessInfo {
   startedAt: number;
 }
 
-interface PtyHandle {
-  pid: number;
-  onData(listener: (data: string) => void): unknown;
-  onExit(listener: (event: { exitCode: number }) => void): unknown;
-  write(data: string): void;
-}
-
 /** One live command: its output not yet returned to a caller, and its exit state. */
 class Session {
   readonly startedAt = Date.now();
@@ -236,7 +229,7 @@ export class ProcessManager implements ProcessRunner {
 
     if (tty) {
       const pty = await loadPty();
-      const handle = pty.spawn(file, args, { name: 'dumb', cols: 80, rows: 24, cwd, env: env as Record<string, string> }) as unknown as PtyHandle;
+      const handle = pty.spawn(file, args, { name: 'dumb', cols: 80, rows: 24, cwd, env });
       session.attach(handle.pid, (data) => {
         handle.write(data);
         return true;

@@ -230,8 +230,6 @@ export class BuiltinHost implements ChatHost {
     this.listener?.status();
   }
 
-  // ------------------------------------------------------------------ internals
-
   private requireTab(tabId: string): Tab {
     const tab = this.tabsById.get(tabId);
     if (!tab) throw new Error(`No such tab ${tabId}`);

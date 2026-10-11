@@ -55,8 +55,6 @@ function parseQuery<T extends z.core.$ZodLooseShape>(params: URLSearchParams, sh
   return parsed.data;
 }
 
-// ----------------------------------------------------------- projections
-
 function projectSession(meta: SessionMeta) {
   return {
     id: meta.id,
@@ -157,8 +155,6 @@ export function projectInput(item: InputItem) {
     attachments: item.attachments.length
   };
 }
-
-// ---------------------------------------------------------------- routes
 
 const CURSOR = /^(\d{1,16})\.([0-9a-f-]{8,64})$/;
 const SESSION_ROUTE = /^\/v1\/sessions\/([0-9a-f-]{8,64})(\/events)?$/;

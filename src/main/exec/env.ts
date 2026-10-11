@@ -26,8 +26,8 @@ function terminalEnv(platform: NodeJS.Platform): Record<string, string> {
 }
 
 /** The environment a child process inherits: the user's env minus Electron internals and app secrets. */
-export function childEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
+export function childEnv(extra: Record<string, string> = {}): Record<string, string> {
+  const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue;
     const upper = key.toUpperCase();

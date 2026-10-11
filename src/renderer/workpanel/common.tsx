@@ -2,7 +2,6 @@ import { errorMessage } from '@shared/errors';
 import { useCallback, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 
-
 /** Runs an action from a button and keeps its failure visible in the panel. */
 export function useAction(): [string | null, (task: () => Promise<unknown>) => Promise<void>] {
   const [error, setError] = useState<string | null>(null);

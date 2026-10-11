@@ -2,8 +2,6 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { AppState, SessionEvent } from '@shared/types';
 import { invoke, subscribe } from './bridge';
 
-// ---------------------------------------------------------------- app state
-
 let appState: AppState | null = null;
 const appListeners = new Set<() => void>();
 
@@ -27,8 +25,6 @@ export function useAppState(): AppState | null {
     () => appState
   );
 }
-
-// ---------------------------------------------------------------- session history
 
 const histories = new Map<string, SessionEvent[]>();
 const historyListeners = new Map<string, Set<() => void>>();

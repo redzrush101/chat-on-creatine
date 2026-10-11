@@ -132,7 +132,8 @@ export class PluginManager {
   }
 
   private async open(entry: Entry): Promise<void> {
-    const client = new Client({ name: 'chat-on-creatine', version: '0.1.0' });
+    // Plugin catalogs can paginate beyond the client's default 64-page limit.
+    const client = new Client({ name: 'chat-on-creatine', version: '0.1.0' }, { listMaxPages: 0 });
     entry.state = 'starting';
     entry.client = client;
     client.onclose = () => this.lost(entry, client);

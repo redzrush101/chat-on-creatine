@@ -55,8 +55,6 @@ export function useNow(intervalMs = 1000): number {
   return now;
 }
 
-// ---------------------------------------------------------------- layout
-
 export function Group({ title, description, children }: { title: string; description?: string; children: ReactNode }): JSX.Element {
   return (
     <section className="st-group">
@@ -90,8 +88,6 @@ export function Row({
     </div>
   );
 }
-
-// ---------------------------------------------------------------- controls
 
 export function Toggle({ checked, onChange, disabled, label }: { checked: boolean; onChange(value: boolean): void; disabled?: boolean; label: string }): JSX.Element {
   return (
