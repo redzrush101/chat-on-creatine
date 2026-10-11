@@ -264,4 +264,25 @@ describe('conversationToMessages', () => {
     expect(conversationToMessages({ current_node: 'x' })).toEqual([]);
     expect(normalizeMessage({ id: 'x' }, CONV)).toBeNull();
   });
+
+  it('keeps web results and citations from message metadata', () => {
+    const ref = { turn_index: 514763, ref_type: 'view', ref_index: 0 };
+    const tool = normalizeMessage({
+      id: 't1', author: { role: 'tool', name: 'web.run' }, content: { content_type: 'text', parts: [''] },
+      metadata: { search_result_groups: [{ domain: 'cdn.kernel.org', entries: [{ url: 'https://cdn.kernel.org/ChangeLog-7.2.10', title: '', ref_id: ref }] }] }
+    }, CONV);
+    expect(tool?.sources).toEqual([{ title: '', url: 'https://cdn.kernel.org/ChangeLog-7.2.10', domain: 'cdn.kernel.org', ref: 'turn514763view0' }]);
+
+    const marker = '\ue200cite\ue202turn547075search0\ue201';
+    const answer = normalizeMessage({
+      id: 'a1', author: { role: 'assistant' }, content: { content_type: 'text', parts: [`Linux 7.2.10. ${marker}`] },
+      metadata: { content_references: [
+        { matched_text: marker, items: [{ title: 'The Linux Kernel Archives', url: 'https://www.kernel.org/?utm_source=chatgpt.com', attribution: 'Kernel Archives' }] },
+        { matched_text: ' ', type: 'sources_footnote', items: [] }
+      ] }
+    }, CONV);
+    expect(answer?.citations).toEqual([
+      { marker, sources: [{ title: 'The Linux Kernel Archives', url: 'https://www.kernel.org/', domain: 'Kernel Archives', ref: null }] }
+    ]);
+  });
 });

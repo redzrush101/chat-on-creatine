@@ -85,6 +85,8 @@ function toolPart(part: ToolOutputPart): Record<string, unknown> {
       return { type: 'diff', path: line(part.path, TITLE_CAP), added: part.added, removed: part.removed, diff: clip(part.diff, TOOL_CAP) };
     case 'exec':
       return { type: 'exec', command: clip(part.command, TOOL_CAP), exitCode: part.exitCode, running: part.running, output: clip(part.output, TOOL_CAP) };
+    case 'sources':
+      return { type: 'sources', sources: part.sources.map((source) => ({ title: line(source.title, TITLE_CAP), url: source.url, domain: source.domain })) };
   }
 }
 

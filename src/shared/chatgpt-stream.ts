@@ -3,6 +3,7 @@
  * `GET /backend-api/conversation/<id>` payload. Environment-agnostic: runs in the page and in Node.
  */
 import type { ChatMessage } from './page-protocol';
+import type { Citation, WebSource } from './types';
 
 type Obj = Record<string, unknown>;
 
@@ -33,6 +34,67 @@ function contentText(content: Obj): string {
   return '';
 }
 
+/** Bounds what one message can carry; a long research answer cites a few dozen pages at most. */
+const MAX_SOURCES = 40;
+const MAX_CITATIONS = 80;
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/** ChatGPT tags every outbound link with utm_source=chatgpt.com; the page is the same without it. */
+function cleanUrl(url: string): string {
+  return url.replace(/([?&])utm_source=chatgpt\.com(&|$)/, (_, lead: string, tail: string) => (tail ? lead : '')).replace(/[?&]$/, '');
+}
+
+function webSource(entry: Obj, ref: string | null, attribution: string | null): WebSource | null {
+  const url = str(entry.url);
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const clean = cleanUrl(url);
+  return { title: (str(entry.title) ?? '').trim(), url: clean, domain: attribution?.trim() || hostOf(clean), ref };
+}
+
+/** `ref_id: { turn_index: 514763, ref_type: 'view', ref_index: 0 }` → `turn514763view0`, as markers spell it. */
+function refOf(value: unknown): string | null {
+  if (!isObj(value) || typeof value.turn_index !== 'number' || typeof value.ref_index !== 'number') return null;
+  const type = str(value.ref_type);
+  return type ? `turn${value.turn_index}${type}${value.ref_index}` : null;
+}
+
+/** Pages of `metadata.search_result_groups`: what a web tool call found or opened. */
+function sourcesOf(metadata: Obj): WebSource[] {
+  const sources: WebSource[] = [];
+  for (const group of Array.isArray(metadata.search_result_groups) ? metadata.search_result_groups : []) {
+    if (!isObj(group) || !Array.isArray(group.entries)) continue;
+    for (const entry of group.entries) {
+      if (!isObj(entry)) continue;
+      const source = webSource(entry, refOf(entry.ref_id), null);
+      if (source && sources.length < MAX_SOURCES) sources.push(source);
+    }
+  }
+  return sources;
+}
+
+/** Citation markers of an answer (`metadata.content_references`) with the pages each one cites. */
+function citationsOf(metadata: Obj): Citation[] {
+  const citations: Citation[] = [];
+  for (const reference of Array.isArray(metadata.content_references) ? metadata.content_references : []) {
+    if (!isObj(reference)) continue;
+    const marker = str(reference.matched_text);
+    if (!marker || !marker.includes('\ue200') || citations.some((citation) => citation.marker === marker)) continue;
+    const items = Array.isArray(reference.items) ? reference.items.filter(isObj) : [];
+    const sources = items
+      .map((item) => webSource(item, null, str(item.attribution)))
+      .filter((source): source is WebSource => source !== null);
+    if (sources.length && citations.length < MAX_CITATIONS) citations.push({ marker, sources });
+  }
+  return citations;
+}
+
 export function normalizeMessage(raw: unknown, conversationId: string): ChatMessage | null {
   if (!isObj(raw)) return null;
   const id = str(raw.id);
@@ -57,7 +119,9 @@ export function normalizeMessage(raw: unknown, conversationId: string): ChatMess
     turnId: str(metadata.turn_exchange_id),
     parentId: str(metadata.parent_id),
     createTime: typeof raw.create_time === 'number' ? raw.create_time : null,
-    hidden: metadata.is_visually_hidden_from_conversation === true
+    hidden: metadata.is_visually_hidden_from_conversation === true,
+    sources: sourcesOf(metadata),
+    citations: citationsOf(metadata)
   };
 }
 

@@ -1023,3 +1023,66 @@
     padding: var(--space-3) var(--space-3) var(--space-4);
   }
 }
+
+/* Citation chips in answers and the pages behind a web step */
+.md a.cite {
+  display: inline-flex;
+  align-items: center;
+  max-width: 200px;
+  height: 19px;
+  padding: 0 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 19px;
+  text-decoration: none;
+  vertical-align: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.md a.cite:hover {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.source:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.source-domain {
+  flex: none;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.source-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

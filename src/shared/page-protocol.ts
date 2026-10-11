@@ -4,7 +4,7 @@
  * Chrome extension (WebSocket), so the driver never knows which host it runs in.
  */
 import type { ReasoningEffort } from './config';
-import type { ModelOption } from './types';
+import type { Citation, ModelOption, WebSource } from './types';
 
 /** A ChatGPT message normalized from the conversation stream or the conversation API. */
 export interface ChatMessage {
@@ -33,6 +33,10 @@ export interface ChatMessage {
   createTime: number | null;
   /** Hidden from the native transcript (system prompts, tool plumbing). */
   hidden: boolean;
+  /** Pages a web tool result found or opened (`metadata.search_result_groups`). */
+  sources: WebSource[];
+  /** Citation markers of an answer with their pages (`metadata.content_references`). */
+  citations: Citation[];
 }
 
 /** Events the page driver sends to the app. */

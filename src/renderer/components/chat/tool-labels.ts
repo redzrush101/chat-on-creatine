@@ -2,7 +2,7 @@ import type { SessionEvent } from '@shared/types';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 
-export type ToolCategory = 'command' | 'script' | 'read' | 'edit' | 'create' | 'delete' | 'search' | 'plan' | 'agent' | 'browser' | 'image' | 'other';
+export type ToolCategory = 'command' | 'script' | 'read' | 'edit' | 'create' | 'delete' | 'search' | 'web' | 'open' | 'plan' | 'agent' | 'browser' | 'image' | 'other';
 
 /** How one tool call reads in the timeline: `Ran` + `ls -la`, `Edited` + `report.md`. */
 export interface ToolLabel {
@@ -142,7 +142,14 @@ export function describeTool(event: ToolEvent): ToolLabel {
   }
   if (name === 'session_finish') return label('other', 'Finished the session', 'Finishing the session', null);
   if (event.surface === 'chatgpt' && name === 'bio') return label('other', 'Updated memory', 'Updating memory', null);
-  if (event.surface === 'chatgpt' && /^(web|search|web\.run)/.test(name)) return label('search', 'Searched the web', 'Searching the web', null);
+  if (event.surface === 'chatgpt' && /^(web|search)/.test(name)) {
+    // ChatGPT hides web queries; what it found or opened is in the result's sources.
+    const sources = event.output.flatMap((part) => (part.type === 'sources' ? part.sources : []));
+    const domains = [...new Set(sources.map((source) => source.domain))];
+    const opened = sources.length > 0 && sources.every((source) => source.ref?.includes('view'));
+    if (opened) return label('open', 'Opened', 'Opening', listOf(domains), false, [], sources.map((source) => source.url));
+    return label('web', 'Searched the web', 'Searching the web', domains.length ? listOf(domains) : null, false, [], domains);
+  }
   return label('other', 'Used', 'Using', name);
 }
 
@@ -172,6 +179,8 @@ export function summarizeTools(events: ToolEvent[]): string {
       case 'create': phrases.push(files('created', items)); break;
       case 'delete': phrases.push(files('deleted', items)); break;
       case 'search': phrases.push(counted(calls, itself(only), (n) => `searched ${n} times`)); break;
+      case 'web': phrases.push(counted(calls, 'searched the web', (n) => `searched the web ${n} times`)); break;
+      case 'open': phrases.push(counted(items.length || calls, 'opened a page', (n) => `opened ${n} pages`)); break;
       case 'plan': phrases.push('updated the plan'); break;
       case 'agent': phrases.push(counted(calls, itself(only), (n) => `used agents ${n} times`)); break;
       case 'browser': phrases.push(counted(calls, itself(only), (n) => `used the browser ${n} times`)); break;

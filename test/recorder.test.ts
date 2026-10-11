@@ -38,6 +38,8 @@ function message(overrides: Partial<ChatMessage> & { id: string }): PageEvent {
       channel: 'final',
       contentType: 'text',
       text: '',
+      sources: [],
+      citations: [],
       status: 'finished_successfully',
       endTurn: null,
       model: 'gpt-6',
@@ -125,6 +127,15 @@ describe('Recorder', () => {
         output: [{ type: 'text', text: 'found it', truncated: false }]
       })
     ]);
+  });
+
+  it('keeps web results that arrive later in a chain of tool messages', () => {
+    const page = { title: 'Rust 1.99.0', url: 'https://blog.rust-lang.org/1.99.0', domain: 'blog.rust-lang.org', ref: 'turn7search0' };
+    recorder.handle(sessionId, message({ id: 'call', recipient: 'web.run', text: '', channel: null }));
+    recorder.handle(sessionId, message({ id: 'status', role: 'tool', parentId: 'call', text: '' }));
+    recorder.handle(sessionId, message({ id: 'results', role: 'tool', parentId: 'status', text: '', sources: [page] }));
+
+    expect(events()).toEqual([expect.objectContaining({ id: 'tool:call', status: 'ok', output: [{ type: 'sources', sources: [page] }] })]);
   });
 
   it('records turn start and end with the outcome mapped to the app vocabulary', () => {

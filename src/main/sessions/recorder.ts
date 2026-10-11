@@ -15,6 +15,8 @@ interface SessionState {
   claimed: Set<string>;
   /** Call message ids the MCP server records itself; ChatGPT's copy of them is skipped. */
   ownCalls: Set<string>;
+  /** Tool result message id → the call it answers. A tool can answer in a chain of messages. */
+  resultCalls: Map<string, string>;
 }
 
 interface RecorderDeps {
@@ -92,7 +94,7 @@ export class Recorder {
 
   private state(sessionId: string): SessionState {
     let state = this.states.get(sessionId);
-    if (!state) this.states.set(sessionId, (state = { echoes: [], claimed: new Set(), ownCalls: new Set() }));
+    if (!state) this.states.set(sessionId, (state = { echoes: [], claimed: new Set(), ownCalls: new Set(), resultCalls: new Map() }));
     return state;
   }
 
@@ -124,7 +126,8 @@ export class Recorder {
         text: message.text,
         channel: message.channel === null || message.channel === 'final' ? 'final' : 'commentary',
         model: message.model,
-        streaming: message.status === 'in_progress'
+        streaming: message.status === 'in_progress',
+        ...(message.citations.length ? { citations: message.citations } : {})
       }));
       return;
     }
@@ -196,14 +199,24 @@ export class Recorder {
   }
 
   private onToolResult(sessionId: string, message: ChatMessage): void {
-    if (!message.parentId || this.state(sessionId).ownCalls.has(message.parentId)) return;
-    const previous = this.store.event(sessionId, toolEventId(message.parentId));
+    if (!message.parentId) return;
+    const state = this.state(sessionId);
+    // web.run answers in a chain (status, then results), each parented to the previous message.
+    const callId = state.resultCalls.get(message.parentId) ?? message.parentId;
+    if (state.ownCalls.has(callId)) return;
+    const previous = this.store.event(sessionId, toolEventId(callId));
     if (previous?.kind !== 'tool') return;
+    state.resultCalls.set(message.id, callId);
+    if (state.resultCalls.size > 500) state.resultCalls.delete(state.resultCalls.keys().next().value!);
 
     const running = message.status === 'in_progress';
-    const output: ToolOutputPart[] = message.text
+    const text: ToolOutputPart[] = message.text
       ? [{ type: 'text', text: message.text.slice(0, OUTPUT_LIMIT), truncated: message.text.length > OUTPUT_LIMIT }]
-      : [];
+      : previous.output.filter((part) => part.type === 'text');
+    // Web results: the pages a search found or a fetch opened, which the answer's citations point to.
+    const known = previous.output.flatMap((part) => (part.type === 'sources' ? part.sources : []));
+    const sources = [...known, ...message.sources.filter((source) => !known.some((seen) => seen.url === source.url && seen.ref === source.ref))];
+    const output: ToolOutputPart[] = sources.length ? [...text, { type: 'sources', sources }] : text;
     this.store.append(sessionId, [
       { ...previous, status: running ? 'running' : 'ok', output, endedAt: running ? null : Date.now() }
     ]);

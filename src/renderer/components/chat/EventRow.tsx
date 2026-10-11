@@ -1,10 +1,12 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useContext, useMemo, useState } from 'react';
 import { Check, CircleAlert, CircleDot, Copy, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
-import type { SessionEvent, WorkerState } from '@shared/types';
+import type { Citation, SessionEvent, WorkerState } from '@shared/types';
+import { resolveMarkers, stripMarkers } from '../../lib/citations';
 import { renderMarkdown } from '../../lib/markdown';
 import { useAppState } from '../../lib/store';
 import { basename, cx, formatAgo } from '../../lib/format';
 import { ToolRow } from './ToolCard';
+import { SourcesContext } from './sources';
 
 export interface EventActions {
   onOpenSession(sessionId: string): void;
@@ -47,7 +49,7 @@ export const EventRow = memo(function EventRow({ event, actions }: EventRowProps
         </div>
       );
     case 'assistant':
-      return <AssistantText text={event.text} streaming={event.streaming} final={event.channel === 'final'} />;
+      return <AssistantText text={event.text} citations={event.citations} streaming={event.streaming} final={event.channel === 'final'} />;
     case 'reasoning':
       return (
         <details className="reasoning" open={event.streaming || undefined}>
@@ -160,15 +162,16 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   );
 }
 
-function AssistantText({ text, streaming, final }: { text: string; streaming: boolean; final: boolean }) {
-  const html = useMemo(() => renderMarkdown(text), [text]);
+function AssistantText({ text, citations, streaming, final }: { text: string; citations: Citation[] | undefined; streaming: boolean; final: boolean }) {
+  const sources = useContext(SourcesContext);
+  const html = useMemo(() => renderMarkdown(resolveMarkers(text, citations, sources)), [text, citations, sources]);
   return (
     <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')}>
       <div className="md" dangerouslySetInnerHTML={{ __html: html }} />
       {streaming && <span className="caret" aria-hidden="true" />}
       {final && !streaming && text.trim() && (
         <div className="msg-actions is-start">
-          <CopyButton text={text} label="Copy answer" />
+          <CopyButton text={stripMarkers(text)} label="Copy answer" />
         </div>
       )}
     </div>

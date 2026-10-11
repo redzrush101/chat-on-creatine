@@ -4,6 +4,7 @@ import type { SessionEvent } from '@shared/types';
 import { openExternal } from '../../lib/actions';
 import { EventRow, type EventActions } from './EventRow';
 import { WorkGroup } from './WorkGroup';
+import { SourcesContext, sourcesByRef } from './sources';
 import { buildBlocks } from './timeline-model';
 
 const STICK_THRESHOLD_PX = 80;
@@ -22,6 +23,9 @@ export function Timeline({ sessionId, events, busy, followNonce, actions }: Time
   const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const blocks = useMemo(() => (events ? buildBlocks(events, busy) : []), [events, busy]);
+  // Keyed by the tool events that carry sources, so streaming text does not re-render every answer.
+  const sourcesKey = (events ?? []).filter((event) => event.kind === 'tool' && event.output.some((part) => part.type === 'sources')).map((event) => event.id).join();
+  const sources = useMemo(() => sourcesByRef(events ?? []), [sourcesKey]);
 
   useLayoutEffect(() => {
     stuck.current = true;
@@ -84,13 +88,15 @@ export function Timeline({ sessionId, events, busy, followNonce, actions }: Time
   return (
     <div className="timeline-wrap">
       <div ref={scroller} className="timeline scroll" onScroll={onScroll} onClick={onClick} role="log" aria-live="polite">
-        <div className="timeline-inner">
-          {events === null && <p className="timeline-status">Loading conversation…</p>}
-          {events !== null && events.length === 0 && <p className="timeline-status">No messages yet.</p>}
-          {blocks.map((block) =>
-            block.type === 'event' ? <EventRow key={block.event.id} event={block.event} actions={actions} /> : <WorkGroup key={block.id} block={block} />
-          )}
-        </div>
+        <SourcesContext.Provider value={sources}>
+          <div className="timeline-inner">
+            {events === null && <p className="timeline-status">Loading conversation…</p>}
+            {events !== null && events.length === 0 && <p className="timeline-status">No messages yet.</p>}
+            {blocks.map((block) =>
+              block.type === 'event' ? <EventRow key={block.event.id} event={block.event} actions={actions} /> : <WorkGroup key={block.id} block={block} />
+            )}
+          </div>
+        </SourcesContext.Provider>
       </div>
       {!atBottom && (
         <button type="button" className="jump-latest" aria-label="Jump to latest" title="Jump to latest" onClick={jumpToLatest}>

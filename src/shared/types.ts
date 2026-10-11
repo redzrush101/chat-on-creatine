@@ -76,12 +76,28 @@ export interface PlanItem {
 
 type ToolStatus = 'running' | 'ok' | 'error';
 
+/** A page ChatGPT's web tool found or opened. `ref` is the id its citations use, e.g. `turn514763view0`. */
+export interface WebSource {
+  title: string;
+  url: string;
+  domain: string;
+  ref: string | null;
+}
+
+/** One citation marker in an answer and the pages it cites. */
+export interface Citation {
+  /** The marker exactly as it appears in the text (private-use characters included). */
+  marker: string;
+  sources: WebSource[];
+}
+
 /** One block of a recorded tool result, bounded for display. */
 export type ToolOutputPart =
   | { type: 'text'; text: string; truncated?: boolean }
   | { type: 'image'; mime: string; path: string }
   | { type: 'diff'; path: string; diff: string; added: number; removed: number }
-  | { type: 'exec'; command: string; cwd: string | null; exitCode: number | null; output: string; running: boolean; sessionId: string | null };
+  | { type: 'exec'; command: string; cwd: string | null; exitCode: number | null; output: string; running: boolean; sessionId: string | null }
+  | { type: 'sources'; sources: WebSource[] };
 
 interface EventBase {
   /** Stable id; a later event with the same id replaces the earlier one (streaming upserts). */
@@ -99,6 +115,8 @@ export type SessionEvent =
       channel: 'final' | 'commentary';
       model: string | null;
       streaming: boolean;
+      /** Citation markers in `text` with their pages; absent in recordings made before citations were kept. */
+      citations?: Citation[];
     })
   | (EventBase & { kind: 'reasoning'; messageId: string; text: string; streaming: boolean })
   | (EventBase & {

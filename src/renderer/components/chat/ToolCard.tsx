@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react';
 import hljs from 'highlight.js/lib/common';
 import { ChevronDown, ChevronRight, CircleAlert, Copy, Check, Image, LoaderCircle } from 'lucide-react';
-import type { SessionEvent, ToolOutputPart } from '@shared/types';
+import type { SessionEvent, ToolOutputPart, WebSource } from '@shared/types';
 import { basename, cx, formatDuration } from '../../lib/format';
 import { describeTool, diffRows } from './tool-labels';
 
@@ -117,6 +117,7 @@ function CommandOutput({ part }: { part: Extract<ToolOutputPart, { type: 'exec' 
 function OutputPart({ part }: { part: ToolOutputPart }) {
   if (part.type === 'exec') return <CommandOutput part={part} />;
   if (part.type === 'diff') return <DiffCard path={part.path} diff={part.diff} />;
+  if (part.type === 'sources') return <SourceList sources={part.sources} />;
   if (part.type === 'image') {
     return (
       <div className="out-note">
@@ -130,6 +131,22 @@ function OutputPart({ part }: { part: ToolOutputPart }) {
       {part.text}
       {part.truncated && <span className="out-note"> …truncated</span>}
     </pre>
+  );
+}
+
+/** Pages a web search found or opened; links open in the default browser. */
+function SourceList({ sources }: { sources: WebSource[] }) {
+  return (
+    <ul className="sources">
+      {sources.map((source, index) => (
+        <li key={`${source.url}:${index}`}>
+          <a className="source" href={source.url} data-external title={source.url}>
+            <span className="source-domain">{source.domain}</span>
+            <span className="source-title">{source.title || source.url}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
 

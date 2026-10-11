@@ -85,6 +85,53 @@
     }
     return "";
   }
+  var MAX_SOURCES = 40;
+  var MAX_CITATIONS = 80;
+  function hostOf(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  }
+  function cleanUrl(url) {
+    return url.replace(/([?&])utm_source=chatgpt\.com(&|$)/, (_, lead, tail) => tail ? lead : "").replace(/[?&]$/, "");
+  }
+  function webSource(entry, ref, attribution) {
+    const url = str(entry.url);
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+    const clean = cleanUrl(url);
+    return { title: (str(entry.title) ?? "").trim(), url: clean, domain: attribution?.trim() || hostOf(clean), ref };
+  }
+  function refOf(value) {
+    if (!isObj(value) || typeof value.turn_index !== "number" || typeof value.ref_index !== "number") return null;
+    const type = str(value.ref_type);
+    return type ? `turn${value.turn_index}${type}${value.ref_index}` : null;
+  }
+  function sourcesOf(metadata) {
+    const sources = [];
+    for (const group of Array.isArray(metadata.search_result_groups) ? metadata.search_result_groups : []) {
+      if (!isObj(group) || !Array.isArray(group.entries)) continue;
+      for (const entry of group.entries) {
+        if (!isObj(entry)) continue;
+        const source = webSource(entry, refOf(entry.ref_id), null);
+        if (source && sources.length < MAX_SOURCES) sources.push(source);
+      }
+    }
+    return sources;
+  }
+  function citationsOf(metadata) {
+    const citations = [];
+    for (const reference of Array.isArray(metadata.content_references) ? metadata.content_references : []) {
+      if (!isObj(reference)) continue;
+      const marker = str(reference.matched_text);
+      if (!marker || !marker.includes("\uE200") || citations.some((citation) => citation.marker === marker)) continue;
+      const items = Array.isArray(reference.items) ? reference.items.filter(isObj) : [];
+      const sources = items.map((item) => webSource(item, null, str(item.attribution))).filter((source) => source !== null);
+      if (sources.length && citations.length < MAX_CITATIONS) citations.push({ marker, sources });
+    }
+    return citations;
+  }
   function normalizeMessage(raw, conversationId) {
     if (!isObj(raw)) return null;
     const id = str(raw.id);
@@ -109,7 +156,9 @@
       turnId: str(metadata.turn_exchange_id),
       parentId: str(metadata.parent_id),
       createTime: typeof raw.create_time === "number" ? raw.create_time : null,
-      hidden: metadata.is_visually_hidden_from_conversation === true
+      hidden: metadata.is_visually_hidden_from_conversation === true,
+      sources: sourcesOf(metadata),
+      citations: citationsOf(metadata)
     };
   }
   function unescapeToken(token) {

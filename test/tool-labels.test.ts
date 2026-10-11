@@ -37,6 +37,9 @@ describe('tool labels', () => {
     expect(describeTool(tool('apply_patch', { patch: '*** Begin Patch\n*** Add File: /repo/new.txt\n+x\n*** End Patch' }))).toMatchObject({ category: 'create', target: 'new.txt' });
     expect(describeTool(tool('agents', { action: 'spawn', workers: [{ label: 'alpha', task: 't' }, { label: 'beta', task: 't' }] }))).toMatchObject({ verb: 'Started agents', target: 'alpha, beta' });
     expect(describeTool(tool('exec', { code: 'await tools.read({}); await tools.exec_command({})' }))).toMatchObject({ category: 'script', target: 'using read, exec_command' });
+    const page = { title: '', url: 'https://cdn.kernel.org/x', domain: 'cdn.kernel.org', ref: 'turn1view0' };
+    expect(describeTool(tool('web.run', '', [{ type: 'sources', sources: [page] }], 'chatgpt'))).toMatchObject({ verb: 'Opened', target: 'cdn.kernel.org' });
+    expect(describeTool(tool('web.run', '', [{ type: 'sources', sources: [{ ...page, ref: 'turn1search0' }] }], 'chatgpt'))).toMatchObject({ verb: 'Searched the web', target: 'cdn.kernel.org' });
   });
 
   it('summarizes a group like "Ran 2 commands, edited report.md"', () => {
