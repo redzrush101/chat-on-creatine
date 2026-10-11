@@ -212,41 +212,81 @@ export function readErrorNotice(): ErrorNotice | null {
 }
 
 /**
- * Best-effort: opens the composer's model picker and clicks the item named `model` (a picker label
- * or an id), then the effort item. Returns false when the picker or an item cannot be found.
+ * Selects a picker family and confirms its native intelligence slider before dismissing it.
+ * Older category pickers expose effort menu items instead of a slider.
  */
-export async function selectModel(model: string, effort: ReasoningEffort | null): Promise<boolean> {
-  const menuButtons = composerForm()?.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]') ?? [];
-  const trigger = first(
-    [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')), ...menuButtons],
+export async function selectModel(model: string, effort: ReasoningEffort | null, presetIndex?: number): Promise<boolean> {
+  const findTrigger = () => first(
+    [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')),
+      ...composerForm()?.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]') ?? []],
     visible
   );
-  if (!trigger) return false;
-  trigger.click();
-  await wait(300);
-
-  const clickItem = (pattern: (text: string) => boolean): boolean => {
-    const item = first(document.querySelectorAll<HTMLElement>(SELECTORS.menuItem), (node) => {
-      if (!visible(node)) return false;
+  // ChatGPT mounts the editor before its native model control on a fresh chat.
+  if (!(await waitFor(() => findTrigger() !== null))) return false;
+  const trigger = findTrigger()!;
+  const menu = () => first(document.querySelectorAll<HTMLElement>('[role="menu"]'), (node) =>
+    visible(node) && node.getAttribute('aria-labelledby') === trigger.id);
+  const item = (pattern: (text: string) => boolean, includeHidden = false) => first(
+    menu()?.querySelectorAll<HTMLElement>(SELECTORS.menuItem) ?? [], (node) => {
+      if (!includeHidden && !visible(node)) return false;
       const label = normalize((node.innerText || node.textContent || '').split('\n')[0] ?? '');
       return pattern(label);
     });
-    if (!item) return false;
-    item.click();
-    return true;
-  };
-
   const wanted = normalize(model);
-  let ok = clickItem((label) => label === wanted || label.startsWith(`${wanted} `));
-  if (ok && effort) {
-    await wait(300);
+  const modelItem = (includeHidden = false) => item((label) => label === wanted, includeHidden);
+  try {
+    if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
+    if (!(await waitFor(() => menu() !== null))) return false;
+    // Native v2 keeps the model list inert until the effort/view toggle is opened.
+    if (presetIndex !== undefined && !modelItem()) menu()?.querySelector<HTMLElement>('[data-model-picker-view-toggle]')?.click();
+    if (!(await waitFor(() => modelItem() !== null))) return false;
+    modelItem()!.click();
+    await wait(200);
+
+    if (presetIndex !== undefined) {
+      if (!menu()) trigger.click();
+      if (!(await waitFor(() => modelItem(true)?.getAttribute('aria-checked') === 'true'))) return false;
+      const control = () => menu()?.querySelector<HTMLElement>('[data-reasoning-slider]');
+      const slider = () => menu()?.querySelector<HTMLElement>('[role="slider"]');
+      if (!(await waitFor(() => {
+        const node = control();
+        return !!node && visible(node) && node.getAttribute('aria-disabled') !== 'true' && !!slider();
+      }))) return false;
+      const current = () => Number(slider()?.getAttribute('aria-valuenow'));
+      const min = Number(slider()!.getAttribute('aria-valuemin'));
+      const max = Number(slider()!.getAttribute('aria-valuemax'));
+      if (presetIndex < min || presetIndex > max) return false;
+      control()!.focus();
+      for (let steps = 0; current() !== presetIndex && steps <= max - min; steps++) {
+        const next = current() + (current() < presetIndex ? 1 : -1);
+        const key = next > current() ? 'ArrowRight' : 'ArrowLeft';
+        control()!.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
+        if (!(await waitFor(() => current() === next))) return false;
+      }
+      return current() === presetIndex && modelItem(true)?.getAttribute('aria-checked') === 'true'
+        && trigger.getAttribute('data-selected-reasoning-effort') === effort;
+    }
+
+    if (!effort) return true;
+    if (!menu()) trigger.click();
     const pattern = EFFORT_LABELS[effort];
-    ok = pattern !== null && clickItem((label) => pattern.test(label));
+    if (!pattern || !(await waitFor(() => item((label) => pattern.test(label)) !== null))) return false;
+    item((label) => pattern.test(label))!.click();
+    return true;
+  } finally {
+    menu()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   }
-  if (!ok) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  return ok;
 }
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(predicate: () => boolean): Promise<boolean> {
+  const deadline = Date.now() + 3_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) return false;
+    await wait(100);
+  }
+  return true;
 }

@@ -576,37 +576,81 @@
     }
     return null;
   }
-  async function selectModel(model, effort) {
-    const menuButtons = composerForm()?.querySelectorAll('button[aria-haspopup="menu"]') ?? [];
-    const trigger = first(
-      [...document.querySelectorAll(SELECTORS.modelTrigger.join(", ")), ...menuButtons],
+  async function selectModel(model, effort, presetIndex) {
+    const findTrigger = () => first(
+      [
+        ...document.querySelectorAll(SELECTORS.modelTrigger.join(", ")),
+        ...composerForm()?.querySelectorAll('button[aria-haspopup="menu"]') ?? []
+      ],
       visible
     );
-    if (!trigger) return false;
-    trigger.click();
-    await wait(300);
-    const clickItem = (pattern) => {
-      const item = first(document.querySelectorAll(SELECTORS.menuItem), (node) => {
-        if (!visible(node)) return false;
+    if (!await waitFor(() => findTrigger() !== null)) return false;
+    const trigger = findTrigger();
+    const menu = () => first(document.querySelectorAll('[role="menu"]'), (node) => visible(node) && node.getAttribute("aria-labelledby") === trigger.id);
+    const item = (pattern, includeHidden = false) => first(
+      menu()?.querySelectorAll(SELECTORS.menuItem) ?? [],
+      (node) => {
+        if (!includeHidden && !visible(node)) return false;
         const label = normalize((node.innerText || node.textContent || "").split("\n")[0] ?? "");
         return pattern(label);
-      });
-      if (!item) return false;
-      item.click();
-      return true;
-    };
+      }
+    );
     const wanted = normalize(model);
-    let ok = clickItem((label) => label === wanted || label.startsWith(`${wanted} `));
-    if (ok && effort) {
-      await wait(300);
+    const modelItem = (includeHidden = false) => item((label) => label === wanted, includeHidden);
+    try {
+      if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
+      if (!await waitFor(() => menu() !== null)) return false;
+      if (presetIndex !== void 0 && !modelItem()) menu()?.querySelector("[data-model-picker-view-toggle]")?.click();
+      if (!await waitFor(() => modelItem() !== null)) return false;
+      modelItem().click();
+      await wait(200);
+      if (presetIndex !== void 0) {
+        if (!menu()) trigger.click();
+        if (!await waitFor(() => modelItem(true)?.getAttribute("aria-checked") === "true")) return false;
+        const control = () => menu()?.querySelector("[data-reasoning-slider]");
+        const slider = () => menu()?.querySelector('[role="slider"]');
+        if (!await waitFor(() => {
+          const node = control();
+          return !!node && visible(node) && node.getAttribute("aria-disabled") !== "true" && !!slider();
+        })) return false;
+        const current = () => Number(slider()?.getAttribute("aria-valuenow"));
+        const min = Number(slider().getAttribute("aria-valuemin"));
+        const max = Number(slider().getAttribute("aria-valuemax"));
+        if (presetIndex < min || presetIndex > max) return false;
+        control().focus();
+        for (let steps = 0; current() !== presetIndex && steps <= max - min; steps++) {
+          const next = current() + (current() < presetIndex ? 1 : -1);
+          const key = next > current() ? "ArrowRight" : "ArrowLeft";
+          control().dispatchEvent(new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true }));
+          if (!await waitFor(() => current() === next)) return false;
+        }
+        return current() === presetIndex && modelItem(true)?.getAttribute("aria-checked") === "true" && trigger.getAttribute("data-selected-reasoning-effort") === effort;
+      }
+      if (!effort) return true;
+      if (!menu()) trigger.click();
       const pattern = EFFORT_LABELS[effort];
-      ok = pattern !== null && clickItem((label) => pattern.test(label));
+      if (!pattern || !await waitFor(() => item((label) => pattern.test(label)) !== null)) return false;
+      item((label) => pattern.test(label)).click();
+      return true;
+    } finally {
+      menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     }
-    if (!ok) document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    return ok;
   }
   function wait(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  async function waitFor(predicate) {
+    const deadline = Date.now() + 3e3;
+    while (!predicate()) {
+      if (Date.now() >= deadline) return false;
+      await wait(100);
+    }
+    return true;
+  }
+
+  // src/shared/model-selection.ts
+  function findModel(models, id) {
+    return models.find((model) => model.id === id || id !== null && model.slugs?.includes(id));
   }
 
   // src/page/models.ts
@@ -623,10 +667,32 @@
   function parseModels(body) {
     const root = isRecord(body) ? body : {};
     const list = (Array.isArray(root.models) ? root.models : []).filter(isRecord);
-    const models = list.flatMap((model) => {
+    const details = new Map(list.flatMap((model) => typeof model.slug === "string" && model.slug ? [[model.slug, model]] : []));
+    const fallback = list.find((model) => model.is_default === true);
+    const defaultSlug = typeof root.default_model_slug === "string" ? root.default_model_slug : typeof fallback?.slug === "string" ? fallback.slug : null;
+    const models = Array.isArray(root.versions) ? root.versions.filter(isRecord).flatMap((version) => {
+      if (version.enabled !== true || !Array.isArray(version.intelligence_presets)) return [];
+      const presets = version.intelligence_presets.flatMap((entry, index) => {
+        if (!isRecord(entry) || entry.preset_type !== "available" || typeof entry.model_slug !== "string" || !details.has(entry.model_slug)) return [];
+        const reasoning = entry.lane === "instant" ? "none" : typeof entry.thinking_effort === "string" ? EFFORT_NAMES[entry.thinking_effort] : void 0;
+        if (!reasoning || typeof entry.title !== "string") return [];
+        return [{ model: entry.model_slug, reasoning, label: entry.title, index }];
+      });
+      const primary = presets.find((preset) => preset.reasoning === "medium") ?? presets[0];
+      if (!primary) return [];
+      const label = typeof version.display_text_for_intelligence === "string" ? version.display_text_for_intelligence : typeof version.display_text === "string" ? version.display_text : null;
+      if (!label) return [];
+      const slugs = [...new Set(presets.map((preset) => preset.model))];
+      if (defaultSlug && Array.isArray(version.slugs) && version.slugs.includes(defaultSlug) && !slugs.includes(defaultSlug)) {
+        slugs.push(defaultSlug);
+      }
+      return [{ id: primary.model, label, efforts: [...new Set(presets.map((preset) => preset.reasoning))], slugs, presets }];
+    }) : (Array.isArray(root.categories) ? root.categories : []).filter(isRecord).flatMap((category) => {
+      const model = typeof category.default_model === "string" ? details.get(category.default_model) : void 0;
+      if (!model) return [];
       const id = typeof model.slug === "string" ? model.slug : null;
       if (!id) return [];
-      const label = typeof model.title === "string" ? model.title : id;
+      const label = typeof category.human_category_short_name === "string" ? category.human_category_short_name : typeof model.title === "string" ? model.title : id;
       const efforts = [];
       if (model.reasoning_type !== "none" && Array.isArray(model.thinking_efforts)) {
         for (const entry of model.thinking_efforts) {
@@ -637,9 +703,7 @@
       }
       return [{ id, label, efforts }];
     });
-    const fallback = list.find((model) => model.is_default === true);
-    const defaultModel = typeof root.default_model_slug === "string" ? root.default_model_slug : typeof fallback?.slug === "string" ? fallback.slug : null;
-    return { defaultModel, models };
+    return { defaultModel: findModel(models, defaultSlug) ? defaultSlug : null, models };
   }
 
   // src/page/attachments.ts
@@ -687,7 +751,7 @@
   function wait2(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  async function waitFor(predicate, ms) {
+  async function waitFor2(predicate, ms) {
     const deadline = Date.now() + ms;
     while (!predicate()) {
       if (Date.now() >= deadline) return false;
@@ -716,7 +780,7 @@
       };
     }
     async send(text, files) {
-      if (!await waitFor(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
+      if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
       if (isGenerating()) return fail("busy", "a response is still generating");
       if (!setComposerText(text)) return fail("failed", "could not type into the composer");
       if (files.length > 0 && !await attachFiles(files.map(toFile))) {
@@ -727,16 +791,23 @@
         const button = findSendButton();
         return button !== null && !button.disabled && button.getAttribute("aria-disabled") !== "true";
       };
-      if (!await waitFor(sendable, files.length > 0 ? 1500 : 15e3) && files.length === 0) return fail("not-ready", "send button is not available");
+      if (!await waitFor2(sendable, files.length > 0 ? 1500 : 15e3) && files.length === 0) return fail("not-ready", "send button is not available");
       const started = this.streams.waitForStart(2e4);
       if (!clickSend()) return fail("failed", "send button could not be clicked");
       const value = await started;
       return value ? { ok: true, value } : fail("timeout", "no conversation stream started after send");
     }
     async selectModel(model, effort) {
-      if (!this.models) await this.loadModels().catch(() => void 0);
-      const label = this.models?.models.find((entry) => entry.id === model)?.label ?? model;
-      return await selectModel(label, effort) ? DONE : fail("not-found", `model ${model} not found in the picker`);
+      const models = this.models ?? await this.loadModels();
+      const effective = model || models.defaultModel;
+      const option = findModel(models.models, effective);
+      if (!option) return fail("not-found", `Model ${effective ?? "account default"} is not available in ChatGPT's picker. Reload models and choose an available model.`);
+      const preset = option.presets?.find((entry) => effort !== null ? entry.reasoning === effort : entry.model === effective) ?? (effort === null ? option.presets?.find((entry) => entry.model === option.id) : void 0);
+      if (effort !== null && !option.efforts.includes(effort)) {
+        return fail("not-found", `${option.label} does not offer the ${effort} thinking level. Choose an available level.`);
+      }
+      if (!await waitFor2(() => findComposer() !== null, 15e3)) return fail("not-ready", "composer not found");
+      return await selectModel(option.label, preset?.reasoning ?? effort, preset?.index) ? DONE : fail("not-found", `Could not confirm ${option.label}${effort ? ` (${effort})` : ""} in ChatGPT's picker. Open ChatGPT and try again.`);
     }
     async run(command) {
       try {

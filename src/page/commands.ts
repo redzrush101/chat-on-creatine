@@ -6,6 +6,7 @@ import * as dom from './dom';
 import type { createBackend } from './backend';
 import { DriverError, fail } from './errors';
 import { parseModels } from './models';
+import { findModel } from '@shared/model-selection';
 import { attachFiles } from './attachments';
 import type { StreamRelay } from './streams';
 
@@ -75,9 +76,18 @@ export class PageCommands {
   }
 
   private async selectModel(model: string, effort: ReasoningEffort | null): Promise<PageResult> {
-    if (!this.models) await this.loadModels().catch(() => undefined);
-    const label = this.models?.models.find((entry) => entry.id === model)?.label ?? model;
-    return (await dom.selectModel(label, effort)) ? DONE : fail('not-found', `model ${model} not found in the picker`);
+    const models = this.models ?? await this.loadModels();
+    const effective = model || models.defaultModel;
+    const option = findModel(models.models, effective);
+    if (!option) return fail('not-found', `Model ${effective ?? 'account default'} is not available in ChatGPT's picker. Reload models and choose an available model.`);
+    const preset = option.presets?.find((entry) => effort !== null ? entry.reasoning === effort : entry.model === effective)
+      ?? (effort === null ? option.presets?.find((entry) => entry.model === option.id) : undefined);
+    if (effort !== null && !option.efforts.includes(effort)) {
+      return fail('not-found', `${option.label} does not offer the ${effort} thinking level. Choose an available level.`);
+    }
+    if (!(await waitFor(() => dom.findComposer() !== null, 15_000))) return fail('not-ready', 'composer not found');
+    return (await dom.selectModel(option.label, preset?.reasoning ?? effort, preset?.index))
+      ? DONE : fail('not-found', `Could not confirm ${option.label}${effort ? ` (${effort})` : ''} in ChatGPT's picker. Open ChatGPT and try again.`);
   }
 
   async run(command: PageCommand): Promise<PageResult> {

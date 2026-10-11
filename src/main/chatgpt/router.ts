@@ -329,10 +329,8 @@ export class ChatRouter {
     try {
       const fresh = !session.conversationId;
       const tabId = await this.ensureTab(session, fresh);
-      if (fresh && session.reasoning) {
-        const selected = await this.deps.host.command(tabId, { type: 'select-model', model: session.model ?? '', effort: session.reasoning }, 20_000);
-        if (!selected.ok) log.info(`could not preselect reasoning ${session.reasoning}: ${selected.error}`);
-      }
+      const selected = await this.deps.host.command(tabId, { type: 'select-model', model: session.model ?? '', effort: session.reasoning }, 20_000);
+      if (!selected.ok) throw new Error(selected.error);
       const opening = fresh ? await this.deps.openingContext(session) : null;
       const text = opening ? `${opening}\n\n${item.text}` : item.text;
       const files = await Promise.all(item.attachments.map(async (file): Promise<PageFile> => ({

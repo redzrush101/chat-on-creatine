@@ -2,6 +2,7 @@ import { Check, ChevronDown, RotateCw } from 'lucide-react';
 import type { ReasoningEffort } from '@shared/config';
 import { REASONING_EFFORTS } from '@shared/config';
 import type { ModelCatalog } from '@shared/types';
+import { findModel, modelSelection } from '@shared/model-selection';
 import { invoke } from '../../lib/bridge';
 import { cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
@@ -31,7 +32,7 @@ const EFFORT_LABEL: Record<ReasoningEffort, string> = {
 };
 
 function labelOf(catalog: ModelCatalog, id: string): string {
-  return catalog.models.find((option) => option.id === id)?.label ?? id;
+  return findModel(catalog.models, id)?.label ?? id;
 }
 
 /**
@@ -40,7 +41,10 @@ function labelOf(catalog: ModelCatalog, id: string): string {
  */
 export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerProps) {
   const effective = value.model ?? catalog.defaultModel;
-  const efforts = catalog.models.find((option) => option.id === effective)?.efforts ?? [];
+  const option = findModel(catalog.models, effective);
+  const efforts = option?.efforts ?? [];
+  const reasoning = value.reasoning ?? option?.presets?.find((preset) => preset.model === effective)?.reasoning ?? null;
+  const effortLabel = (effort: ReasoningEffort) => option?.presets?.find((preset) => preset.reasoning === effort)?.label ?? EFFORT_LABEL[effort];
   const modelText = value.model ? labelOf(catalog, value.model) : catalog.defaultModel ? labelOf(catalog, catalog.defaultModel) : 'Default model';
 
   return (
@@ -65,18 +69,18 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
               <span className="menu-text">{catalog.defaultModel ? `Default (${labelOf(catalog, catalog.defaultModel)})` : 'Default'}</span>
               {value.model === null && <Check size={14} className="menu-check" aria-hidden="true" />}
             </button>
-            {catalog.models.map((option) => (
+            {catalog.models.map((entry) => (
               <button
-                key={option.id}
+                key={entry.id}
                 type="button"
                 className="menu-item"
                 onClick={() => {
-                  onChange({ model: option.id, reasoning: value.reasoning && option.efforts.includes(value.reasoning) ? value.reasoning : null });
+                  onChange(modelSelection(entry, reasoning));
                   close();
                 }}
               >
-                <span className="menu-text">{option.label}</span>
-                {value.model === option.id && <Check size={14} className="menu-check" aria-hidden="true" />}
+                <span className="menu-text">{entry.label}</span>
+                {value.model !== null && option === entry && <Check size={14} className="menu-check" aria-hidden="true" />}
               </button>
             ))}
             {catalog.state === 'loading' && <p className="picker-note">Loading models…</p>}
@@ -98,7 +102,7 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
           panelClassName="is-picker"
           trigger={({ open, toggle }) => (
             <button type="button" className="quiet-trigger" aria-haspopup="dialog" aria-expanded={open} disabled={disabled} title="Reasoning effort" onClick={toggle}>
-              <span className="chip-text">{value.reasoning ? EFFORT_LABEL[value.reasoning] : 'Default'}</span>
+              <span className="chip-text">{reasoning ? effortLabel(reasoning) : 'Default'}</span>
             </button>
           )}
         >
@@ -110,15 +114,15 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
                   close();
                 }}>
                 <span className="menu-text">Default</span>
-                {value.reasoning === null && <Check size={14} className="menu-check" aria-hidden="true" />}
+                {reasoning === null && <Check size={14} className="menu-check" aria-hidden="true" />}
               </button>
               {REASONING_EFFORTS.filter((effort) => efforts.includes(effort)).map((effort) => (
                 <button key={effort} type="button" className="menu-item" onClick={() => {
-                  onChange({ ...value, reasoning: effort });
+                  if (option) onChange(modelSelection(option, effort));
                   close();
                 }}>
-                  <span className="menu-text">{EFFORT_LABEL[effort]}</span>
-                  {value.reasoning === effort && <Check size={14} className="menu-check" aria-hidden="true" />}
+                  <span className="menu-text">{effortLabel(effort)}</span>
+                  {reasoning === effort && <Check size={14} className="menu-check" aria-hidden="true" />}
                 </button>
               ))}
             </div>

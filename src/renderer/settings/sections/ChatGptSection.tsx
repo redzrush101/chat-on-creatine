@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
-import { REASONING_EFFORTS } from '@shared/config';
 import type { ReasoningEffort } from '@shared/config';
+import { findModel, modelSelection } from '@shared/model-selection';
 import type { AppState } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { Button, Group, NumberField, Pill, Row, SelectField, Segmented, Toggle, useRun, useSave } from '../controls';
@@ -20,8 +20,9 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
   const { config, browser, models, usage } = state;
   const save = useSave();
   const run = useRun();
-  const selectedModel = models.models.find((model) => model.id === config.ui.defaultModel) ?? null;
-  const reasoningOptions = selectedModel ? selectedModel.efforts : REASONING_EFFORTS;
+  const selectedModel = findModel(models.models, config.ui.defaultModel ?? models.defaultModel);
+  const reasoningOptions = selectedModel?.efforts ?? [];
+  const reasoningLabel = (effort: ReasoningEffort) => selectedModel?.presets?.find((preset) => preset.reasoning === effort)?.label ?? REASONING_LABEL[effort];
 
   return (
     <div className="st-stack">
@@ -93,7 +94,7 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
         </Row>
       </Group>
 
-      <Group title="Models" description="The catalog comes from your signed-in account.">
+      <Group title="Models" description="Models and thinking levels match your signed-in ChatGPT picker.">
         <Row
           label="Model catalog"
           hint={
@@ -116,7 +117,7 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
               <li key={model.id}>
                 <span>{model.label}</span>
                 <span className="st-mono st-muted">{model.id}</span>
-                <span className="st-muted">{model.efforts.map((effort) => REASONING_LABEL[effort]).join(', ') || 'No reasoning levels'}</span>
+                <span className="st-muted">{model.presets?.map((preset) => preset.label).join(', ') || model.efforts.map((effort) => REASONING_LABEL[effort]).join(', ') || 'No reasoning levels'}</span>
               </li>
             ))}
           </ul>
@@ -124,13 +125,17 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
         <Row label="Default model" hint="Used for new chats unless a chat picks its own.">
           <SelectField
             label="Default model"
-            value={config.ui.defaultModel ?? ''}
+            value={config.ui.defaultModel ? selectedModel?.id ?? config.ui.defaultModel : ''}
             options={[
               { value: '', label: 'Account default' },
               ...models.models.map((model) => ({ value: model.id, label: model.label })),
               ...(config.ui.defaultModel && !selectedModel ? [{ value: config.ui.defaultModel, label: config.ui.defaultModel }] : [])
             ]}
-            onChange={(value) => save({ ui: { defaultModel: value === '' ? null : value } })}
+            onChange={(value) => {
+              const option = findModel(models.models, value);
+              const selection = option ? modelSelection(option, config.ui.defaultReasoning) : null;
+              save({ ui: { defaultModel: selection?.model ?? null, defaultReasoning: selection?.reasoning ?? null } });
+            }}
           />
         </Row>
         <Row label="Default reasoning" hint="Used for new chats. Account default leaves the model's choice.">
@@ -139,9 +144,12 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
             value={config.ui.defaultReasoning ?? ''}
             options={[
               { value: '', label: 'Account default' },
-              ...reasoningOptions.map((effort) => ({ value: effort, label: REASONING_LABEL[effort] }))
+              ...reasoningOptions.map((effort) => ({ value: effort, label: reasoningLabel(effort) }))
             ]}
-            onChange={(value) => save({ ui: { defaultReasoning: value === '' ? null : (value as ReasoningEffort) } })}
+            onChange={(value) => {
+              const selection = value && selectedModel ? modelSelection(selectedModel, value as ReasoningEffort) : null;
+              save({ ui: { defaultModel: selection?.model ?? config.ui.defaultModel, defaultReasoning: selection?.reasoning ?? null } });
+            }}
           />
         </Row>
       </Group>

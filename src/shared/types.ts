@@ -193,6 +193,17 @@ export interface ModelOption {
   id: string;
   label: string;
   efforts: ReasoningEffort[];
+  /** Slugs belonging to one family in ChatGPT's version picker. */
+  slugs?: string[];
+  presets?: ModelPreset[];
+}
+
+export interface ModelPreset {
+  model: string;
+  reasoning: ReasoningEffort;
+  label: string;
+  /** Position in the native intelligence slider, including locked presets. */
+  index: number;
 }
 
 export interface ModelCatalog {

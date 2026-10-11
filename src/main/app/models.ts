@@ -1,29 +1,10 @@
 import { errorMessage } from '@shared/errors';
-import type { ModelCatalog, ModelOption } from '@shared/types';
+import type { ModelCatalog } from '@shared/types';
 import type { ModelsValue } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
 import type { ChatHost } from '../chatgpt/host';
 
 const log = createLogger('models');
-
-/** ChatGPT titles several lanes of one family identically ("GPT-5.6 Sol"); name the lane from the slug. */
-function distinctLabels(models: ModelOption[]): ModelOption[] {
-  const counts = new Map<string, number>();
-  for (const model of models) counts.set(model.label, (counts.get(model.label) ?? 0) + 1);
-  const lane = (id: string): string | null => {
-    if (/-wm$/.test(id)) return 'Work';
-    if (/-t-mini$/.test(id)) return 'Thinking mini';
-    if (/-thinking$/.test(id)) return 'Thinking';
-    if (/-instant$/.test(id)) return 'Instant';
-    if (/-mini$/.test(id)) return 'Mini';
-    return null;
-  };
-  return models.map((model) => {
-    if ((counts.get(model.label) ?? 0) < 2) return model;
-    const suffix = lane(model.id);
-    return { ...model, label: suffix && !model.label.endsWith(suffix) ? `${model.label} ${suffix}` : model.label };
-  });
-}
 
 /** The account's model list, read from ChatGPT through any signed-in tab. */
 export class ModelService {
@@ -56,7 +37,7 @@ export class ModelService {
       const result = await this.host.command(tabId, { type: 'models' }, 45_000);
       if (!result.ok) throw new Error(result.error);
       const value = result.value as ModelsValue;
-      this.set({ state: 'ready', models: distinctLabels(value.models), defaultModel: value.defaultModel, fetchedAt: Date.now(), error: null });
+      this.set({ state: 'ready', models: value.models, defaultModel: value.defaultModel, fetchedAt: Date.now(), error: null });
     } catch (error) {
       const message = errorMessage(error);
       log.warn(`model list unavailable: ${message}`);

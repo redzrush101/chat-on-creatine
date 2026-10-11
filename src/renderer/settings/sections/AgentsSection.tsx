@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
-import { REASONING_EFFORTS } from '@shared/config';
 import type { ReasoningEffort } from '@shared/config';
+import { findModel, modelSelection } from '@shared/model-selection';
 import type { AppState } from '@shared/types';
 import { ApiKeyField } from '../TunnelFields';
 import { Group, NumberField, Row, SelectField, Segmented, TextField, Toggle, useSave } from '../controls';
@@ -11,6 +11,7 @@ export function AgentsSection({ state }: { state: AppState }): JSX.Element {
   const agents = config.agents;
   const automation = config.automation;
   const isApi = automation.backend === 'api';
+  const selectedModel = findModel(models.models, agents.defaultModel ?? config.ui.defaultModel ?? models.defaultModel);
 
   return (
     <div className="st-stack">
@@ -24,15 +25,19 @@ export function AgentsSection({ state }: { state: AppState }): JSX.Element {
         <Row label="Default worker model" hint="Used when a worker does not name a model.">
           <SelectField
             label="Default worker model"
-            value={agents.defaultModel ?? ''}
+            value={agents.defaultModel ? selectedModel?.id ?? agents.defaultModel : ''}
             options={[
               { value: '', label: 'Same as the chat' },
               ...models.models.map((model) => ({ value: model.id, label: model.label })),
-              ...(agents.defaultModel && !models.models.some((model) => model.id === agents.defaultModel)
+              ...(agents.defaultModel && !selectedModel
                 ? [{ value: agents.defaultModel, label: agents.defaultModel }]
                 : [])
             ]}
-            onChange={(value) => save({ agents: { defaultModel: value === '' ? null : value } })}
+            onChange={(value) => {
+              const option = findModel(models.models, value);
+              const selection = option ? modelSelection(option, agents.defaultReasoning) : null;
+              save({ agents: { defaultModel: selection?.model ?? null, defaultReasoning: selection?.reasoning ?? null } });
+            }}
           />
         </Row>
         <Row label="Default worker reasoning">
@@ -41,9 +46,13 @@ export function AgentsSection({ state }: { state: AppState }): JSX.Element {
             value={agents.defaultReasoning ?? ''}
             options={[
               { value: '', label: 'Same as the chat' },
-              ...REASONING_EFFORTS.map((effort) => ({ value: effort, label: effort }))
+              ...(selectedModel?.efforts ?? []).map((effort) => ({ value: effort,
+                label: selectedModel?.presets?.find((preset) => preset.reasoning === effort)?.label ?? effort }))
             ]}
-            onChange={(value) => save({ agents: { defaultReasoning: value === '' ? null : (value as ReasoningEffort) } })}
+            onChange={(value) => {
+              const selection = value && selectedModel ? modelSelection(selectedModel, value as ReasoningEffort) : null;
+              save({ agents: { defaultModel: selection?.model ?? agents.defaultModel, defaultReasoning: selection?.reasoning ?? null } });
+            }}
           />
         </Row>
         <Row label="Wait for workers" hint="Goal and Loop wait for a chat's workers before deciding the next step.">
