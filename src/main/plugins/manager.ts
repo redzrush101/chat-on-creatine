@@ -1,9 +1,6 @@
 import { createHash } from 'node:crypto';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Client, StreamableHTTPClientTransport, type Transport, type CallToolResult, type Tool } from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import type { Config, PluginServerConfig, SecretKey } from '@shared/config';
 import type { PluginStatus } from '@shared/types';
 import { createLogger } from '../core/log';
@@ -140,7 +137,7 @@ export class PluginManager {
     client.onclose = () => this.lost(entry, client);
     try {
       await client.connect(this.createTransport(entry.config), { timeout: START_TIMEOUT_MS });
-      const tools = await listAllTools(client);
+      const { tools } = await client.listTools(undefined, { timeout: START_TIMEOUT_MS });
       if (entry.client !== client) return;
       entry.state = 'running';
       entry.detail = '';
@@ -241,11 +238,10 @@ export class PluginManager {
     }
     let result: CallToolResult;
     try {
-      result = (await client.callTool(
+      result = await client.callTool(
         { name: toolName, arguments: args as Record<string, unknown> },
-        undefined,
         { timeout: TOOL_TIMEOUT_MS, signal: ctx.signal }
-      )) as CallToolResult;
+      );
     } catch (error) {
       throw new ToolError('FAILED', `${entry.config.name} did not complete ${toolName}: ${errorMessage(error)}`);
     }
@@ -290,17 +286,6 @@ export class PluginManager {
 
 function secretKey(id: string, name: string): SecretKey {
   return `plugin:${id}:env:${name}`;
-}
-
-async function listAllTools(client: Client): Promise<Tool[]> {
-  const tools: Tool[] = [];
-  let cursor: string | undefined;
-  do {
-    const page = await client.listTools(cursor ? { cursor } : undefined, { timeout: START_TIMEOUT_MS });
-    tools.push(...page.tools);
-    cursor = page.nextCursor;
-  } while (cursor);
-  return tools;
 }
 
 function toToolResult(result: CallToolResult): ToolResult {

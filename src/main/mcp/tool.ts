@@ -17,7 +17,7 @@ export type ToolContent = { type: 'text'; text: string } | { type: 'image'; data
 
 export interface ToolResult {
   content: ToolContent[];
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: unknown;
   isError?: boolean;
   /** What the app records and shows for this call; defaults to the text content. */
   display?: ToolOutputPart[];

@@ -2,8 +2,7 @@ import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { defaultConfig, type Config, type PluginServerConfig, type SecretKey } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
@@ -12,12 +11,12 @@ import { McpHttpServer, generateToken } from '../src/main/mcp/server';
 import type { ToolContext, ToolServices, ToolSpec } from '../src/main/mcp/tool';
 
 const SERVER_SCRIPT = `
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { McpServer } from '@modelcontextprotocol/server';
+import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 
 const server = new McpServer({ name: process.argv[2], version: '1.0.0' });
-server.registerTool('echo', { description: 'Echoes text.', inputSchema: { text: z.string() } }, async ({ text }) => ({
+server.registerTool('echo', { description: 'Echoes text.', inputSchema: z.object({ text: z.string() }) }, async ({ text }) => ({
   content: [{ type: 'text', text: 'echo:' + text + ':' + (process.env.PLUGIN_TOKEN ?? 'missing') }]
 }));
 server.registerTool('crash', { description: 'Exits the process.' }, async () => {
