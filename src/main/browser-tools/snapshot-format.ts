@@ -11,7 +11,7 @@ export interface AxNode {
   backendDOMNodeId?: number;
 }
 
-export const INTERACTIVE_ROLES: ReadonlySet<string> = new Set([
+const INTERACTIVE_ROLES: ReadonlySet<string> = new Set([
   'button', 'link', 'textbox', 'searchbox', 'combobox', 'checkbox', 'radio', 'switch', 'slider',
   'spinbutton', 'listbox', 'option', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'tab', 'treeitem'
 ]);
@@ -21,7 +21,7 @@ const STRUCTURAL_ROLES: ReadonlySet<string> = new Set(['none', 'generic', 'Inlin
 
 const MAX_NAME_CHARS = 200;
 
-export interface SnapshotOptions {
+interface SnapshotOptions {
   /** Returns the ref for a DOM node, assigning a new one the first time the node is seen. */
   refFor: (backendNodeId: number) => string;
   maxLines: number;
@@ -30,7 +30,7 @@ export interface SnapshotOptions {
   filter?: string;
 }
 
-export interface SnapshotText {
+interface SnapshotText {
   text: string;
   lineCount: number;
   truncated: boolean;

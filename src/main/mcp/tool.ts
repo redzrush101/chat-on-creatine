@@ -23,7 +23,7 @@ export interface ToolResult {
   display?: ToolOutputPart[];
 }
 
-export type ToolErrorCode =
+type ToolErrorCode =
   | 'TOOL_DISABLED'
   | 'PATH_NOT_ALLOWED'
   | 'NOT_FOUND'
@@ -111,7 +111,7 @@ export interface AgentsApi {
 }
 
 /** What code mode (`exec`) needs from its surface: the tools it may call and a nested dispatch. */
-export interface NestedToolHost {
+interface NestedToolHost {
   /** Tools this surface exposes right now. */
   list(): Array<{ name: string; description: string }>;
   /** Runs one tool as a nested call: live permission check, the parent's identity, hooks, no steering. */
@@ -130,7 +130,7 @@ export interface ToolContext {
   nested?: NestedToolHost;
 }
 
-export interface ToolAnnotations {
+interface ToolAnnotations {
   readOnlyHint?: boolean;
   destructiveHint?: boolean;
   idempotentHint?: boolean;

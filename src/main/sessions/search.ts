@@ -1,6 +1,6 @@
 import type { SessionStore } from './store';
 
-export interface SearchHit {
+interface SearchHit {
   sessionId: string;
   eventId: string;
   snippet: string;

@@ -37,7 +37,7 @@ export interface CallRecord {
   startedAt: number;
 }
 
-export interface McpHttpServerOptions {
+interface McpHttpServerOptions {
   getConfig(): Config;
   /** A function is re-read on every request, so tools can come and go without a restart. */
   tools: ToolSpec[] | (() => ToolSpec[]);

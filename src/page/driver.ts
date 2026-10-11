@@ -18,7 +18,7 @@ import {
 } from '@shared/page-protocol';
 import * as dom from './dom';
 
-export interface DriverTransport {
+interface DriverTransport {
   send(event: PageEvent): void;
   onCommand(handler: (command: PageCommand) => Promise<PageResult>): void;
 }

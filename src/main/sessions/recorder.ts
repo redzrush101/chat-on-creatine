@@ -17,7 +17,7 @@ interface SessionState {
   ownCalls: Set<string>;
 }
 
-export interface RecorderDeps {
+interface RecorderDeps {
   store: SessionStore;
   /** True for calls to our own MCP connector; those are recorded by the MCP server itself. */
   isOwnConnectorPath(path: string): boolean;

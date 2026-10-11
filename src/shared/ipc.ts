@@ -12,7 +12,7 @@ import type {
   SessionMeta
 } from './types';
 
-export interface SendRequest {
+interface SendRequest {
   /** Existing session, or null to start a new chat. */
   sessionId: string | null;
   text: string;
@@ -27,7 +27,7 @@ export interface SendRequest {
   automation?: AutomationMode;
 }
 
-export interface SendResult {
+interface SendResult {
   sessionId: string;
   input: InputItem;
 }

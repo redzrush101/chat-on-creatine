@@ -6,7 +6,7 @@ import type { ChatHost } from '../chatgpt/host';
 const log = createLogger('models');
 
 /** ChatGPT titles several lanes of one family identically ("GPT-5.6 Sol"); name the lane from the slug. */
-export function distinctLabels(models: ModelOption[]): ModelOption[] {
+function distinctLabels(models: ModelOption[]): ModelOption[] {
   const counts = new Map<string, number>();
   for (const model of models) counts.set(model.label, (counts.get(model.label) ?? 0) + 1);
   const lane = (id: string): string | null => {

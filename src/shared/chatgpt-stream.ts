@@ -61,7 +61,7 @@ export function normalizeMessage(raw: unknown, conversationId: string): ChatMess
   };
 }
 
-export interface StreamHandlers {
+interface StreamHandlers {
   message(m: ChatMessage): void;
   conversation?(id: string): void;
   title?(conversationId: string, title: string): void;

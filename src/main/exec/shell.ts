@@ -1,7 +1,7 @@
 import { accessSync, constants, statSync } from 'node:fs';
 import path from 'node:path';
 
-export type ShellType = 'zsh' | 'bash' | 'sh' | 'powershell' | 'cmd';
+type ShellType = 'zsh' | 'bash' | 'sh' | 'powershell' | 'cmd';
 
 export interface ShellSpec {
   type: ShellType;

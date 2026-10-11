@@ -9,11 +9,11 @@ import { defineTool, textResult, ToolError, type ExecResult, type ToolContext, t
 const WINDOWS_SHELL_NOTE =
   '\n\nWindows: PowerShell 5.1 has no && or ||; use the cmds array for a sequence, or A; if ($?) { B }. Do not compose destructive filesystem commands across shells; prefer PowerShell cmdlets such as Remove-Item and Move-Item with -LiteralPath, and verify resolved target paths first.';
 
-export const EXEC_COMMAND_DESCRIPTION =
+const EXEC_COMMAND_DESCRIPTION =
   'Runs a command and returns its output, or a session ID while it keeps running. Use write_stdin to poll a running session, send it input, or read its remaining output.' +
   (process.platform === 'win32' ? WINDOWS_SHELL_NOTE : '');
 
-export const EXEC_COMMAND_INPUT = {
+const EXEC_COMMAND_INPUT = {
   cmd: z.string().optional().describe('Shell command to execute. To read a file, use the read tool instead.'),
   cmds: z
     .array(z.string())

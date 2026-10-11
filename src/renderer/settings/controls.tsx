@@ -8,7 +8,7 @@ import { connectionView } from '../lib/connection';
 /** Errors from saving settings are shown by the settings shell, not swallowed. */
 export const ReportContext = createContext<(message: string) => void>(() => undefined);
 
-export function errorText(error: unknown): string {
+function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 

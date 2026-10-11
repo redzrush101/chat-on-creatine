@@ -15,7 +15,7 @@ const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 const CLOSE_UNAUTHORIZED = 4401;
 const CLOSE_REPLACED = 4000;
 
-export interface ExtensionHostDeps {
+interface ExtensionHostDeps {
   port: number;
   loadToken(): string | null;
   saveToken(token: string): void;

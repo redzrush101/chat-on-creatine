@@ -3,11 +3,11 @@ import type { SurfaceId } from '@shared/types';
 export const SURFACE_IDS: readonly SurfaceId[] = ['core', 'desktop', 'plugins'];
 
 export const CONNECTOR_BRAND = 'Chat on Creatine';
-export const CONNECTOR_SUFFIX_MAX = 32;
+const CONNECTOR_SUFFIX_MAX = 32;
 /** Letters, digits, spaces, dots, dashes and underscores; the app adds the parentheses. */
 const CONNECTOR_SUFFIX_PATTERN = /^[\p{L}\p{N} ._-]*$/u;
 
-export interface SurfaceDefinition {
+interface SurfaceDefinition {
   id: SurfaceId;
   /** MCP server name. Stable: ChatGPT keys its cached metadata off it. */
   serverName: string;
@@ -62,7 +62,7 @@ export const SURFACES: Record<SurfaceId, SurfaceDefinition> = {
 };
 
 /** A usable suffix, or '' for anything empty, too long or outside the allowed characters. */
-export function normalizeConnectorSuffix(value: unknown): string {
+function normalizeConnectorSuffix(value: unknown): string {
   if (typeof value !== 'string') return '';
   const trimmed = value.trim().replace(/\s+/g, ' ');
   return trimmed.length <= CONNECTOR_SUFFIX_MAX && CONNECTOR_SUFFIX_PATTERN.test(trimmed) ? trimmed : '';

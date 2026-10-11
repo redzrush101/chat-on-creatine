@@ -18,7 +18,7 @@ function emit(next: Toast[]): void {
   for (const listener of listeners) listener();
 }
 
-export function dismissToast(id: number): void {
+function dismissToast(id: number): void {
   emit(toasts.filter((toast) => toast.id !== id));
 }
 

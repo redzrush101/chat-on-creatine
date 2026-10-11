@@ -18,7 +18,7 @@ import {
 
 export type TunnelAdapter = 'openai' | 'cloudflared' | 'manual';
 
-export interface TunnelReport {
+interface TunnelReport {
   state: ConnectionState;
   detail: string;
   publicUrl: string | null;
@@ -26,7 +26,7 @@ export interface TunnelReport {
   handshakeAt: number | null;
 }
 
-export interface TunnelOptions {
+interface TunnelOptions {
   adapter: TunnelAdapter;
   /** Connector name for the log, e.g. "core". */
   label: string;
@@ -45,7 +45,7 @@ export interface TunnelHandle {
   stop(): Promise<void>;
 }
 
-export class TunnelError extends Error {}
+class TunnelError extends Error {}
 
 const TUNNEL_ID_PATTERN = /^tunnel_[0-9a-f]{32}$/;
 const READY_TIMEOUT_MS = 60_000;

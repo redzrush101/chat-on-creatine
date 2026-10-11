@@ -57,7 +57,7 @@ function parseQuery<T extends z.core.$ZodLooseShape>(params: URLSearchParams, sh
 
 // ----------------------------------------------------------- projections
 
-export function projectSession(meta: SessionMeta) {
+function projectSession(meta: SessionMeta) {
   return {
     id: meta.id,
     kind: meta.kind,

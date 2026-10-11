@@ -17,10 +17,6 @@ export function formatTokens(count: number): string {
   return `${(count / 1_000_000).toFixed(1)}M`;
 }
 
-export function formatClock(at: number): string {
-  return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 export function formatRelative(at: number, now = Date.now()): string {
   const diff = Math.max(0, now - at);
   const minute = 60_000;

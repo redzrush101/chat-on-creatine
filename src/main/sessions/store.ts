@@ -6,7 +6,7 @@ import { flushWrites, writeJson } from '../core/durable';
 import { Emitter } from '../core/emitter';
 import { createLogger } from '../core/log';
 
-export type MetaChange = SessionMeta | { deleted: string };
+type MetaChange = SessionMeta | { deleted: string };
 
 interface History {
   /** Latest version of each event, in order of first appearance. */

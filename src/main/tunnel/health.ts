@@ -32,7 +32,7 @@ export function readMetric(text: string, name: string): number | null {
   return total;
 }
 
-export interface PollHealth {
+interface PollHealth {
   /** Epoch ms of the last successful control-plane poll; null before the first one. */
   lastSuccessMs: number | null;
   /** Poll errors since the client started. */

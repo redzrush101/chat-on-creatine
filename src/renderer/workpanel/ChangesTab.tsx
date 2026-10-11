@@ -110,7 +110,7 @@ function FileDiff({ rootDir, change, onBack }: { rootDir: string; change: GitFil
   );
 }
 
-export function UnifiedDiff({ text }: { text: string }): JSX.Element {
+function UnifiedDiff({ text }: { text: string }): JSX.Element {
   if (text.trim() === '') return <Empty title="No text changes">The file is binary or only its mode changed.</Empty>;
   const lines = text.split('\n');
   return (

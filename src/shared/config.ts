@@ -20,7 +20,6 @@ const rootSchema = z.object({
   path: z.string(),
   label: z.string().default('')
 });
-export type Root = z.infer<typeof rootSchema>;
 
 const pluginServerSchema = z.object({
   id: z.string(),
@@ -221,5 +220,5 @@ export function effectiveCapabilities(config: Config): Capabilities {
 }
 
 /** Secret slots kept outside config.json, encrypted with the OS keychain. */
-export const SECRET_KEYS = ['tunnelApiKey', 'automationApiKey', 'extensionToken'] as const;
+const SECRET_KEYS = ['tunnelApiKey', 'automationApiKey', 'extensionToken'] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number] | `plugin:${string}`;

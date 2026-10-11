@@ -1,6 +1,6 @@
 import type { AppState, ConnectionState } from '@shared/types';
 
-export type ConnectionTone = 'neutral' | 'progress' | 'ok' | 'bad';
+type ConnectionTone = 'neutral' | 'progress' | 'ok' | 'bad';
 
 export interface ConnectionView {
   label: string;

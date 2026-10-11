@@ -13,20 +13,20 @@ const SCREENSHOT_MAX_WIDTH = 1280;
 const JPEG_QUALITY = 80;
 const SELECT_ALL = process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
 
-export interface TabInfo {
+interface TabInfo {
   id: string;
   url: string;
   title: string;
   loading: boolean;
 }
 
-export interface ConsoleEntry {
+interface ConsoleEntry {
   level: 'error' | 'warning' | 'info' | 'debug';
   text: string;
   url: string | null;
 }
 
-export interface NetworkEntry {
+interface NetworkEntry {
   requestId: string;
   method: string;
   url: string;
@@ -37,13 +37,13 @@ export interface NetworkEntry {
   finished: boolean;
 }
 
-export interface Page<T> {
+interface Page<T> {
   items: Array<T & { seq: number }>;
   /** Pass as `after` to continue after the last returned item. */
   cursor: number;
 }
 
-export interface Screenshot {
+interface Screenshot {
   mimeType: 'image/jpeg';
   data: string;
   /** Pixel size of the returned image. */
@@ -53,7 +53,7 @@ export interface Screenshot {
   viewport: { width: number; height: number };
 }
 
-export interface ActionInput {
+interface ActionInput {
   action: 'click' | 'hover' | 'fill' | 'type' | 'select' | 'key' | 'scroll' | 'drag' | 'dialog';
   ref?: string;
   x?: number;
@@ -138,7 +138,7 @@ const NAMED_KEYS: Record<string, { key: string; code: string; vk: number; text?:
   pagedown: { key: 'PageDown', code: 'PageDown', vk: 34 }
 };
 
-export interface ParsedKey {
+interface ParsedKey {
   key: string;
   code: string;
   vk: number;

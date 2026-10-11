@@ -1,6 +1,6 @@
 import type { Config } from '@shared/config';
 
-export type CommandPolicyDecision = { allowed: true } | { allowed: false; reason: string };
+type CommandPolicyDecision = { allowed: true } | { allowed: false; reason: string };
 
 type Policy = Config['commandPolicy'];
 

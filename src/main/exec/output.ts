@@ -1,6 +1,6 @@
 /** Bounded command output: a head/tail byte buffer and token-based middle truncation (about 4 bytes per token). */
 
-export const OUTPUT_MAX_BYTES = 1024 * 1024;
+const OUTPUT_MAX_BYTES = 1024 * 1024;
 export const DEFAULT_MAX_OUTPUT_TOKENS = 10_000;
 const BYTES_PER_TOKEN = 4;
 
@@ -69,7 +69,7 @@ export class HeadTailBuffer {
   }
 }
 
-export function approxTokenCount(text: string): number {
+function approxTokenCount(text: string): number {
   return Math.ceil(Buffer.byteLength(text, 'utf8') / BYTES_PER_TOKEN);
 }
 

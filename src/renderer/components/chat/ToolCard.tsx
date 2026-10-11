@@ -88,7 +88,7 @@ function OutputPart({ part }: { part: ToolOutputPart }) {
   );
 }
 
-export function DiffView({ path, diff, added, removed }: { path: string; diff: string; added: number; removed: number }) {
+function DiffView({ path, diff, added, removed }: { path: string; diff: string; added: number; removed: number }) {
   const lines = diff.split('\n');
   return (
     <div className="diff">

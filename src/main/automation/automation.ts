@@ -12,7 +12,7 @@ export const CONTINUATION_MARKER = 'This chat continues earlier work that was mo
 
 const HELPER_TIMEOUT_MS = 10 * 60_000;
 
-export interface AutomationDeps {
+interface AutomationDeps {
   store: SessionStore;
   outbox: Outbox;
   getConfig(): Config;

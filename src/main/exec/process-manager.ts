@@ -19,7 +19,7 @@ const POST_EXIT_CLOSE_MS = 50;
 const INTERRUPT = '\u0003';
 const FIRST_SESSION_ID = 1000;
 
-export interface ProcessInfo {
+interface ProcessInfo {
   sessionId: string;
   command: string;
   owner: string;

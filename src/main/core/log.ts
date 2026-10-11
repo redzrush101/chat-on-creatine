@@ -33,7 +33,7 @@ function write(level: LogEntry['level'], scope: string, message: string): void {
   }
 }
 
-export interface Logger {
+interface Logger {
   debug(message: string): void;
   info(message: string): void;
   warn(message: string): void;

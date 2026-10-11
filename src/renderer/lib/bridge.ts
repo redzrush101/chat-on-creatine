@@ -14,7 +14,7 @@ function missingBridge(): PreloadBridge {
   };
 }
 
-export const bridge: PreloadBridge = window.creatine ?? missingBridge();
+const bridge: PreloadBridge = window.creatine ?? missingBridge();
 
 export function invoke<C extends RendererChannel>(channel: C, ...args: Parameters<RendererApi[C]>): Promise<Awaited<ReturnType<RendererApi[C]>>> {
   return bridge.invoke(channel, ...args);

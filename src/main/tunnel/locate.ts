@@ -1,9 +1,9 @@
 import { existsSync, statSync, accessSync, constants } from 'node:fs';
 import path from 'node:path';
 
-export type BinaryName = 'tunnel-client' | 'cloudflared';
+type BinaryName = 'tunnel-client' | 'cloudflared';
 
-export interface LocateOptions {
+interface LocateOptions {
   /** Path the user chose in Settings: an executable or the folder containing it. Wins outright when set. */
   explicit: string;
   /** Downloaded copy under the app's user-data folder. */
@@ -12,7 +12,7 @@ export interface LocateOptions {
   resourcesBinDir: string | null;
 }
 
-export function executableName(name: BinaryName, platform: NodeJS.Platform = process.platform): string {
+function executableName(name: BinaryName, platform: NodeJS.Platform = process.platform): string {
   return platform === 'win32' ? `${name}.exe` : name;
 }
 

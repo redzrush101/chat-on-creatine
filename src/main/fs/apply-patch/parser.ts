@@ -14,7 +14,7 @@ const MOVE = '*** Move to: ';
 const END_OF_FILE = '*** End of File';
 const HEREDOC_START = /^<<['"]?EOF['"]?$/;
 
-export interface PatchLine {
+interface PatchLine {
   kind: ' ' | '-' | '+';
   text: string;
 }

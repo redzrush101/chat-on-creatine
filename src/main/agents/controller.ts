@@ -6,7 +6,7 @@ import { type AgentsApi, type Caller, ToolError } from '../mcp/tool';
 import type { Outbox } from '../sessions/outbox';
 import type { SessionStore } from '../sessions/store';
 
-export interface AgentControllerDeps {
+interface AgentControllerDeps {
   store: SessionStore;
   outbox: Outbox;
   getConfig(): Config;

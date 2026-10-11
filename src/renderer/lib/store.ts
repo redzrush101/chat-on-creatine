@@ -28,10 +28,6 @@ export function useAppState(): AppState | null {
   );
 }
 
-export function getAppState(): AppState | null {
-  return appState;
-}
-
 // ---------------------------------------------------------------- session history
 
 const histories = new Map<string, SessionEvent[]>();

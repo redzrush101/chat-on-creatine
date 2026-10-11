@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { BaseWindow, BrowserWindow, WebContentsView, ipcMain, session, shell, type Session, type WebContents } from 'electron';
+import { BaseWindow, WebContentsView, ipcMain, session, shell, type Session, type WebContents } from 'electron';
 import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
 import { conversationIdFromUrl } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
@@ -7,9 +7,9 @@ import type { ChatHost, HostEvents, HostStatus, TabInfo } from './host';
 
 const log = createLogger('browser');
 
-export const PAGE_EVENT_CHANNEL = 'creatine-page:event';
-export const PAGE_COMMAND_CHANNEL = 'creatine-page:command';
-export const PAGE_RESULT_CHANNEL = 'creatine-page:result';
+const PAGE_EVENT_CHANNEL = 'creatine-page:event';
+const PAGE_COMMAND_CHANNEL = 'creatine-page:command';
+const PAGE_RESULT_CHANNEL = 'creatine-page:result';
 
 const PARTITION = 'persist:chatgpt';
 
@@ -358,12 +358,5 @@ export class BuiltinHost implements ChatHost {
     const tab = this.tabsById.get(this.selected);
     const { width, height } = this.window.getContentBounds();
     tab?.view.setBounds({ x: 0, y: 0, width, height });
-  }
-}
-
-/** Used by sign-in popups the window-open handler allows; exported for the shutdown path. */
-export function closeAuxiliaryWindows(): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.webContents.session === session.fromPartition(PARTITION)) window.destroy();
   }
 }

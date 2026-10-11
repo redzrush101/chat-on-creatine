@@ -33,7 +33,7 @@ export interface ApiReply {
   body: unknown;
 }
 
-export interface Text {
+interface Text {
   text: string;
   chars: number;
   truncated: boolean;

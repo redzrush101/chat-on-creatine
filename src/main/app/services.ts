@@ -84,7 +84,7 @@ export interface Services {
   dispose(): Promise<void>;
 }
 
-export interface ServiceHooks {
+interface ServiceHooks {
   version: string;
   /** Something in AppState changed. */
   changed(): void;

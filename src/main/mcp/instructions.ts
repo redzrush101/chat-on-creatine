@@ -2,8 +2,8 @@ import { effectiveCapabilities, CAPABILITIES, type Config } from '@shared/config
 import type { SurfaceId } from '@shared/types';
 import { connectorName } from './surfaces';
 
-export const CONTEXT_OPEN = '<creatine_context>';
-export const CONTEXT_CLOSE = '</creatine_context>';
+const CONTEXT_OPEN = '<creatine_context>';
+const CONTEXT_CLOSE = '</creatine_context>';
 /** UTF-16 ceiling for one message sent into a chat, opening context included. */
 export const MAX_MESSAGE_CHARS = 96_000;
 const MAX_STANDING_CHARS = 8_000;
@@ -78,7 +78,7 @@ export function serverInstructions(surface: SurfaceId, config: Config, codeMode 
   return lines.join('\n');
 }
 
-export interface OpeningContextOptions {
+interface OpeningContextOptions {
   config: Config;
   /** Working folder the chat starts in, or null when none is selected. */
   cwd: string | null;
@@ -94,7 +94,7 @@ const ESCAPED_CLOSE = /<\/creatine_context/gi;
 
 /**
  * The frame prepended to the first message of a new chat. The content is app-authored and the
- * frame is what lets the UI show the user's own words alone (see stripOpeningContext).
+ * recorder strips the frame so the UI shows the user's own words alone.
  */
 export function openingContext(opts: OpeningContextOptions): string {
   const { config } = opts;
@@ -126,13 +126,4 @@ export function openingContext(opts: OpeningContextOptions): string {
   // Nothing app-authored may close the frame early; a stray tag is neutralised, never removed.
   const body = `${head}${agents}`.replace(ESCAPED_CLOSE, (match) => `<\\/${match.slice(2)}`);
   return `${CONTEXT_OPEN}\n${body}\n${CONTEXT_CLOSE}`;
-}
-
-/** Removes a leading opening-context frame so the UI can show only what the user typed. */
-export function stripOpeningContext(text: string): string {
-  const trimmed = text.trimStart();
-  if (!trimmed.startsWith(CONTEXT_OPEN)) return text;
-  const end = trimmed.indexOf(CONTEXT_CLOSE);
-  if (end === -1) return text;
-  return trimmed.slice(end + CONTEXT_CLOSE.length).replace(/^\r?\n\r?\n/, '');
 }

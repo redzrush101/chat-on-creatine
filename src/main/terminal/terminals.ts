@@ -7,7 +7,7 @@ import { defaultShell } from '../exec/shell';
 
 const FLUSH_MS = 16;
 
-export interface TerminalCallbacks {
+interface TerminalCallbacks {
   onData(terminalId: string, data: string): void;
   onExit(terminalId: string, code: number | null): void;
 }

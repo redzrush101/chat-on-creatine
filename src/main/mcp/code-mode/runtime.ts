@@ -15,7 +15,7 @@ export const CODE_MODE_LIMITS = Object.freeze({
   images: 4
 });
 
-export interface CodeModeTool {
+interface CodeModeTool {
   name: string;
   description: string;
 }

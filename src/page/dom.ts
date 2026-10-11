@@ -28,7 +28,6 @@ const SELECTORS = {
   uploadBusy: '[aria-busy="true"], [role="progressbar"], [data-inline-file-uploading]',
   alert: '[role="alert"]',
   dialog: '[role="dialog"], [role="alertdialog"]',
-  loginLink: '[data-testid="login-button"], a[href^="/auth/login"]',
   modelTrigger: [
     '[data-codex-intelligence-trigger]',
     '[data-composer-navigation-target="reasoning"]'
@@ -151,7 +150,7 @@ export function findSendButton(): HTMLButtonElement | null {
   return candidates.length === 1 ? candidates[0]! : null;
 }
 
-export function findStopButton(): HTMLButtonElement | null {
+function findStopButton(): HTMLButtonElement | null {
   for (const selector of SELECTORS.stopButton) {
     const found = first(document.querySelectorAll<HTMLButtonElement>(selector), visible);
     if (found) return found;
@@ -223,12 +222,7 @@ export async function attachFiles(files: File[], timeoutMs = 120_000): Promise<b
   return false;
 }
 
-/** Signed-out heuristics for the page itself; the session endpoint is the authority. */
-export function isSignedOut(): boolean {
-  return location.pathname.startsWith('/auth') || document.querySelector(SELECTORS.loginLink) !== null;
-}
-
-export interface ErrorNotice {
+interface ErrorNotice {
   level: 'warn' | 'error';
   text: string;
 }

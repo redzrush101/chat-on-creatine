@@ -1,7 +1,7 @@
 import type { SessionEvent, ToolOutputPart } from '@shared/types';
 
 /** Rough token count from characters (about four per token). Local accounting only. */
-export function estimateTokens(text: string): number {
+function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 

@@ -23,7 +23,7 @@ const MAX_AUTO_CONTINUES = 3;
 
 export type TurnOutcome = 'done' | 'stopped' | 'error' | 'incomplete';
 
-export interface RouterDeps {
+interface RouterDeps {
   host: ChatHost;
   store: SessionStore;
   recorder: Recorder;

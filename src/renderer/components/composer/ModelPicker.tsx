@@ -31,7 +31,7 @@ const EFFORT_LABEL: Record<ReasoningEffort, string> = {
   pro: 'Pro'
 };
 
-export function modelLabel(catalog: ModelCatalog, model: string | null): string {
+function modelLabel(catalog: ModelCatalog, model: string | null): string {
   const labelOf = (id: string) => catalog.models.find((option) => option.id === id)?.label ?? id;
   if (model) return labelOf(model);
   return catalog.defaultModel ? `Default (${labelOf(catalog.defaultModel)})` : 'Default';

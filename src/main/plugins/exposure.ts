@@ -1,4 +1,4 @@
-export interface ExposureSource {
+interface ExposureSource {
   /** Plugin server id. */
   id: string;
   /** Server name, used as the prefix when a tool name is claimed by several servers. */

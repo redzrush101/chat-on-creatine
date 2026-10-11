@@ -10,14 +10,14 @@ import { exposedNames } from './exposure';
 
 const log = createLogger('plugins');
 
-export const MAX_RECONNECTS = 5;
+const MAX_RECONNECTS = 5;
 const RECONNECT_BASE_MS = 1_000;
 /** A connection that stays up this long resets the reconnect budget. */
 const STABLE_MS = 30_000;
 const START_TIMEOUT_MS = 60_000;
 const TOOL_TIMEOUT_MS = 120_000;
 
-export interface PluginManagerDeps {
+interface PluginManagerDeps {
   getConfig(): Config;
   getSecret(key: SecretKey): string | null;
   /** Called whenever a server's status or tool list changes. */

@@ -13,7 +13,7 @@ export interface Project {
 // ---------------------------------------------------------------- sessions
 
 /** `chat`: a user-facing chat. `worker`: spawned by a prime chat. `helper`: Goal/Loop/handoff helper. */
-export type SessionKind = 'chat' | 'worker' | 'helper';
+type SessionKind = 'chat' | 'worker' | 'helper';
 export type AutomationMode = 'off' | 'goal' | 'loop';
 
 export interface GoalState {
@@ -51,7 +51,7 @@ export interface SessionMeta {
   blocked: boolean;
 }
 
-export type TurnStatus = 'idle' | 'sending' | 'generating' | 'compacting';
+type TurnStatus = 'idle' | 'sending' | 'generating' | 'compacting';
 
 /** Live, non-persisted session status. */
 export interface SessionLive {
@@ -78,7 +78,7 @@ export interface PlanItem {
   status: 'pending' | 'in_progress' | 'completed';
 }
 
-export type ToolStatus = 'running' | 'ok' | 'error';
+type ToolStatus = 'running' | 'ok' | 'error';
 
 /** One block of a recorded tool result, bounded for display. */
 export type ToolOutputPart =
@@ -208,7 +208,7 @@ export interface BrowserStatus {
   detail: string;
 }
 
-export interface UsageInfo {
+interface UsageInfo {
   /** Free text the provider shows, e.g. "Resets in 3h". */
   summary: string | null;
   fetchedAt: number | null;

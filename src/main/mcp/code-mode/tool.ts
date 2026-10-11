@@ -3,7 +3,7 @@ import type { SurfaceId } from '@shared/types';
 import { defineTool, ToolError, type ToolResult, type ToolSpec } from '../tool';
 import { CODE_MODE_LIMITS, runCodeMode } from './runtime';
 
-export const CODE_MODE_DESCRIPTION =
+const CODE_MODE_DESCRIPTION =
   "Run JavaScript to compose this connector's tools. Argument: {code: \"raw JavaScript\"}. " +
   'Inside code, use await tools.<tool_name>(args), await Promise.all([...]), text(value), and image(dataUrlOrMcpImageContent). ' +
   'tools return their normal MCP result objects, including content and isError. Only explicit text/image output reaches the model; ' +
@@ -20,7 +20,7 @@ export function canAddCodeMode(tools: readonly { name: string }[]): boolean {
 }
 
 /** Names a script calls on `tools` (dotted or quoted bracket access) that this surface lacks. */
-export function unknownToolReferences(code: string, available: readonly string[]): string[] {
+function unknownToolReferences(code: string, available: readonly string[]): string[] {
   const names = new Set<string>();
   // Only calls count: `typeof tools.x` or `if (tools.x)` is a script checking, not failing.
   const pattern = /\btools\s*(?:\??\.\s*([A-Za-z_$][\w$]*)|\[\s*(['"`])([^'"`\n]{1,64})\2\s*\])\s*(?:\?\.\s*)?\(/g;

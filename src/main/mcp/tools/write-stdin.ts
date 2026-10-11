@@ -3,7 +3,7 @@ import { effectiveCapabilities } from '@shared/config';
 import { defineTool } from '../tool';
 import { execOwner, execToolResult } from './exec-command';
 
-export const WRITE_STDIN_DESCRIPTION =
+const WRITE_STDIN_DESCRIPTION =
   'Polls or writes to a session returned by exec_command. Empty chars only reads new output and returns as soon as some arrives. Non-empty chars are written to the process input (use \\u0003 chars to interrupt). A process that has exited reports its exit code and output once, then the session is released.';
 
 export const writeStdinTool = defineTool({

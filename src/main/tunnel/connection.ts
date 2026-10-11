@@ -8,7 +8,7 @@ import { startTunnel, type TunnelAdapter, type TunnelHandle } from './tunnel';
 
 const log = createLogger('connection');
 
-export interface ConnectionDeps {
+interface ConnectionDeps {
   getConfig(): Config;
   getSecret(key: SecretKey): string | null;
   server: McpHttpServer;
@@ -29,7 +29,7 @@ interface SurfaceRuntime {
 }
 
 /** Surfaces this config publishes. Desktop and Plugins need their own OpenAI tunnel id. */
-export function enabledSurfaces(config: Config): SurfaceId[] {
+function enabledSurfaces(config: Config): SurfaceId[] {
   const openai = config.connection.kind === 'openai';
   const ids: SurfaceId[] = ['core'];
   if (config.capabilities.browser && (!openai || config.connection.desktopTunnelId.trim())) ids.push('desktop');

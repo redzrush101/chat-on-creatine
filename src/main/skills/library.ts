@@ -90,7 +90,7 @@ export class SkillLibrary {
 }
 
 /** Lowercase letters, digits and `._-`, starting alphanumeric: the form skill ids take in `/id` commands. */
-export function slugify(value: string): string {
+function slugify(value: string): string {
   return value
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')

@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { BrowserWindow, Menu, Tray, app, nativeImage, shell } from 'electron';
 
-export interface WindowOptions {
+interface WindowOptions {
   preloadDir: string;
   resourcesDir: string;
   closeToTray: () => boolean;

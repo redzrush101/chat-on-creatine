@@ -38,7 +38,7 @@ interface Box {
  * Places a panel of `panel` size next to `anchor` inside a viewport. It opens downward when that fits,
  * upward otherwise, and shrinks to the larger side (scrolling internally) when neither side fits.
  */
-export function placeFloating(anchor: DOMRect, panel: Box, align: 'start' | 'end', viewport: Box): Placement {
+function placeFloating(anchor: DOMRect, panel: Box, align: 'start' | 'end', viewport: Box): Placement {
   const spaceBelow = viewport.height - anchor.bottom - GAP - MARGIN;
   const spaceAbove = anchor.top - GAP - MARGIN;
   const fitsBelow = panel.height <= spaceBelow;
@@ -152,7 +152,7 @@ interface MenuListProps {
 }
 
 /** Keyboard-navigable menu list (arrows, Home/End; Enter or Space activates; Escape closes via the anchor). */
-export function MenuList({ entries, onClose }: MenuListProps) {
+function MenuList({ entries, onClose }: MenuListProps) {
   const list = useRef<HTMLDivElement>(null);
   const menuItems = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
 

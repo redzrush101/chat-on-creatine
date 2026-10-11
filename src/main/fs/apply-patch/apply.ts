@@ -11,7 +11,7 @@ import { ToolError, type PathGuard } from '../../mcp/tool';
 import type { Hunk, UpdateChunk } from './parser';
 import { seekSequence } from './seek';
 
-export interface PatchPlan {
+interface PatchPlan {
   /** Summary lines in Codex order: added, modified, deleted. */
   added: string[];
   modified: string[];
@@ -22,7 +22,7 @@ export interface PatchPlan {
   writes: Map<string, string | null>;
 }
 
-export interface FileChange {
+interface FileChange {
   path: string;
   diff: string;
   added: number;
@@ -201,7 +201,7 @@ interface Replacement {
 }
 
 /** Applies update chunks to file text, keeping the file's line endings and final-newline state. */
-export function applyChunks(content: string, chunks: readonly UpdateChunk[], display: string): string {
+function applyChunks(content: string, chunks: readonly UpdateChunk[], display: string): string {
   const source = splitLines(content);
   const finalNewline = content === '' || content.endsWith('\n');
   const preferred = source.find((line) => line.eol !== '')?.eol ?? '\n';
@@ -305,7 +305,7 @@ const LCS_CELL_LIMIT = 2_000_000;
 type Op = { tag: ' ' | '-' | '+'; text: string };
 
 /** Unified diff plus added and removed line counts for one file. */
-export function describeChange(display: string, before: string | null, after: string | null): Omit<FileChange, 'path'> {
+function describeChange(display: string, before: string | null, after: string | null): Omit<FileChange, 'path'> {
   const ops = diffLines(toLines(before ?? ''), toLines(after ?? ''));
   const added = ops.filter((op) => op.tag === '+').length;
   const removed = ops.filter((op) => op.tag === '-').length;

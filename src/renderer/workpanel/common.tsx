@@ -39,10 +39,6 @@ export function formatBytes(size: number): string {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function joinPath(dir: string, name: string): string {
-  return dir.endsWith('/') || dir.endsWith('\\') ? `${dir}${name}` : `${dir}/${name}`;
-}
-
 /** The path relative to the folder it sits in, or the full path when it is outside. */
 export function relativeTo(root: string, path: string): string {
   const prefix = root.endsWith('/') ? root : `${root}/`;

@@ -71,7 +71,7 @@ export function imageMimeOf(filePath: string, head: Buffer): ImageMime | null {
   return sniffImage(head);
 }
 
-export interface TextWindow {
+interface TextWindow {
   /** Numbered lines, `N<TAB>text`, within the byte budget. */
   text: string;
   firstLine: number;
@@ -140,7 +140,7 @@ export async function readTextWindow(
   };
 }
 
-export interface DirectoryEntry {
+interface DirectoryEntry {
   name: string;
   kind: 'dir' | 'file' | 'link' | 'other';
   bytes: number | null;
