@@ -1,15 +1,9 @@
 (() => {
-  // src/shared/errors.ts
-  function errorMessage(error) {
-    return error instanceof Error ? error.message : String(error);
-  }
-
   // src/page/tap.ts
   function installFetchTap(channel) {
     const flag = `__chatOnCreatineTap_${channel}`;
-    const host = window;
-    if (host[flag]) return;
-    host[flag] = true;
+    if (Reflect.get(window, flag)) return;
+    Reflect.set(window, flag, true);
     const original = window.fetch;
     const endsWithConversation = (pathname) => pathname.endsWith("/backend-api/f/conversation") || pathname.endsWith("/backend-api/conversation");
     const post = (payload) => {
@@ -38,7 +32,7 @@
           kind: "error",
           streamId,
           requestId,
-          error: errorMessage(error)
+          error: error instanceof Error ? error.message : String(error)
         });
       }
     };
