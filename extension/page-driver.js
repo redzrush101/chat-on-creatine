@@ -454,6 +454,7 @@
       box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
     };
     const matches = () => compact(composerText(box)) === compact(text);
+    if (matches()) return true;
     const attempts = text.length > 2e3 ? [paste, insert] : [insert, paste];
     for (const attempt of attempts) {
       clear();
@@ -673,10 +674,11 @@
         return fail("failed", "attachments did not finish uploading");
       }
       const sendable = () => {
+        if (!setComposerText(text)) return false;
         const button = findSendButton();
         return button !== null && !button.disabled && button.getAttribute("aria-disabled") !== "true";
       };
-      if (!await waitFor(sendable, files.length > 0 ? 1500 : 5e3) && files.length === 0) return fail("not-ready", "send button is not available");
+      if (!await waitFor(sendable, files.length > 0 ? 1500 : 15e3) && files.length === 0) return fail("not-ready", "send button is not available");
       const started = this.streams.waitForStart(2e4);
       if (!clickSend()) return fail("failed", "send button could not be clicked");
       const value = await started;

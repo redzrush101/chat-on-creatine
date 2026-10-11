@@ -60,11 +60,13 @@ export class PageCommands {
       return fail('failed', 'attachments did not finish uploading');
     }
     const sendable = (): boolean => {
+      // Hydration can replace the editor after it first accepts the draft.
+      if (!dom.setComposerText(text)) return false;
       const button = dom.findSendButton();
       return button !== null && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
     };
     // With attachments the button may not be identifiable; clickSend then submits with Enter.
-    if (!(await waitFor(sendable, files.length > 0 ? 1_500 : 5_000)) && files.length === 0) return fail('not-ready', 'send button is not available');
+    if (!(await waitFor(sendable, files.length > 0 ? 1_500 : 15_000)) && files.length === 0) return fail('not-ready', 'send button is not available');
     // Register before clicking: the stream can start before the click returns.
     const started = this.streams.waitForStart(20_000);
     if (!dom.clickSend()) return fail('failed', 'send button could not be clicked');

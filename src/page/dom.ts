@@ -119,6 +119,7 @@ export function setComposerText(text: string): boolean {
     box.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }));
   };
   const matches = (): boolean => compact(composerText(box)) === compact(text);
+  if (matches()) return true;
 
   const attempts = text.length > 2000 ? [paste, insert] : [insert, paste];
   for (const attempt of attempts) {
