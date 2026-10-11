@@ -1,3 +1,4 @@
+import { handoffPrompt } from '@shared/config';
 import { randomUUID } from 'node:crypto';
 import type { Config } from '@shared/config';
 import type { AutomationMode, GoalState, InputItem, SessionEvent, SessionMeta } from '@shared/types';
@@ -273,7 +274,7 @@ export class Automation {
     this.deps.outbox.enqueue({
       id: itemId,
       sessionId,
-      text: this.deps.getConfig().context.handoffPrompt,
+      text: handoffPrompt(this.deps.getConfig()),
       attachments: [],
       delivery: 'after-turn',
       source: 'automation'

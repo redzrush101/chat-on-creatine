@@ -106,9 +106,10 @@ export const configSchema = z.object({
       /** Estimated tokens after which a chat is considered long. */
       advisoryTokens: z.number().int().min(10_000).default(400_000),
       autoCompact: z.boolean().default(true),
-      handoffPrompt: z.string().default(DEFAULT_HANDOFF_PROMPT)
+      /** Empty means the built-in prompt, so improvements to it reach existing installs. */
+      handoffPrompt: z.string().default('')
     })
-    .default(() => ({ advisoryTokens: 400_000, autoCompact: true, handoffPrompt: DEFAULT_HANDOFF_PROMPT })),
+    .default(() => ({ advisoryTokens: 400_000, autoCompact: true, handoffPrompt: '' })),
   agents: z
     .object({
       enabled: z.boolean().default(true),
@@ -205,6 +206,10 @@ export function parseConfig(raw: unknown): Config {
 }
 
 export type DeepPartial<T> = T extends readonly unknown[] ? T : T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T;
+
+export function handoffPrompt(config: Config): string {
+  return config.context.handoffPrompt.trim() || DEFAULT_HANDOFF_PROMPT;
+}
 
 /** Effective capabilities after read-only mode masks every mutating permission. */
 export function effectiveCapabilities(config: Config): Capabilities {

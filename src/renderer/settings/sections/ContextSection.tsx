@@ -52,14 +52,14 @@ export function ContextSection({ state }: { state: AppState }): JSX.Element {
             label="Handoff prompt"
             rows={8}
             mono
-            value={context.handoffPrompt}
-            onCommit={(handoffPrompt) => save({ context: { handoffPrompt } })}
+            value={context.handoffPrompt || DEFAULT_HANDOFF_PROMPT}
+            onCommit={(handoffPrompt) => save({ context: { handoffPrompt: handoffPrompt.trim() === DEFAULT_HANDOFF_PROMPT ? '' : handoffPrompt } })}
           />
           <div className="st-actions">
             <Button
               variant="ghost"
-              disabled={context.handoffPrompt === DEFAULT_HANDOFF_PROMPT}
-              onClick={() => save({ context: { handoffPrompt: DEFAULT_HANDOFF_PROMPT } })}
+              disabled={!context.handoffPrompt}
+              onClick={() => save({ context: { handoffPrompt: '' } })}
             >
               Reset to default
             </Button>

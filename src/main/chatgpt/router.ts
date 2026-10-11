@@ -86,9 +86,9 @@ export class ChatRouter {
   private readonly userStopped = new Set<string>();
   /** Conversation streams that started and have not ended, per session. */
   private readonly openStreams = new Map<string, Set<string>>();
-  /** Inputs steered into tool results during the running turn, and whether ChatGPT's code runner was used. */
+  /** Inputs steered into tool results during the running turn. */
   private readonly steeredThisTurn = new Map<string, InputItem[]>();
-  private readonly codeRunnerTurns = new Set<string>();
+
   /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
   private readonly currentTurnIds = new Map<string, string>();
   private gcTimer: NodeJS.Timeout | null = null;
@@ -202,15 +202,13 @@ export class ChatRouter {
   }
 
   /**
-   * When ChatGPT ran its own code runner, tool results land in its sandbox and the model only sees
-   * what its code prints, so a steered message may never have been read. Send it again as a normal
-   * follow-up, worded so a model that already handled it just confirms.
+   * Models treat tool output as data, not instructions, and ChatGPT's code runner may never print
+   * it, so a message steered into a tool result is not reliably acted on. After the turn it is sent
+   * again as a real user message, worded so a model that already handled it just confirms.
    */
   private resendUnseenSteering(session: SessionMeta): void {
     const steered = this.steeredThisTurn.get(session.id) ?? [];
     this.steeredThisTurn.delete(session.id);
-    const codeRunner = this.codeRunnerTurns.delete(session.id);
-    if (!codeRunner) return;
     for (const item of steered) {
       this.deps.outbox.enqueue({
         sessionId: session.id,
@@ -339,7 +337,6 @@ export class ChatRouter {
       case 'message':
         this.indexMessage(sessionId, event.message);
         if (event.message.turnId) this.currentTurnIds.set(sessionId, event.message.turnId);
-        if (event.message.authorName === 'functions.exec' || event.message.recipient === 'functions.exec') this.codeRunnerTurns.add(sessionId);
         if (event.message.role === 'assistant' && /partial|incomplete/.test(event.message.status)) this.incompleteTurns.add(sessionId);
         this.patchLive(sessionId, { lastActivityAt: Date.now() });
         break;
