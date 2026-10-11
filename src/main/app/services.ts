@@ -97,6 +97,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const config = new ConfigStore(paths.config);
   const getConfig = (): Config => config.get();
   const secrets = new SecretStore(paths.secrets, safeCipher);
+  secrets.upgrade();
   const store = new SessionStore(paths.sessions, { recording: () => getConfig().sessions.recording });
   store.load();
   store.prune(getConfig().sessions.retentionDays);

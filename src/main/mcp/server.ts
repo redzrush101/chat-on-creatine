@@ -146,7 +146,7 @@ export class McpHttpServer {
               requestIdFromHeader(ctx.requestInfo?.headers.get('x-request-id') ?? undefined),
               ctx.requestInfo?.signal ?? new AbortController().signal
             ),
-          { responseMode: 'json', maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.warn(`${surface}: ${error.message}`) }
+          { maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.warn(`${surface}: ${error.message}`) }
         ),
         { maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.error(`${surface} handler failed`, error) }
       )
@@ -257,7 +257,8 @@ export class McpHttpServer {
     }
 
     res.on('finish', () => {
-      if (res.statusCode < 400) return;
+      // Stateless serving answers the 2025-era GET stream probe with 405; that is expected.
+      if (res.statusCode < 400 || (method === 'GET' && res.statusCode === 405)) return;
       const rpc = body && typeof body === 'object' && 'method' in body ? String((body as { method: unknown }).method) : '-';
       log.warn(
         `${surface} ${method} ${rpc} → HTTP ${res.statusCode} (protocol ${req.headers['mcp-protocol-version'] ?? '-'}, accept ${req.headers.accept ?? '-'}, content-type ${req.headers['content-type'] ?? '-'})`

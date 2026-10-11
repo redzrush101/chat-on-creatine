@@ -11,6 +11,11 @@ import { createMainWindow, createTray } from './app/window';
 
 const log = createLogger('app');
 app.setName('Chat on Creatine');
+// Electron picks plain-text secret storage on desktops it does not recognise (Hyprland, Sway…);
+// ask for the Secret Service keyring explicitly unless the user chose a store.
+if (process.platform === 'linux' && !app.commandLine.hasSwitch('password-store')) {
+  app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+}
 if (process.env.CREATINE_USER_DATA) app.setPath('userData', process.env.CREATINE_USER_DATA);
 
 if (!app.requestSingleInstanceLock()) {

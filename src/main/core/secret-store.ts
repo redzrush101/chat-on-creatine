@@ -28,6 +28,16 @@ export class SecretStore {
     this.data = readJsonSync<Record<string, StoredSecret>>(path, {});
   }
 
+  /** Re-encrypts values stored in plain text while no keychain was available. Call after app ready. */
+  upgrade(): void {
+    if (!this.cipher.available()) return;
+    const plain = Object.entries(this.data).filter(([, stored]) => stored.enc === 'plain');
+    if (!plain.length) return;
+    for (const [key, stored] of plain) this.data[key] = { enc: 'safe', value: this.cipher.encrypt(stored.value) };
+    void writeJson(this.path, this.data);
+    log.info(`encrypted ${plain.length} stored secret(s) with the OS keychain`);
+  }
+
   get(key: SecretKey): string | null {
     const stored = this.data[key];
     if (!stored) return null;
