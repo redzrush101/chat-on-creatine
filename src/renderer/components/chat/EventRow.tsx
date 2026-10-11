@@ -25,7 +25,7 @@ export const EventRow = memo(function EventRow({ event, actions }: EventRowProps
   switch (event.kind) {
     case 'user':
       return (
-        <div className="msg msg-user">
+        <div className="msg msg-user" data-event-id={event.id}>
           <div className="bubble">{event.text}</div>
           {event.attachments.length > 0 && (
             <div className="attachments">
@@ -50,7 +50,7 @@ export const EventRow = memo(function EventRow({ event, actions }: EventRowProps
         </div>
       );
     case 'assistant':
-      return <AssistantText text={event.text} citations={event.citations} streaming={event.streaming} final={event.channel === 'final'} />;
+      return <AssistantText id={event.id} text={event.text} citations={event.citations} streaming={event.streaming} final={event.channel === 'final'} />;
     case 'reasoning':
       return (
         <details className="reasoning" open={event.streaming || undefined}>
@@ -152,11 +152,11 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   );
 }
 
-function AssistantText({ text, citations, streaming, final }: { text: string; citations: Citation[] | undefined; streaming: boolean; final: boolean }) {
+function AssistantText({ id, text, citations, streaming, final }: { id: string; text: string; citations: Citation[] | undefined; streaming: boolean; final: boolean }) {
   const sources = useContext(SourcesContext);
   const html = useMemo(() => renderMarkdown(resolveMarkers(text, citations, sources)), [text, citations, sources]);
   return (
-    <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')}>
+    <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')} data-event-id={id}>
       <div className="md" dangerouslySetInnerHTML={{ __html: html }} />
       {streaming && <span className="caret" aria-hidden="true" />}
       {final && !streaming && text.trim() && (

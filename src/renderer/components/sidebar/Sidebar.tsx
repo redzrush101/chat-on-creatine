@@ -49,13 +49,15 @@ interface SidebarProps {
   searchNonce: number;
   history: NavHistory;
   onSelect(sessionId: string): void;
+  /** Opens a chat at one message, for a search hit. */
+  onOpenHit(sessionId: string, eventId: string): void;
   onNewChat(projectId: string | null): void;
   onCollapse(): void;
   onOpenSettings(section?: string): void;
   onSessionDeleted(sessionId: string): void;
 }
 
-function useSidebarSearch(searchRef: RefObject<HTMLInputElement | null>, onSelect: (sessionId: string) => void) {
+function useSidebarSearch(searchRef: RefObject<HTMLInputElement | null>, onOpenHit: (sessionId: string, eventId: string) => void) {
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const runSearch = () => {
@@ -80,10 +82,10 @@ function useSidebarSearch(searchRef: RefObject<HTMLInputElement | null>, onSelec
     }
   };
 
-  const openHit = (sessionId: string) => {
+  const openHit = (hit: SearchHit) => {
     setHits(null);
     setQuery('');
-    onSelect(sessionId);
+    onOpenHit(hit.sessionId, hit.eventId);
   };
 
   return { query, setQuery, hits, setHits, onSearchKeyDown, openHit };
@@ -97,8 +99,8 @@ const MORE_SECTIONS = [
   { id: 'appearance', label: 'Appearance', icon: Palette }
 ] as const;
 
-export function Sidebar({ app, selectedId, searchRef, searchNonce, history, onSelect, onNewChat, onCollapse, onOpenSettings, onSessionDeleted }: SidebarProps) {
-  const { query, setQuery, hits, setHits, onSearchKeyDown, openHit } = useSidebarSearch(searchRef, onSelect);
+export function Sidebar({ app, selectedId, searchRef, searchNonce, history, onSelect, onOpenHit, onNewChat, onCollapse, onOpenSettings, onSessionDeleted }: SidebarProps) {
+  const { query, setQuery, hits, setHits, onSearchKeyDown, openHit } = useSidebarSearch(searchRef, onOpenHit);
   const [collapsed, setCollapsed] = useStoredState<Record<string, boolean>>('creatine.sidebar.collapsed', {});
   const [moreOpen, setMoreOpen] = useStoredState('creatine.sidebar.more', false);
   const [renamingProject, setRenamingProject] = useState<string | null>(null);
@@ -232,7 +234,7 @@ export function Sidebar({ app, selectedId, searchRef, searchNonce, history, onSe
                 </div>
                 {hits.length === 0 && <p className="sidebar-empty">No messages match.</p>}
                 {hits.map((hit) => (
-                  <button key={`${hit.sessionId}:${hit.eventId}`} type="button" className="search-hit" onClick={() => openHit(hit.sessionId)}>
+                  <button key={`${hit.sessionId}:${hit.eventId}`} type="button" className="search-hit" onClick={() => openHit(hit)}>
                     <span className="search-hit-title">{sessionById.get(hit.sessionId)?.title || 'New chat'}</span>
                     <span className="search-hit-snippet">{hit.snippet}</span>
                   </button>

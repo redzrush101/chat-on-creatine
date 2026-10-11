@@ -23,6 +23,8 @@ interface ChatViewProps {
   onOpenSession(sessionId: string): void;
   onOpenSettings(section?: string): void;
   onDeleted(sessionId: string): void;
+  /** A search hit in this chat to scroll to. */
+  found: { eventId: string; at: number } | null;
 }
 
 export function ChatView({
@@ -37,7 +39,8 @@ export function ChatView({
   onPanel,
   onOpenSession,
   onOpenSettings,
-  onDeleted
+  onDeleted,
+  found
 }: ChatViewProps) {
   const events = useSessionEvents(session.id);
   const live = app.live[session.id];
@@ -50,7 +53,7 @@ export function ChatView({
   return (
     <section className="chat" aria-label="Chat">
       <TopBar app={app} session={session} sidebarOpen={sidebarOpen} panel={panel} onToggleSidebar={onToggleSidebar} onPanel={onPanel} onDeleted={onDeleted} />
-      <Timeline sessionId={session.id} events={events} busy={busy} followNonce={followNonce} actions={actions} />
+      <Timeline sessionId={session.id} events={events} busy={busy} followNonce={followNonce} found={found} actions={actions} />
       <Composer
         key={session.id}
         app={app}

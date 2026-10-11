@@ -120,14 +120,20 @@ export function App() {
     setSettings(null);
   };
 
+  const [found, setFound] = useState<{ sessionId: string; eventId: string; at: number } | null>(null);
   const openLatest = useRef((sessionId: string) => void sessionId);
   openLatest.current = (sessionId: string) => {
     setSettings(null);
     setOverlayOpen(false);
+    setFound(null);
     visit(sessionId);
   };
   // Stable identity: timeline rows are memoized and receive it.
   const openSession = useCallback((sessionId: string) => openLatest.current(sessionId), []);
+  const openHit = (sessionId: string, eventId: string) => {
+    openSession(sessionId);
+    setFound({ sessionId, eventId, at: Date.now() });
+  };
   const onSessionDeleted = (sessionId: string) => {
     if (sessionId === selectedId) setSelectedId(null);
   };
@@ -216,6 +222,7 @@ export function App() {
               forward: () => step(1)
             }}
             onSelect={openSession}
+            onOpenHit={openHit}
             onNewChat={(projectId) => {
               setDraft((current) => ({ ...current, projectId }));
               openNewChat();
@@ -253,6 +260,7 @@ export function App() {
             onOpenSession={openSession}
             onOpenSettings={(section) => setSettings({ section })}
             onDeleted={onSessionDeleted}
+            found={found?.sessionId === session.id ? found : null}
           />
         ) : (
           <Home

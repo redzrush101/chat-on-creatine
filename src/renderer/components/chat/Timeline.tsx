@@ -15,10 +15,12 @@ interface TimelineProps {
   busy: boolean;
   /** Changes when the user sends something: the view jumps to the bottom. */
   followNonce: number;
+  /** A message to scroll to and mark once its row has rendered; `at` tells repeated opens apart. */
+  found: { eventId: string; at: number } | null;
   actions: EventActions;
 }
 
-export function Timeline({ sessionId, events, busy, followNonce, actions }: TimelineProps) {
+export function Timeline({ sessionId, events, busy, followNonce, found, actions }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -38,6 +40,20 @@ export function Timeline({ sessionId, events, busy, followNonce, actions }: Time
     const node = scroller.current;
     if (node && stuck.current) node.scrollTop = node.scrollHeight;
   }, [blocks]);
+
+  const shownFound = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const node = scroller.current;
+    if (!found || !node || shownFound.current === found.at) return;
+    const row = node.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(found.eventId)}"]`);
+    if (!row) return;
+    shownFound.current = found.at;
+    stuck.current = false;
+    setAtBottom(false);
+    row.scrollIntoView({ block: 'center' });
+    row.classList.add('is-found');
+    window.setTimeout(() => row.classList.remove('is-found'), 2000);
+  }, [found, blocks]);
 
   // Resizing the window re-wraps text and can fire a scroll that unpins the view; keep it at the bottom while pinned.
   useEffect(() => {

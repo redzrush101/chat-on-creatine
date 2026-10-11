@@ -178,6 +178,13 @@
   line-height: 1.6;
 }
 
+/* The message a search hit opened, marked for a moment after the jump. */
+.msg.is-found {
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 6px var(--accent-soft);
+  background: var(--accent-soft);
+}
+
 .caret {
   display: inline-block;
   width: 8px;
