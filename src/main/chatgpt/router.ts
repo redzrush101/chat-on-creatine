@@ -11,13 +11,10 @@ import type { Recorder } from '../sessions/recorder';
 import type { SessionStore } from '../sessions/store';
 import { contextTokens } from '../sessions/tokens';
 import type { ChatHost } from './host';
+import { CallerAttribution } from './attribution';
 
 const log = createLogger('router');
 
-/** How long an MCP call may wait for the page to report the message that issued it. */
-const ATTRIBUTION_WAIT_MS = 2_500;
-/** Index entries older than this cannot attribute new calls. */
-const INDEX_TTL_MS = 6 * 60 * 60_000;
 /** A page that stopped generating without a stream end is treated as idle after this. */
 const GENERATING_SETTLE_MS = 6_000;
 const MAX_AUTO_CONTINUES = 3;
@@ -41,30 +38,6 @@ interface RouterDeps {
   onLiveChange(): void;
 }
 
-interface IndexEntry {
-  sessionId: string;
-  conversationId: string;
-  at: number;
-}
-
-interface PendingCall extends IndexEntry {
-  tool: string;
-  argsKey: string;
-  /** The streamed call message, or null for an MCP call that arrived before its message. */
-  messageId: string | null;
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value as object)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value ?? null);
-}
-
 /**
  * Binds ChatGPT tabs to local sessions and moves work between them: delivers queued inputs,
  * routes page events to the recorder, tracks live turn state and attributes MCP tool calls to
@@ -74,11 +47,7 @@ export class ChatRouter {
   private readonly tabSession = new Map<string, string>();
   private readonly sessionTab = new Map<string, string>();
   private readonly live = new Map<string, SessionLive>();
-  private readonly requestIndex = new Map<string, IndexEntry>();
-  private pendingCalls: PendingCall[] = [];
-  /** MCP calls attributed before ChatGPT streamed their call message; that message is ours when it comes. */
-  private earlyCalls: PendingCall[] = [];
-  private readonly messageWaiters = new Set<() => void>();
+  private readonly attribution: CallerAttribution;
   private readonly pumping = new Set<string>();
   private readonly settleTimers = new Map<string, NodeJS.Timeout>();
   private readonly autoContinues = new Map<string, number>();
@@ -95,6 +64,11 @@ export class ChatRouter {
   private gcTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: RouterDeps) {
+    this.attribution = new CallerAttribution({
+      callerFor: (id) => this.callerFor(id),
+      generatingSessions: () => [...this.live.values()].filter((live) => live.turn === 'generating').map((live) => live.sessionId),
+      markOwnCall: (id, messageId) => deps.recorder.markOwnCall(id, messageId)
+    });
     deps.host.setListener({
       page: (tabId, event) => this.onPage(tabId, event),
       closed: (tabId) => this.unbindTab(tabId),
@@ -170,27 +144,8 @@ export class ChatRouter {
     return tabId;
   }
 
-  /**
-   * Finds the chat behind an MCP tool call. The `x-request-id` join key matches the
-   * `request_id` ChatGPT puts on the messages of that request; a call message with the same
-   * tool and arguments is the second proof; a single generating chat is the last resort.
-   */
-  async resolveCaller(requestId: string | null, call: { tool: string; args: unknown }): Promise<Caller | null> {
-    const argsKey = canonicalJson(call.args ?? {});
-    const deadline = Date.now() + ATTRIBUTION_WAIT_MS;
-    for (;;) {
-      const entry = this.lookup(requestId, call.tool, argsKey);
-      if (entry) return this.claim(entry, call.tool, argsKey);
-      if (Date.now() >= deadline) break;
-      await this.nextMessage(Math.max(50, deadline - Date.now()));
-    }
-    const generating = [...this.live.values()].filter((live) => live.turn === 'generating');
-    if (generating.length === 1) {
-      const sessionId = generating[0]!.sessionId;
-      return this.claim({ sessionId, conversationId: '', at: Date.now() }, call.tool, argsKey);
-    }
-    log.info(`unattributed ${call.tool} call (request ${requestId ?? 'none'}, ${generating.length} chats generating)`);
-    return null;
+  resolveCaller(requestId: string | null, call: { tool: string; args: unknown }): Promise<Caller | null> {
+    return this.attribution.resolve(requestId, call);
   }
 
   /** Inputs handed to the model inside a tool result during the current turn. */
@@ -222,78 +177,10 @@ export class ChatRouter {
     this.patchLive(sessionId, { runningTools: Math.max(0, live.runningTools + delta), lastActivityAt: Date.now() });
   }
 
-  private lookup(requestId: string | null, tool: string, argsKey: string): IndexEntry | null {
-    const now = Date.now();
-    if (requestId) {
-      const hit = this.requestIndex.get(requestId);
-      if (hit && now - hit.at < INDEX_TTL_MS) return hit;
-    }
-    return this.pendingCalls.find((pending) => pending.tool === tool && pending.argsKey === argsKey) ?? null;
-  }
-
-  /**
-   * Builds the caller and ties the call to ChatGPT's streamed call message, so the timeline shows
-   * one event: the server's, under the message's id. A call that beats its message is remembered
-   * and its message is marked as ours on arrival.
-   */
-  private claim(entry: IndexEntry, tool: string, argsKey: string): Caller | null {
-    const caller = this.callerFor(entry.sessionId);
-    if (!caller) return null;
-    const index = this.pendingCalls.findIndex((pending) => pending.sessionId === entry.sessionId && pending.tool === tool && pending.argsKey === argsKey);
-    if (index >= 0) {
-      const [pending] = this.pendingCalls.splice(index, 1);
-      if (pending!.messageId) {
-        this.deps.recorder.markOwnCall(entry.sessionId, pending!.messageId);
-        return { ...caller, streamCallId: pending!.messageId };
-      }
-    }
-    this.earlyCalls.push({ sessionId: entry.sessionId, conversationId: caller.conversationId, at: Date.now(), tool, argsKey, messageId: null });
-    this.earlyCalls = this.earlyCalls.slice(-50);
-    return caller;
-  }
-
   private callerFor(sessionId: string): Caller | null {
     const session = this.deps.store.get(sessionId);
     if (!session || !session.conversationId) return null;
     return { sessionId, conversationId: session.conversationId, cwd: this.deps.sessionCwd(session), kind: session.kind };
-  }
-
-  private nextMessage(timeoutMs: number): Promise<void> {
-    return new Promise((resolve) => {
-      const done = () => {
-        clearTimeout(timer);
-        this.messageWaiters.delete(done);
-        resolve();
-      };
-      const timer = setTimeout(done, timeoutMs);
-      this.messageWaiters.add(done);
-    });
-  }
-
-  private indexMessage(sessionId: string, message: ChatMessage): void {
-    const now = Date.now();
-    if (message.requestId) this.requestIndex.set(message.requestId, { sessionId, conversationId: message.conversationId, at: now });
-    if (message.role === 'assistant' && message.recipient === 'api_tool.call_tool' && message.status !== 'in_progress') {
-      try {
-        const parsed = JSON.parse(message.text) as { path?: string; args?: unknown };
-        const tool = parsed.path?.split('/').filter(Boolean).at(-1);
-        const argsKey = canonicalJson(parsed.args ?? {});
-        const early = this.earlyCalls.findIndex((call) => call.sessionId === sessionId && call.tool === tool && call.argsKey === argsKey);
-        if (early >= 0) {
-          this.earlyCalls.splice(early, 1);
-          this.deps.recorder.markOwnCall(sessionId, message.id);
-        } else if (tool && !this.pendingCalls.some((call) => call.messageId === message.id)) {
-          this.pendingCalls.push({ sessionId, conversationId: message.conversationId, at: now, tool, argsKey, messageId: message.id });
-        }
-      } catch {
-        // Partial or non-JSON call text; the request id still attributes it.
-      }
-    }
-    this.pendingCalls = this.pendingCalls.filter((call) => now - call.at < 5 * 60_000).slice(-200);
-    if (this.requestIndex.size > 5_000) {
-      for (const [key, entry] of this.requestIndex) if (now - entry.at > INDEX_TTL_MS) this.requestIndex.delete(key);
-    }
-    for (const waiter of [...this.messageWaiters]) waiter();
   }
 
   private onPage(tabId: string, event: PageEvent): void {
@@ -330,7 +217,7 @@ export class ChatRouter {
         this.patchLive(sessionId, { turn: 'generating', lastActivityAt: Date.now() });
         break;
       case 'message':
-        this.indexMessage(sessionId, event.message);
+        this.attribution.noteMessage(sessionId, event.message);
         if (event.message.turnId) this.currentTurnIds.set(sessionId, event.message.turnId);
         if (event.message.role === 'assistant' && /partial|incomplete/.test(event.message.status)) this.incompleteTurns.add(sessionId);
         this.patchLive(sessionId, { lastActivityAt: Date.now() });
