@@ -3,14 +3,13 @@ import { WebSocket, WebSocketServer, type RawData } from 'ws';
 import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
 import { conversationIdFromUrl } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
-import type { ChatHost, HostEvents, HostStatus, TabInfo } from './host';
+import type { ChatHost, HostStatus } from './host';
+import { newTabInfo, TabHost, type HostTab } from './tab-host';
 
 const log = createLogger('extension');
 
 const HELLO_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 15_000;
-const COMMAND_TIMEOUT_MS = 30_000;
-const READY_WAIT_MAX_MS = 45_000;
 const MAX_PAYLOAD_BYTES = 64 * 1024 * 1024;
 const CLOSE_UNAUTHORIZED = 4401;
 const CLOSE_REPLACED = 4000;
@@ -43,17 +42,9 @@ type Request =
   | { type: 'tab-reveal'; tabId: string }
   | { type: 'command'; tabId: string; command: PageCommand };
 
-interface Tab {
-  info: TabInfo;
+interface Tab extends HostTab {
   /** Last loading state the extension reported; a new load resets the driver until it says hello. */
   loading: boolean;
-  readyWaiters: Array<() => void>;
-}
-
-interface Pending {
-  tabId: string | null;
-  resolve(result: PageResult): void;
-  timer: NodeJS.Timeout;
 }
 
 /**
@@ -61,20 +52,16 @@ interface Pending {
  * The extension connects to a loopback WebSocket; the first connection is paired with a token
  * the app stores, and every later one must present it. Tabs are the ones the app opened.
  */
-export class ExtensionHost implements ChatHost {
+export class ExtensionHost extends TabHost<Tab> implements ChatHost {
   readonly kind = 'extension' as const;
   private server: WebSocketServer | null = null;
   /** The one authenticated connection; a newer one replaces it. */
   private socket: WebSocket | null = null;
   private token: string | null;
   private pairingOpen: boolean;
-  private readonly tabsById = new Map<string, Tab>();
-  private readonly pending = new Map<string, Pending>();
-  private selected: string | null = null;
-  private listener: HostEvents | null = null;
-  private signedIn: boolean | null = null;
 
   constructor(private readonly deps: ExtensionHostDeps) {
+    super();
     this.token = deps.loadToken();
     this.pairingOpen = this.token === null;
   }
@@ -88,10 +75,6 @@ export class ExtensionHost implements ChatHost {
   /** Accepts a new pairing, e.g. when the user re-pairs a browser. */
   openPairing(): void {
     this.pairingOpen = true;
-  }
-
-  setListener(events: HostEvents): void {
-    this.listener = events;
   }
 
   async start(): Promise<void> {
@@ -124,7 +107,6 @@ export class ExtensionHost implements ChatHost {
 
   status(): HostStatus {
     const connected = this.socket !== null;
-    const count = this.tabsById.size;
     return {
       ready: this.server !== null,
       signedIn: this.signedIn,
@@ -135,12 +117,8 @@ export class ExtensionHost implements ChatHost {
         ? `Waiting for the Chrome extension on port ${this.listeningPort}.`
         : this.signedIn === false
           ? 'Sign in to ChatGPT in your browser.'
-          : `${count} ChatGPT tab${count === 1 ? '' : 's'} open.`
+          : this.tabCountDetail()
     };
-  }
-
-  tabs(): TabInfo[] {
-    return [...this.tabsById.values()].map((tab) => ({ ...tab.info }));
   }
 
   async openTab(url: string, options: { reveal?: boolean } = {}): Promise<string> {
@@ -169,13 +147,8 @@ export class ExtensionHost implements ChatHost {
     this.forget(tabId);
   }
 
-  async command(tabId: string, command: PageCommand, timeoutMs = COMMAND_TIMEOUT_MS): Promise<PageResult> {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) return { ok: false, error: 'No such tab', code: 'failed' };
-    if (!tab.info.driverReady && !(await this.waitForDriver(tab, Math.min(timeoutMs, READY_WAIT_MAX_MS)))) {
-      return { ok: false, error: 'ChatGPT page did not finish loading', code: 'not-ready' };
-    }
-    return this.request({ type: 'command', tabId, command }, tabId, timeoutMs);
+  protected sendCommand(tab: Tab, command: PageCommand, timeoutMs: number): Promise<PageResult> {
+    return this.request({ type: 'command', tabId: tab.info.tabId, command }, tab.info.tabId, timeoutMs);
   }
 
   reveal(tabId: string | null): void {
@@ -258,14 +231,9 @@ export class ExtensionHost implements ChatHost {
       case 'tabs':
         this.sync(frame.tabs);
         break;
-      case 'result': {
-        const pending = this.pending.get(frame.id);
-        if (!pending) break;
-        this.pending.delete(frame.id);
-        clearTimeout(pending.timer);
-        pending.resolve(frame.result);
+      case 'result':
+        this.settle(frame.id, frame.result);
         break;
-      }
       case 'hello':
         break;
     }
@@ -279,49 +247,13 @@ export class ExtensionHost implements ChatHost {
 
   /** Sends one request and resolves with the extension's result, or with a failure if it cannot be sent or times out. */
   private request(body: Request, tabId: string | null, timeoutMs = REQUEST_TIMEOUT_MS): Promise<PageResult> {
-    const id = randomUUID();
-    return new Promise<PageResult>((resolve) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        resolve({ ok: false, error: `Timed out waiting for the Chrome extension (${body.type})`, code: 'timeout' });
-      }, timeoutMs);
-      this.pending.set(id, { tabId, resolve, timer });
-      if (this.send({ ...body, id })) return;
-      clearTimeout(timer);
-      this.pending.delete(id);
-      resolve({ ok: false, error: 'Chrome extension is not connected', code: 'not-ready' });
-    });
-  }
-
-  private failPending(tabId: string | null, error: string, code: 'failed' | 'not-ready'): void {
-    for (const [id, pending] of this.pending) {
-      if (tabId !== null && pending.tabId !== tabId) continue;
-      clearTimeout(pending.timer);
-      this.pending.delete(id);
-      pending.resolve({ ok: false, error, code });
-    }
-  }
-
-  private requireTab(tabId: string): Tab {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) throw new Error(`No such tab ${tabId}`);
-    return tab;
+    const { id, result } = this.awaitResult(tabId, timeoutMs, `Timed out waiting for the Chrome extension (${body.type})`);
+    if (!this.send({ ...body, id })) this.settle(id, { ok: false, error: 'Chrome extension is not connected', code: 'not-ready' });
+    return result;
   }
 
   private adopt(tabId: string, url: string): Tab {
-    const tab: Tab = {
-      info: {
-        tabId,
-        url,
-        conversationId: conversationIdFromUrl(url),
-        driverReady: false,
-        signedIn: null,
-        generating: false,
-        createdAt: Date.now()
-      },
-      loading: false,
-      readyWaiters: []
-    };
+    const tab: Tab = { info: newTabInfo(tabId, url), loading: false, readyWaiters: [] };
     this.tabsById.set(tabId, tab);
     return tab;
   }
@@ -351,55 +283,6 @@ export class ExtensionHost implements ChatHost {
     if (this.selected === tabId) this.selected = null;
     this.listener?.closed(tabId);
     this.listener?.status();
-  }
-
-  private handlePageEvent(tabId: string, event: PageEvent): void {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) return;
-    switch (event.type) {
-      case 'hello':
-        tab.info.driverReady = true;
-        tab.info.url = event.url;
-        tab.info.conversationId = event.conversationId;
-        if (event.signedIn !== null) this.noteSignedIn(tab, event.signedIn);
-        for (const waiter of tab.readyWaiters.splice(0)) waiter();
-        break;
-      case 'location':
-        tab.info.url = event.url;
-        tab.info.conversationId = event.conversationId;
-        break;
-      case 'auth':
-        this.noteSignedIn(tab, event.signedIn);
-        break;
-      case 'generating':
-        tab.info.generating = event.value;
-        break;
-      default:
-        break;
-    }
-    this.listener?.page(tabId, event);
-  }
-
-  private noteSignedIn(tab: Tab, signedIn: boolean): void {
-    tab.info.signedIn = signedIn;
-    if (this.signedIn === signedIn) return;
-    this.signedIn = signedIn;
-    this.listener?.status();
-  }
-
-  private waitForDriver(tab: Tab, timeoutMs: number): Promise<boolean> {
-    if (tab.info.driverReady) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        tab.readyWaiters = tab.readyWaiters.filter((waiter) => waiter !== done);
-        resolve(false);
-      }, timeoutMs);
-      const done = () => {
-        clearTimeout(timer);
-        resolve(true);
-      };
-      tab.readyWaiters.push(done);
-    });
   }
 }
 

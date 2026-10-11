@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { BaseWindow, WebContentsView, ipcMain, session, shell, type Session, type WebContents } from 'electron';
 import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
-import { conversationIdFromUrl } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
-import type { ChatHost, HostEvents, HostStatus, TabInfo } from './host';
+import type { ChatHost, HostStatus } from './host';
+import { newTabInfo, TabHost, type HostTab } from './tab-host';
 
 const log = createLogger('browser');
 
@@ -34,18 +34,9 @@ function staysInApp(url: string): boolean {
   }
 }
 
-interface Tab {
-  info: TabInfo;
+interface Tab extends HostTab {
   view: WebContentsView;
   title: string;
-  /** Resolvers waiting for the driver to (re)announce itself after a navigation. */
-  readyWaiters: Array<() => void>;
-}
-
-interface PendingCommand {
-  tabId: string;
-  resolve(result: PageResult): void;
-  timer: NodeJS.Timeout;
 }
 
 /**
@@ -53,23 +44,16 @@ interface PendingCommand {
  * WebContentsView per tab. Only the revealed tab is attached to the window; the rest keep
  * running detached with throttling disabled.
  */
-export class BuiltinHost implements ChatHost {
+export class BuiltinHost extends TabHost<Tab> implements ChatHost {
   readonly kind = 'builtin' as const;
   private window: BaseWindow | null = null;
-  private readonly tabsById = new Map<string, Tab>();
   private readonly byContentsId = new Map<number, string>();
-  private readonly pending = new Map<string, PendingCommand>();
-  private selected: string | null = null;
-  private listener: HostEvents | null = null;
   private browserSession: Session | null = null;
-  private signedIn: boolean | null = null;
   private quitting = false;
   private readonly ipcHandlers: Array<() => void> = [];
 
-  constructor(private readonly options: { preloadPath: string; iconPath?: string }) {}
-
-  setListener(events: HostEvents): void {
-    this.listener = events;
+  constructor(private readonly options: { preloadPath: string; iconPath?: string }) {
+    super();
   }
 
   async start(): Promise<void> {
@@ -85,11 +69,8 @@ export class BuiltinHost implements ChatHost {
       if (tabId) this.handlePageEvent(tabId, payload);
     };
     const onResult = (event: Electron.IpcMainEvent, payload: { id: string; result: PageResult }) => {
-      const pending = this.pending.get(payload.id);
-      if (!pending || this.byContentsId.get(event.sender.id) !== pending.tabId) return;
-      this.pending.delete(payload.id);
-      clearTimeout(pending.timer);
-      pending.resolve(payload.result);
+      const tabId = this.byContentsId.get(event.sender.id);
+      if (tabId) this.settle(payload.id, payload.result, tabId);
     };
     ipcMain.on(PAGE_EVENT_CHANNEL, onEvent);
     ipcMain.on(PAGE_RESULT_CHANNEL, onResult);
@@ -108,21 +89,13 @@ export class BuiltinHost implements ChatHost {
   }
 
   status(): HostStatus {
-    const tabs = this.tabs();
     return {
       ready: this.browserSession !== null,
       signedIn: this.signedIn,
       windowVisible: this.window?.isVisible() ?? false,
       extensionConnected: false,
-      detail:
-        this.signedIn === false
-          ? 'Sign in to ChatGPT in the built-in browser.'
-          : `${tabs.length} ChatGPT tab${tabs.length === 1 ? '' : 's'} open.`
+      detail: this.signedIn === false ? 'Sign in to ChatGPT in the built-in browser.' : this.tabCountDetail()
     };
-  }
-
-  tabs(): TabInfo[] {
-    return [...this.tabsById.values()].map((tab) => ({ ...tab.info }));
   }
 
   async openTab(url: string, options: { reveal?: boolean } = {}): Promise<string> {
@@ -139,20 +112,7 @@ export class BuiltinHost implements ChatHost {
         spellcheck: true
       }
     });
-    const tab: Tab = {
-      view,
-      title: 'ChatGPT',
-      readyWaiters: [],
-      info: {
-        tabId,
-        url,
-        conversationId: conversationIdFromUrl(url),
-        driverReady: false,
-        signedIn: null,
-        generating: false,
-        createdAt: Date.now()
-      }
-    };
+    const tab: Tab = { view, title: 'ChatGPT', readyWaiters: [], info: newTabInfo(tabId, url) };
     this.tabsById.set(tabId, tab);
     this.byContentsId.set(view.webContents.id, tabId);
     this.wireContents(tab, view.webContents);
@@ -172,12 +132,7 @@ export class BuiltinHost implements ChatHost {
     if (!tab) return;
     this.tabsById.delete(tabId);
     this.byContentsId.delete(tab.view.webContents.id);
-    for (const [id, pending] of this.pending) {
-      if (pending.tabId !== tabId) continue;
-      clearTimeout(pending.timer);
-      this.pending.delete(id);
-      pending.resolve({ ok: false, error: 'Tab closed', code: 'failed' });
-    }
+    this.failPending(tabId, 'Tab closed', 'failed');
     if (this.selected === tabId) {
       this.window?.contentView.removeChildView(tab.view);
       this.selected = null;
@@ -187,22 +142,10 @@ export class BuiltinHost implements ChatHost {
     this.listener?.status();
   }
 
-  async command(tabId: string, command: PageCommand, timeoutMs = 30_000): Promise<PageResult> {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) return { ok: false, error: 'No such tab', code: 'failed' };
-    if (!tab.info.driverReady) {
-      const ready = await this.waitForDriver(tab, Math.min(timeoutMs, 45_000));
-      if (!ready) return { ok: false, error: 'ChatGPT page did not finish loading', code: 'not-ready' };
-    }
-    const id = randomUUID();
-    return new Promise<PageResult>((resolve) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        resolve({ ok: false, error: `Timed out waiting for the ChatGPT page (${command.type})`, code: 'timeout' });
-      }, timeoutMs);
-      this.pending.set(id, { tabId, resolve, timer });
-      tab.view.webContents.send(PAGE_COMMAND_CHANNEL, { id, command });
-    });
+  protected sendCommand(tab: Tab, command: PageCommand, timeoutMs: number): Promise<PageResult> {
+    const { id, result } = this.awaitResult(tab.info.tabId, timeoutMs, `Timed out waiting for the ChatGPT page (${command.type})`);
+    tab.view.webContents.send(PAGE_COMMAND_CHANNEL, { id, command });
+    return result;
   }
 
   reveal(tabId: string | null): void {
@@ -228,62 +171,6 @@ export class BuiltinHost implements ChatHost {
   hide(): void {
     this.window?.hide();
     this.listener?.status();
-  }
-
-  private requireTab(tabId: string): Tab {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) throw new Error(`No such tab ${tabId}`);
-    return tab;
-  }
-
-  private waitForDriver(tab: Tab, timeoutMs: number): Promise<boolean> {
-    if (tab.info.driverReady) return Promise.resolve(true);
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        tab.readyWaiters = tab.readyWaiters.filter((waiter) => waiter !== done);
-        resolve(false);
-      }, timeoutMs);
-      const done = () => {
-        clearTimeout(timer);
-        resolve(true);
-      };
-      tab.readyWaiters.push(done);
-    });
-  }
-
-  private handlePageEvent(tabId: string, event: PageEvent): void {
-    const tab = this.tabsById.get(tabId);
-    if (!tab) return;
-    switch (event.type) {
-      case 'hello':
-        tab.info.driverReady = true;
-        tab.info.url = event.url;
-        tab.info.conversationId = event.conversationId;
-        if (event.signedIn !== null) this.noteSignedIn(tab, event.signedIn);
-        for (const waiter of tab.readyWaiters.splice(0)) waiter();
-        break;
-      case 'location':
-        tab.info.url = event.url;
-        tab.info.conversationId = event.conversationId;
-        break;
-      case 'auth':
-        this.noteSignedIn(tab, event.signedIn);
-        break;
-      case 'generating':
-        tab.info.generating = event.value;
-        break;
-      default:
-        break;
-    }
-    this.listener?.page(tabId, event);
-  }
-
-  private noteSignedIn(tab: Tab, signedIn: boolean): void {
-    tab.info.signedIn = signedIn;
-    if (this.signedIn !== signedIn) {
-      this.signedIn = signedIn;
-      this.listener?.status();
-    }
   }
 
   private wireContents(tab: Tab, contents: WebContents): void {
