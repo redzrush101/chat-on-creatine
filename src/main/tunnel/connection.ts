@@ -5,7 +5,8 @@ import { createLogger } from '../core/log';
 import type { McpHttpServer } from '../mcp/server';
 import { connectorName, SURFACE_IDS, SURFACES } from '../mcp/surfaces';
 import { locateBinary } from './locate';
-import { startTunnel, type TunnelAdapter, type TunnelHandle } from './tunnel';
+import { startTunnel } from './tunnel';
+import type { TunnelAdapter, TunnelHandle } from './types';
 
 const log = createLogger('connection');
 
@@ -189,7 +190,7 @@ export class ConnectionManager {
 
   private async startSurface(id: SurfaceId, config: Config, generation: number): Promise<void> {
     const runtime = this.runtimes.get(id)!;
-    const adapter = config.connection.kind as TunnelAdapter;
+    const adapter = config.connection.kind;
     const localUrl = this.deps.server.localUrl(id);
     this.setSurface(id, 'starting', 'Connecting…');
     try {
