@@ -16,13 +16,6 @@ export type ImageMime = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp';
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp']);
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
 /** The first bytes of a file, enough to sniff its type. */
 export async function readHead(realPath: string, length = SNIFF_BYTES): Promise<Buffer> {
   const handle = await open(realPath, 'r');
@@ -35,23 +28,14 @@ export async function readHead(realPath: string, length = SNIFF_BYTES): Promise<
   }
 }
 
-/**
- * A sample is binary when it holds a NUL byte or is not valid UTF-8. A sample cut in the middle of
- * a character is still text when more of the file follows, so up to three trailing bytes may be
- * an incomplete sequence.
- */
-export function isBinarySample(sample: Buffer, complete: boolean): boolean {
-  if (sample.includes(0)) return true;
-  const decoder = new TextDecoder('utf-8', { fatal: true });
-  const cuts = complete ? [0] : [0, 1, 2, 3];
-  return !cuts.some((cut) => {
-    try {
-      decoder.decode(sample.subarray(0, Math.max(0, sample.length - cut)));
-      return true;
-    } catch {
-      return false;
-    }
-  });
+/** Decodes file bytes, allowing an incomplete final character only when more bytes follow. */
+export function decodeText(bytes: Uint8Array, complete: boolean): string | null {
+  if (bytes.includes(0)) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes, { stream: !complete });
+  } catch {
+    return null;
+  }
 }
 
 export function sniffImage(head: Buffer): ImageMime | null {

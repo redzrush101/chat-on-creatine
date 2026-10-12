@@ -95,6 +95,14 @@ describe('read tool', () => {
     expect(result.content.some((part) => part.type === 'image')).toBe(false);
   });
 
+  it('rejects invalid UTF-8 at the end of a partial sample instead of trimming it away', async () => {
+    const file = path.join(root, 'invalid.txt');
+    const bytes = Buffer.alloc(9000, 0x61);
+    bytes[8191] = 0xff;
+    await writeFile(file, bytes);
+    expect(textOf(await readTool.run({ paths: [file] }, ctx))).toContain('Binary file');
+  });
+
   it('returns a PNG as image content', async () => {
     const file = path.join(root, 'pixel.png');
     await writeFile(file, Buffer.from(PNG_BASE64, 'base64'));

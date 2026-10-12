@@ -47,10 +47,3 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 export function Notice({ tone = 'muted', children }: { tone?: 'muted' | 'error'; children: ReactNode }): JSX.Element {
   return <div className={tone === 'error' ? 'wp-notice is-error' : 'wp-notice'}>{children}</div>;
 }
-
-export function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-

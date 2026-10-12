@@ -2,6 +2,7 @@ import { open, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { FileContent } from '@shared/ipc';
 import type { FileEntry } from '@shared/types';
+import { decodeText } from '../fs/files';
 
 const MAX_ENTRIES = 2000;
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
@@ -45,29 +46,11 @@ export async function readFileForView(file: string): Promise<FileContent> {
     await handle.close();
   }
 
-  const text = bytes.includes(0) ? null : decodeUtf8(bytes, truncated);
-  return { path: file, size: info.size, binary: text === null, text, truncated };
+  const text = decodeText(bytes, !truncated);
+  const base = { path: file, size: info.size, truncated };
+  return text === null ? { ...base, binary: true, text } : { ...base, binary: false, text };
 }
 
 function statOrNull(file: string) {
   return stat(file).catch(() => null);
-}
-
-/** A cut at the byte limit may split a multi-byte character; that tail is not invalid UTF-8. */
-function decodeUtf8(bytes: Buffer, truncated: boolean): string | null {
-  let body = bytes;
-  if (truncated) {
-    for (let back = 1; back <= Math.min(4, bytes.length); back++) {
-      const byte = bytes[bytes.length - back]!;
-      if ((byte & 0xc0) === 0x80) continue;
-      const width = byte >= 0xf0 ? 4 : byte >= 0xe0 ? 3 : byte >= 0xc0 ? 2 : 1;
-      if (width > back) body = bytes.subarray(0, bytes.length - back);
-      break;
-    }
-  }
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(body);
-  } catch {
-    return null;
-  }
 }

@@ -1,3 +1,4 @@
+import { formatBytes } from '@shared/format';
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { ArrowLeft, ChevronDown, ChevronRight, Copy, ExternalLink, File as FileIcon, Folder, FolderOpen, RefreshCw } from 'lucide-react';
@@ -6,7 +7,7 @@ import { invoke } from '../lib/bridge';
 import { basename, relativeTo } from '../lib/format';
 import { useCopy } from '../lib/hooks';
 import { CodeViewer } from './CodeViewer';
-import { Empty, formatBytes, Notice, useAction, useLoaded } from './common';
+import { Empty, Notice, useAction, useLoaded } from './common';
 
 export function FilesTab({ rootDir }: { rootDir: string | null }): JSX.Element {
   const [openFile, setOpenFile] = useState<string | null>(null);
@@ -85,7 +86,6 @@ function FileViewer({ rootDir, path, onBack }: { rootDir: string; path: string; 
   if (loadError) body = <Notice tone="error">{loadError}</Notice>;
   else if (!file) body = <div className="wp-tree-status">Loading…</div>;
   else if (file.binary) body = <Notice>Binary file ({formatBytes(file.size)}). It is not shown.</Notice>;
-  else if (file.text === null) body = <Notice>This file is too large to show ({formatBytes(file.size)}).</Notice>;
   else
     body = (
       <>

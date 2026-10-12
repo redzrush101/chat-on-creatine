@@ -1,3 +1,4 @@
+import { formatBytes } from '@shared/format';
 import { glob, readFile, stat } from 'node:fs/promises';
 import nodePath from 'node:path';
 
@@ -8,9 +9,8 @@ import {
   DEFAULT_READ_BYTES,
   MAX_IMAGE_BYTES,
   MAX_READ_BYTES,
-  formatBytes,
   imageMimeOf,
-  isBinarySample,
+  decodeText,
   listDirectory,
   readHead,
   readTextWindow,
@@ -157,7 +157,7 @@ async function readTarget(target: Target, args: ReadArgs, cwd: string | null, gu
     const text = `--- ${real} — empty file ---`;
     return { text, bytes: Buffer.byteLength(text, 'utf8'), summary: `${real} (empty)` };
   }
-  if (isBinarySample(head, info.size <= head.length)) {
+  if (decodeText(head, info.size <= head.length) === null) {
     const text = `--- ${real} — ${size} ---\nBinary file, so its bytes are not returned. view_image shows PNG, JPEG, GIF and WebP files.`;
     return { text, bytes: Buffer.byteLength(text, 'utf8'), summary: `${real} (${size}, binary)` };
   }

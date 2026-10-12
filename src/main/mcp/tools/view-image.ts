@@ -1,9 +1,10 @@
+import { formatBytes } from '@shared/format';
 import { readFile, stat } from 'node:fs/promises';
 
 import { z } from 'zod';
 
 import { effectiveCapabilities } from '@shared/config';
-import { formatBytes, imageMimeOf, MAX_IMAGE_BYTES } from '../../fs/files';
+import { imageMimeOf, MAX_IMAGE_BYTES } from '../../fs/files';
 import { defineTool, ToolError } from '../tool';
 
 export const viewImageTool = defineTool({

@@ -32,14 +32,11 @@ interface SendResult {
   input: InputItem;
 }
 
-export interface FileContent {
+export type FileContent = {
   path: string;
-  /** UTF-8 text, or null for binary / oversized files. */
-  text: string | null;
   size: number;
-  binary: boolean;
   truncated: boolean;
-}
+} & ({ binary: true; text: null } | { binary: false; text: string });
 
 /**
  * Renderer → main request/response calls. The preload exposes exactly these channels; main
