@@ -1,0 +1,20 @@
+#!/bin/sh
+set -eu
+
+TASK_CLI_SCRIPT=$0
+case "$TASK_CLI_SCRIPT" in
+  /*) ;;
+  *) TASK_CLI_SCRIPT="$(pwd)/$TASK_CLI_SCRIPT" ;;
+esac
+while [ -L "$TASK_CLI_SCRIPT" ]; do
+  TASK_CLI_TARGET=$(readlink "$TASK_CLI_SCRIPT")
+  case "$TASK_CLI_TARGET" in
+    /*) TASK_CLI_SCRIPT=$TASK_CLI_TARGET ;;
+    *) TASK_CLI_SCRIPT="$(dirname "$TASK_CLI_SCRIPT")/$TASK_CLI_TARGET" ;;
+  esac
+done
+TASK_CLI_ROOT=$(cd "$(dirname "$TASK_CLI_SCRIPT")/.." && pwd -P)
+if [ -f /etc/NIXOS ] && [ -z "${ELECTRON_OVERRIDE_DIST_PATH:-}" ]; then
+  exec nix develop "$TASK_CLI_ROOT" -c node "$TASK_CLI_ROOT/scripts/creatine.mjs" "$@"
+fi
+exec node "$TASK_CLI_ROOT/scripts/creatine.mjs" "$@"

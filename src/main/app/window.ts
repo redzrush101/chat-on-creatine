@@ -8,6 +8,7 @@ interface WindowOptions {
   isQuitting: () => boolean;
   showChatGpt(): void;
   quit(): void;
+  closed(): void;
 }
 
 /** The app's own window: loads the renderer, refuses navigation, opens links externally. */
@@ -50,7 +51,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     }
   });
   window.on('closed', () => {
-    if (!options.isQuitting()) options.quit();
+    if (!options.isQuitting()) options.closed();
   });
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) void window.loadURL(devUrl);

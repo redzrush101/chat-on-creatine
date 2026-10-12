@@ -47,9 +47,7 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-export function basename(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-}
+export { basename } from '@shared/format';
 
 /** The path below `root` (either separator, so Windows paths work), or the full path when it is outside. */
 export function relativeTo(root: string, path: string): string {

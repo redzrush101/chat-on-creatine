@@ -29,14 +29,16 @@ afterEach(() => { state.trayAvailable = true; });
 it.each([true, false])('hides on close only when a tray exists: %s', (available) => {
   state.trayAvailable = available;
   const quit = vi.fn();
+  const closed = vi.fn();
   const window = createMainWindow({ preloadDir: '.', resourcesDir: '.', isQuitting: () => false,
-    closeToTray: () => true, showChatGpt: () => {}, quit });
+    closeToTray: () => true, showChatGpt: () => {}, quit, closed });
   const event = { preventDefault: vi.fn() };
   window.emit('close', event);
   expect(event.preventDefault).toHaveBeenCalledTimes(available ? 1 : 0);
   expect(window.hide).toHaveBeenCalledTimes(available ? 1 : 0);
   if (!available) {
     window.emit('closed');
-    expect(quit).toHaveBeenCalledOnce();
+    expect(closed).toHaveBeenCalledOnce();
+    expect(quit).not.toHaveBeenCalled();
   }
 });

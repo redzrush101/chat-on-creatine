@@ -69,6 +69,9 @@ export class BuiltinHost implements ChatHost {
     ses.setUserAgent(ses.getUserAgent().replace(/\s(?:Electron|chat-on-creatine)\/\S+/g, ''));
     ses.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'clipboard-sanitized-write'));
     this.signedIn = await this.readSessionCookie();
+    const cookiesChanged = () => { void this.refreshSignIn(); };
+    ses.cookies.on('changed', cookiesChanged);
+    this.ipcHandlers.push(() => ses.cookies.removeListener('changed', cookiesChanged));
 
     const onEvent = (event: Electron.IpcMainEvent, payload: PageEvent) => {
       const tabId = this.byContentsId.get(event.sender.id);
@@ -90,6 +93,7 @@ export class BuiltinHost implements ChatHost {
     this.quitting = true;
     for (const dispose of this.ipcHandlers.splice(0)) dispose();
     for (const tabId of [...this.tabsById.keys()]) await this.closeTab(tabId);
+    await this.browserSession?.cookies.flushStore();
     this.window?.destroy();
     this.window = null;
   }
@@ -121,6 +125,7 @@ export class BuiltinHost implements ChatHost {
       view, title: 'ChatGPT', readyWaiters: [],
       info: { tabId, url, conversationId: conversationIdFromUrl(url), driverReady: false, signedIn: null, generating: false, createdAt: Date.now() }
     };
+    view.setBounds({ x: 0, y: 0, width: 1100, height: 820 });
     this.tabsById.set(tabId, tab);
     this.byContentsId.set(view.webContents.id, tabId);
     this.wireContents(tab, view.webContents);
@@ -216,7 +221,7 @@ export class BuiltinHost implements ChatHost {
 
   private async refreshSignIn(): Promise<void> {
     const signedIn = await this.readSessionCookie();
-    if (signedIn !== this.signedIn && signedIn === false) {
+    if (signedIn !== this.signedIn) {
       this.signedIn = signedIn;
       this.listener?.status();
     }

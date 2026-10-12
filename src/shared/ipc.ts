@@ -1,4 +1,5 @@
 import type { Config, DeepPartial, ReasoningEffort, SecretKey } from './config';
+import type { ExecResult } from './exec';
 import type {
   AppState,
   AutomationMode,
@@ -21,6 +22,7 @@ interface SendRequest {
   delivery: InputDelivery;
   /** Only used when starting a new chat. */
   projectId?: string | null;
+  cwd?: string;
   model?: string | null;
   reasoning?: ReasoningEffort | null;
   /** Turn on Goal or Loop for this chat with the message as objective. */
@@ -44,6 +46,8 @@ export type FileContent = {
  */
 export interface RendererApi {
   'app:state': () => AppState;
+  'app:show': () => void;
+  'app:quit': () => void;
   'app:logs': (limit: number) => LogEntry[];
   'app:openExternal': (url: string) => void;
   'app:revealPath': (path: string) => void;
@@ -93,6 +97,9 @@ export interface RendererApi {
   'terminal:write': (terminalId: string, data: string) => void;
   'terminal:resize': (terminalId: string, cols: number, rows: number) => void;
   'terminal:close': (terminalId: string) => void;
+  'commands:exec': (cmd: string, cwd: string) => ExecResult;
+  'commands:poll': (sessionId: string, chars: string) => ExecResult;
+  'commands:list': () => { sessionId: string; command: string; owner: string; startedAt: number }[];
 
   'skills:import': (folder: string) => void;
   'skills:remove': (skillId: string) => void;
@@ -126,6 +133,8 @@ export interface PreloadBridge {
 
 export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'app:state',
+  'app:show',
+  'app:quit',
   'app:logs',
   'app:openExternal',
   'app:revealPath',
@@ -163,6 +172,9 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'terminal:write',
   'terminal:resize',
   'terminal:close',
+  'commands:exec',
+  'commands:poll',
+  'commands:list',
   'skills:import',
   'skills:remove',
   'skills:read',

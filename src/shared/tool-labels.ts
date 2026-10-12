@@ -1,5 +1,5 @@
 import type { SessionEvent } from '@shared/types';
-import { basename } from '../../lib/format';
+import { basename } from './format';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 

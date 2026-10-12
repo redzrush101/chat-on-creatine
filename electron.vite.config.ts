@@ -8,7 +8,7 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     resolve: { alias: shared },
-    build: { rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts') } } }
+    build: { rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts'), cli: resolve(__dirname, 'src/cli/index.ts') } } }
   },
   preload: {
     // Preloads run sandboxed, so every import (including shared code) is bundled into one file.

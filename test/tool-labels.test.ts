@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionEvent, ToolOutputPart } from '@shared/types';
-import { describeTool, diffRows, diffTotals, summarizeTools, toolBaseName } from '../src/renderer/components/chat/tool-labels';
+import { describeTool, diffRows, diffTotals, summarizeTools, toolBaseName } from '../src/shared/tool-labels';
 import { buildBlocks } from '../src/renderer/components/chat/timeline-model';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;

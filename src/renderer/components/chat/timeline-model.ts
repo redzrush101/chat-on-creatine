@@ -1,5 +1,5 @@
 import type { SessionEvent } from '@shared/types';
-import { toolBaseName } from './tool-labels';
+import { toolBaseName } from '@shared/tool-labels';
 
 /** Work narration that folds into a group: tool calls and the thinking between them. */
 function isWork(event: SessionEvent): boolean {

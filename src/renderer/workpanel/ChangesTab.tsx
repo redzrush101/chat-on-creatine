@@ -3,7 +3,7 @@ import type { JSX } from 'react';
 import { ArrowLeft, GitBranch, RefreshCw } from 'lucide-react';
 import type { GitFileChange } from '@shared/types';
 import { DiffBody } from '../components/chat/ToolCard';
-import { diffRows } from '../components/chat/tool-labels';
+import { diffRows } from '@shared/tool-labels';
 import { invoke } from '../lib/bridge';
 import { basename } from '../lib/format';
 import { useGitStatus } from '../lib/git-status';

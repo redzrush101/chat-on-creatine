@@ -5,7 +5,7 @@ import { cx, eventTime, formatDuration } from '../../lib/format';
 import { useNow } from '../../lib/hooks';
 import { DiffBadge, DiffCard, ToolRow } from './ToolCard';
 import type { TimelineBlock } from './timeline-model';
-import { describeTool, diffTotals, summarizeTools } from './tool-labels';
+import { describeTool, diffTotals, summarizeTools } from '@shared/tool-labels';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 type ReasoningEvent = Extract<SessionEvent, { kind: 'reasoning' }>;

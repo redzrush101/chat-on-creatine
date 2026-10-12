@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, CircleAlert, Copy, Check, Image, LoaderCircl
 import type { SessionEvent, ToolOutputPart, WebSource } from '@shared/types';
 import { basename, cx, formatDuration } from '../../lib/format';
 import { useCopy } from '../../lib/hooks';
-import { describeTool, diffRows, type DiffRow } from './tool-labels';
+import { describeTool, diffRows, type DiffRow } from '@shared/tool-labels';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 

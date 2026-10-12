@@ -1,3 +1,5 @@
+import type { ExecRequest, ExecResult, WriteStdinRequest } from '@shared/exec';
+export type { ExecRequest, ExecResult, WriteStdinRequest } from '@shared/exec';
 import type { z } from 'zod';
 import type { Config } from '@shared/config';
 import type { PlanItem, SurfaceId, ToolOutputPart } from '@shared/types';
@@ -59,36 +61,6 @@ export interface PathGuard {
 export interface ProcessRunner {
   exec(request: ExecRequest, owner: string): Promise<ExecResult>;
   writeStdin(request: WriteStdinRequest, owner: string): Promise<ExecResult>;
-}
-
-export interface ExecRequest {
-  /** Exactly one of `cmd` / `cmds`. */
-  cmd?: string;
-  cmds?: string[];
-  workdir: string | null;
-  shell?: string;
-  tty?: boolean;
-  yieldTimeMs?: number;
-  maxOutputTokens?: number;
-}
-
-export interface WriteStdinRequest {
-  sessionId: string;
-  chars: string;
-  yieldTimeMs?: number;
-  maxOutputTokens?: number;
-}
-
-export interface ExecResult {
-  /** Present while the process keeps running; pass it to write_stdin. */
-  sessionId: string | null;
-  exitCode: number | null;
-  output: string;
-  wallTimeMs: number;
-  /** Original token estimate when the output was truncated. */
-  originalTokenCount: number | null;
-  command: string;
-  cwd: string | null;
 }
 
 /** Everything tools may touch, injected by the server so tools stay unit-testable. */

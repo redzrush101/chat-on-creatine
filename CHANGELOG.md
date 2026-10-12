@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-10-12
+
+- Add a coding CLI that shares the desktop app's ChatGPT login, conversations, models,
+  projects and local tools. Sign in from either interface and open the desktop app with `/gui`.
+- Stream replies, command output and file diffs in the terminal. Suggest slash commands as
+  you type, choose models interactively and inspect tool details with Ctrl+O.
+- Run scripted tasks with `exec`, piped input, attachments and JSON output. Resume chats,
+  steer tasks, use workers and Goal/Loop modes, and enable unrestricted tools with `--yolo`.
+  Tools use your current directory or the folder selected with `-C`.
+- Run the shared Electron backend in the background for CLI sessions. Keep terminal work
+  running when the desktop window closes, and persist login changes from both interfaces.
+- Simplify the README with desktop and terminal screenshots, setup and basic usage.
+
 ## [0.2.2] - 2026-10-12
 
 - Load the account's models automatically when ChatGPT signs in, including initial setup.

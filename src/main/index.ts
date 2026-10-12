@@ -5,12 +5,17 @@ import { flushWrites } from './core/durable';
 import { createLogger, onLog, setLogFile } from './core/log';
 import { resolvePaths } from './core/paths';
 import { registerIpc } from './app/ipc';
+import { createApi } from './app/api';
+import { FrontendServer } from './app/frontend-server';
 import { createServices, type Services } from './app/services';
 import { StateHub } from './app/state';
 import { createMainWindow } from './app/window';
 
 const log = createLogger('app');
+const headless = process.argv.includes('--creatine-headless');
 app.setName('Chat on Creatine');
+// Frontend lifetimes decide when to quit; Electron must not quit on the last GUI window alone.
+app.on('window-all-closed', () => {});
 // Electron picks plain-text secret storage on desktops it does not recognise (Hyprland, Sway…);
 // ask for the Secret Service keyring explicitly unless the user chose a store.
 if (process.platform === 'linux' && !app.commandLine.hasSwitch('password-store')) {
@@ -21,23 +26,25 @@ if (process.env.CREATINE_USER_DATA) app.setPath('userData', process.env.CREATINE
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  void start();
+  void start().catch((error: unknown) => { log.error('startup failed', error); app.exit(1); });
 }
 
 async function start(): Promise<void> {
   let services: Services | null = null;
   let window: BrowserWindow | null = null;
+  let frontend: FrontendServer | null = null;
+  let idleTimer: NodeJS.Timeout | null = null;
   let quitting = false;
   const markQuitting = () => { quitting = true; };
 
   const send = <E extends MainEvent>(event: E, payload: MainEvents[E]): void => {
     if (window && !window.isDestroyed()) window.webContents.send(event, payload);
+    frontend?.broadcast(event, payload);
   };
   const hub = new StateHub(() => services, send);
 
-  app.on('second-instance', () => {
-    window?.show();
-    window?.focus();
+  app.on('second-instance', (_event, argv) => {
+    if (!argv.includes('--creatine-headless')) show();
   });
 
   await app.whenReady();
@@ -62,20 +69,19 @@ async function start(): Promise<void> {
   // Test harnesses drive the running app through the main-process inspector.
   if (process.env.CREATINE_DEBUG_GLOBAL) (globalThis as { creatine?: Services }).creatine = services;
 
-  registerIpc(() => services, () => hub.snapshot(), (contents) => contents === window?.webContents);
-
-  window = createMainWindow({
-    preloadDir, resourcesDir, isQuitting: () => quitting, closeToTray: () => services?.config.get().ui.closeToTray ?? false,
-    showChatGpt: () => services?.host.reveal(null),
-    quit: () => {
-      markQuitting();
-      app.quit();
-    }
-  });
+  const api = createApi(() => services, () => hub.snapshot(), { show, quit: () => app.quit() });
+  registerIpc(api, (contents) => contents === window?.webContents);
 
   await services.host.start();
   services.router.start();
   if (services.config.get().connection.autoConnect) void services.connection.connect();
+  frontend = new FrontendServer(join(paths.state, 'frontend.json'), api, (count) => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = count === 0 && !window ? setTimeout(() => app.quit(), 3000) : null;
+  });
+  await frontend.start();
+  if (headless) idleTimer = setTimeout(() => app.quit(), 60_000);
+  else show();
   log.info(`started ${app.getVersion()} (userData ${paths.userData})`);
 
   let disposed = false;
@@ -84,10 +90,33 @@ async function start(): Promise<void> {
     if (disposed || !services) return;
     event.preventDefault();
     disposed = true;
-    void services
-      .dispose()
+    if (idleTimer) clearTimeout(idleTimer);
+    void Promise.resolve(frontend?.close())
+      .then(() => services!.dispose())
       .catch((error: unknown) => log.error('shutdown failed', error))
       .then(() => flushWrites())
       .finally(() => app.exit(0));
   });
+  process.on('SIGTERM', () => app.quit());
+  process.on('SIGINT', () => app.quit());
+
+  function show(): void {
+    if (!services) return;
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!window || window.isDestroyed()) {
+      window = createMainWindow({
+        preloadDir: join(__dirname, '../preload'),
+        resourcesDir: app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'),
+        isQuitting: () => quitting, closeToTray: () => services?.config.get().ui.closeToTray ?? false,
+        showChatGpt: () => services?.host.reveal(null),
+        quit: () => app.quit(),
+        closed: () => {
+          window = null;
+          if (!frontend?.clientCount) app.quit();
+        }
+      });
+    }
+    window.show();
+    window.focus();
+  }
 }
