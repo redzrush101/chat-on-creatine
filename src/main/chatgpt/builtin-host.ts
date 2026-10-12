@@ -32,7 +32,7 @@ function staysInApp(url: string): boolean {
 
 interface Tab {
   info: TabInfo;
-  readyWaiters: Array<() => void>;
+  readyWaiters: Array<(ready: boolean) => void>;
   view: WebContentsView;
   title: string;
 }
@@ -139,6 +139,7 @@ export class BuiltinHost implements ChatHost {
     const tab = this.tabsById.get(tabId);
     if (!tab) return;
     this.tabsById.delete(tabId);
+    for (const waiter of tab.readyWaiters.splice(0)) waiter(false);
     this.byContentsId.delete(tab.view.webContents.id);
     this.failPending(tabId);
     if (this.selected === tabId) {
@@ -265,7 +266,9 @@ export class BuiltinHost implements ChatHost {
   async command(tabId: string, command: PageCommand, timeoutMs = 30_000): Promise<PageResult> {
     const tab = this.tabsById.get(tabId);
     if (!tab) return { ok: false, error: 'No such tab', code: 'failed' };
-    if (!(await this.waitForDriver(tab, Math.min(timeoutMs, 45_000)))) {
+    const ready = await this.waitForDriver(tab, Math.min(timeoutMs, 45_000));
+    if (!this.tabsById.has(tabId)) return { ok: false, error: 'Tab closed', code: 'failed' };
+    if (!ready) {
       return { ok: false, error: 'ChatGPT page did not finish loading', code: 'not-ready' };
     }
     return this.sendCommand(tab, command, timeoutMs);
@@ -319,7 +322,7 @@ export class BuiltinHost implements ChatHost {
         tab.info.url = event.url;
         tab.info.conversationId = event.conversationId;
         if (event.signedIn !== null) this.noteSignedIn(tab, event.signedIn);
-        for (const waiter of tab.readyWaiters.splice(0)) waiter();
+        for (const waiter of tab.readyWaiters.splice(0)) waiter(true);
         break;
       case 'location':
         tab.info.url = event.url;
@@ -351,9 +354,9 @@ export class BuiltinHost implements ChatHost {
         tab.readyWaiters = tab.readyWaiters.filter((waiter) => waiter !== done);
         resolve(false);
       }, timeoutMs);
-      const done = () => {
+      const done = (ready: boolean) => {
         clearTimeout(timer);
-        resolve(true);
+        resolve(ready);
       };
       tab.readyWaiters.push(done);
     });
