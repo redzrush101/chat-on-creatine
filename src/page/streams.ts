@@ -48,9 +48,9 @@ export class StreamRelay {
     }
   }
 
-  /** No conversation stream is open in this page. */
+  /** Completed conversations may still carry metadata while the next turn starts. */
   idle(): boolean {
-    return this.streams.size === 0;
+    return [...this.streams.values()].every((stream) => stream.complete);
   }
 
   waitForStart(ms: number): Promise<SendValue | null> {

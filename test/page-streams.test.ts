@@ -16,6 +16,17 @@ function setup() {
 }
 
 describe('page stream relay', () => {
+  it('allows the next send after completion while retaining the stream for trailing metadata', () => {
+    const { relay, events, tap } = setup();
+    tap({ kind: 'start' });
+    expect(relay.idle()).toBe(false);
+    tap({ kind: 'chunk', chunk: 'data: [DONE]\n\n' });
+    expect(relay.idle()).toBe(true);
+    expect(events.some((event) => event.type === 'turn-end')).toBe(false);
+    tap({ kind: 'end' });
+    expect(events.at(-1)).toMatchObject({ type: 'turn-end', outcome: 'complete' });
+  });
+
   it('resolves send waiters on start and expires absent starts', async () => {
     vi.useFakeTimers();
     const { relay, tap } = setup();
