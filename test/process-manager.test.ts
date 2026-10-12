@@ -42,7 +42,7 @@ describe('ProcessManager', () => {
 
   it('keeps a running command as a session and releases it once its exit is reported', async () => {
     const started = await manager.exec(
-      { cmd: `node -e "setTimeout(() => { process.stdout.write('late'); process.exit(3); }, 1500)"`, workdir: os.homedir(), yieldTimeMs: 250 },
+      { cmd: `node -e "setTimeout(() => { process.stdout.write('late'); process.exit(3); }, 1500)"; exit 3`, workdir: os.homedir(), yieldTimeMs: 250 },
       'chat-a'
     );
     expect(started.sessionId).not.toBeNull();
