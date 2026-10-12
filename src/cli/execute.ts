@@ -1,5 +1,6 @@
 import type { SessionEvent } from '@shared/types';
-import { formatEvent, safeText } from './format';
+import { safeText, screenColumns } from './format';
+import { formatEvent } from './render';
 import type { CliSession } from './session';
 
 export async function execute(session: CliSession): Promise<void> {
@@ -29,7 +30,7 @@ export async function execute(session: CliSession): Promise<void> {
       events.set(event.id, event);
       if (session.options.json) json({ type: 'event', sessionId: session.id, event });
       else if (!printed.has(event.id) && (event.kind === 'tool' && event.status !== 'running' || event.kind === 'notice')) {
-        process.stderr.write(formatEvent(event, false) ?? ''); printed.add(event.id);
+        process.stderr.write(formatEvent(event, { colored: false, columns: screenColumns() }) ?? ''); printed.add(event.id);
       }
     }
     check();

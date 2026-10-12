@@ -127,15 +127,17 @@ export class CliSession {
     const models = await this.models();
     let option = findModel(models, id ?? this.selection.model ?? this.state.models.defaultModel);
     if (!id && this.terminal) {
+      const current = this.selection.model === null ? -1 : models.findIndex((model) => model.id === option?.id);
       const picked = await this.terminal.pick<ModelOption | 'default'>('Select model', [
-        { label: 'Account default', value: 'default' },
-        ...models.map((model) => ({ label: model.label, detail: model.id, value: model }))
-      ], Math.max(0, models.findIndex((model) => model.id === option?.id) + 1));
+        { label: 'Account default', detail: 'The model ChatGPT picks for new chats', value: 'default', current: current < 0 },
+        ...models.map((model, index) => ({ label: model.label, detail: model.id, value: model, current: index === current }))
+      ], current + 1);
       if (picked === null) return;
       if (picked === 'default') { await this.setModel('default'); return; }
       option = picked;
       if (!effort && picked.efforts.length) {
-        const selected = await this.terminal.pick(`Reasoning · ${picked.label}`, picked.efforts.map((level) => ({ label: effortLabel(picked, level), value: level })));
+        const selected = await this.terminal.pick(`Effort · ${picked.label}`, picked.efforts.map((level) => ({ label: effortLabel(picked, level), value: level, current: level === this.selection.reasoning })),
+          Math.max(0, picked.efforts.findIndex((level) => level === this.selection.reasoning)));
         if (selected === null) return;
         effort = selected;
       }

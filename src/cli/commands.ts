@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 import { REASONING_EFFORTS, type ReasoningEffort } from '@shared/config';
 import { findModel } from '@shared/model-selection';
 import { CliSession } from './session';
-import { safeText } from './format';
+import { DIM, color, safeText, screenColumns } from './format';
+import { nested } from './render';
 
 export const COMMANDS: Record<string, string> = {
   help: 'Show commands and keyboard controls', exit: 'Leave the CLI', quit: 'Leave the CLI',
@@ -43,14 +44,14 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
   if (!match) { await session.send(text); return; }
   const name = match[1]!;
   const argument = match[2]?.trim() ?? '';
-  const print = (body: string) => terminal.print(`\n${safeText(body)}\n`);
+  const print = (body: string) => terminal.print(nested(safeText(body).split('\n'), { colored: terminal.colored, columns: screenColumns() }).join('\n'));
   const id = (): string => { if (!session.id) throw new Error('Send a message or resume a chat first.'); return session.id; };
   const client = session.client;
   await client.refresh();
   switch (name) {
     case 'help':
-      print(Object.entries(COMMANDS).map(([command, hint]) => `/${command.padEnd(13)} ${hint}`).join('\n') +
-        '\n\nEnter send · Ctrl+J/Alt+Enter newline · Tab complete · ↑/↓ history\nEsc stop · Ctrl+C stop/clear/exit · Ctrl+O expand tool output\n!<command> runs a shell command in the working folder.\nSending while busy steers the current turn. /queue holds a message for later.'); break;
+      print(Object.entries(COMMANDS).map(([command, hint]) => `/${command.padEnd(13)} ${color(DIM, hint, terminal.colored)}`).join('\n') +
+        '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript\n!<command> runs a shell command in the working folder.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
     case 'new': hooks.newChat(); print('New chat.'); break;
     case 'resume': {
       const chats = session.chats();
@@ -70,7 +71,8 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       const models = await session.models();
       const model = findModel(models, session.selection.model ?? session.state.models.defaultModel);
       if (!model) throw new Error('Select a model first with /model.');
-      const effort = argument || await terminal.pick('Reasoning level', model.efforts.map((level) => ({ label: level, value: level })));
+      const effort = argument || await terminal.pick(`Effort · ${model.label}`, model.efforts.map((level) => ({ label: level, value: level, current: level === session.selection.reasoning })),
+        Math.max(0, model.efforts.findIndex((level) => level === session.selection.reasoning)));
       if (effort) await session.setModel(model.id, effort as ReasoningEffort); break;
     }
     case 'status': print(statusText(session)); break;

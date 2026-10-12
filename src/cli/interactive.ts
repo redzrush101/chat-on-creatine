@@ -1,8 +1,8 @@
 import { readdir } from 'node:fs/promises';
-import { dirname, resolve, basename, relative } from 'node:path';
-import os from 'node:os';
+import { dirname, resolve, basename } from 'node:path';
 import { COMMANDS, runCommand } from './commands';
-import { color, safeText } from './format';
+import { ACCENT, DIM, color, safeText, screenColumns, tilde } from './format';
+import { nested, userRows } from './render';
 import type { CliSession } from './session';
 import { Transcript } from './transcript';
 
@@ -15,7 +15,9 @@ export async function interactive(session: CliSession): Promise<void> {
   let shellStopped = false;
   let done: () => void = () => {};
   const finished = new Promise<void>((resolve) => { done = resolve; });
-  const error = (reason: unknown) => terminal.print(`\n${color(31, safeText(reason instanceof Error ? reason.message : String(reason)), terminal.colored)}\n`);
+  const error = (reason: unknown) => terminal.print(`\n${color(31, '●', terminal.colored)} ${color(31, safeText(reason instanceof Error ? reason.message : String(reason)), terminal.colored)}\n`);
+  const echo = (text: string) => terminal.print(`\n${userRows(text, { colored: terminal.colored, columns: screenColumns() }).join('\n')}`);
+  let busySince: number | null = null;
   const reset = () => {
     session.id = null;
     session.mode = 'off';
@@ -26,15 +28,16 @@ export async function interactive(session: CliSession): Promise<void> {
     if (meta) session.selection = { model: meta.model, reasoning: meta.reasoning };
     const model = session.state.models.models.find((item) => item.id === session.selection.model || item.slugs?.includes(session.selection.model ?? ''));
     const remaining = Math.max(0, Math.round(100 * (1 - (meta?.contextTokens ?? 0) / session.state.config.context.advisoryTokens)));
-    const folder = session.cwd.startsWith(os.homedir()) ? `~/${relative(os.homedir(), session.cwd)}` : session.cwd;
-    terminal.status = `${model?.label ?? session.selection.model ?? 'Account default'}${session.selection.reasoning ? ` · ${session.selection.reasoning}` : ''} · ${remaining}% context · ${folder}`;
-    terminal.hints = ['/exit quit · /help · Esc stop · Ctrl+O details', ...(shellId ? ['Ctrl+C interrupt shell'] : session.attachments.length ? [`${session.attachments.length} attachment(s)`] : [])];
+    terminal.info = `${model?.label ?? session.selection.model ?? 'Account default'}${session.selection.reasoning ? ` ${session.selection.reasoning}` : ''} · ${remaining}% context · ${tilde(session.cwd)}`;
+    terminal.hint = shellId ? 'ctrl+c to interrupt the shell' : session.attachments.length ? `${session.attachments.length} attached · /attach clear removes them` : '? for shortcuts';
+    terminal.mode = session.state.config.yolo ? 'unrestricted tools' : session.state.config.readOnly ? 'read only' : '';
     terminal.commands = [
       ...Object.entries(COMMANDS).map(([name, detail]) => ({ label: `/${name}`, value: `/${name}`, detail })),
       ...session.state.skills.map((skill) => ({ label: `/${skill.id}`, value: `/${skill.id}`, detail: skill.description }))
     ];
-    terminal.details = session.transcript.details();
-    terminal.live = shellId ? 'Running shell command…' : session.transcript.preview() || (session.busy ? `${session.state.live[session.id ?? '']?.turn ?? 'Working'}…` : '');
+    const working = !!shellId || session.busy;
+    busySince = working ? busySince ?? Date.now() : null;
+    terminal.busy = working ? { verb: shellId ? 'Running shell command' : session.transcript.activity(), since: session.transcript.since ?? busySince! } : null;
     terminal.draw();
   };
   const offState = client.on('state', () => update());
@@ -60,7 +63,7 @@ export async function interactive(session: CliSession): Promise<void> {
     await session.approve();
     shellId = 'starting';
     shellStopped = false;
-    terminal.print(`\n$ ${safeText(command)}\n`);
+    terminal.print(`\n${color(ACCENT, '!', terminal.colored)} ${safeText(command)}\n`);
     update();
     try {
       let result = await client.invoke('commands:exec', command, session.cwd);
@@ -68,14 +71,15 @@ export async function interactive(session: CliSession): Promise<void> {
         if (result.output) terminal.print(safeText(result.output));
         shellId = result.sessionId;
         if (!shellId) {
-          terminal.print(`\n${shellStopped ? 'Shell interrupted.' : result.exitCode === null ? 'Shell exited.' : `Exit code ${result.exitCode}`}\n`);
+          const status = shellStopped ? 'Interrupted' : result.exitCode === null ? 'Shell exited' : `Exit code ${result.exitCode}`;
+          terminal.print(nested([color(result.exitCode === 0 ? DIM : 31, status, terminal.colored)], { colored: terminal.colored, columns: screenColumns() }).join('\n'));
           break;
         }
         result = await client.invoke('commands:poll', shellId, shellStopped ? '\x03' : '');
       }
     } catch (reason) {
       if (!shellStopped) throw reason;
-      terminal.print('\nShell interrupted.\n');
+      terminal.print(nested([color(31, 'Interrupted', terminal.colored)], { colored: terminal.colored, columns: screenColumns() }).join('\n'));
     } finally {
       shellId = null;
     }
@@ -84,6 +88,7 @@ export async function interactive(session: CliSession): Promise<void> {
     if (text === '/exit' || text === '/quit') { done(); return; }
     if (handling) { terminal.editor.set(text); return; }
     handling = true;
+    if (text.startsWith('/')) echo(text);
     void (text.startsWith('!') ? shell(text.slice(1)) : runCommand(text, session, { newChat: reset, exit: done }))
       .catch(error).finally(() => { handling = false; update(); });
   };
@@ -93,9 +98,10 @@ export async function interactive(session: CliSession): Promise<void> {
     if (session.busy || shellId) { void stop().catch(error); return; }
     if (terminal.editor.text) { terminal.editor.set(''); return; }
     if (Date.now() - lastInterrupt < 1500) done();
-    else { lastInterrupt = Date.now(); terminal.print('\nPress Ctrl+C again to exit, or use /exit.\n'); }
+    else { lastInterrupt = Date.now(); terminal.flash('Press Ctrl+C again to exit'); }
   };
-  terminal.onExpand = () => { session.transcript.expand(); update(); };
+  terminal.live = (columns) => session.transcript.preview(columns);
+  terminal.transcript = (columns) => session.transcript.transcript(columns);
   terminal.onComplete = () => {
     void (async () => {
       const text = terminal.editor.text;

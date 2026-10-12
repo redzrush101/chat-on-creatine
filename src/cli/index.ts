@@ -8,7 +8,7 @@ import { CliSession } from './session';
 import { interactive } from './interactive';
 import { execute } from './execute';
 import { statusText } from './commands';
-import { clip, color, safeText } from './format';
+import { ACCENT, DIM, color, ellipsis, safeText, screenColumns, tilde, width } from './format';
 
 export async function runCli(args: string[], root: string): Promise<void> {
   let client: BackendClient | null = null;
@@ -36,15 +36,7 @@ export async function runCli(args: string[], root: string): Promise<void> {
     if (isInteractive) terminal = new Terminal();
     const transcript = new Transcript((text) => terminal?.print(text), terminal?.colored ?? false);
     const session = new CliSession(client, options, terminal, transcript);
-    if (terminal) {
-      const title = ` Chat on Creatine ${session.state.version} `;
-      const columns = Math.max(12, Math.min(72, (process.stdout.columns || 80) - 4));
-      const label = clip(title, columns - 1);
-      terminal.print(`\n${color(36, `╭─${label}${'─'.repeat(Math.max(0, columns - label.length - 1))}╮`, terminal.colored)}\n` +
-        `  ChatGPT · your account · your local tools\n  ${safeText(options.cwd)}\n` +
-        `${color(36, `╰${'─'.repeat(columns)}╯`, terminal.colored)}\n\n` +
-        `Type a task to get started. /help for commands.\n`);
-    }
+    if (terminal) terminal.print(welcome(session.state.version, options.cwd, terminal.colored));
     await session.initialize();
     switch (options.command) {
       case 'status': process.stdout.write(statusText(session)); break;
@@ -66,11 +58,29 @@ export async function runCli(args: string[], root: string): Promise<void> {
   } catch (error) {
     const message = safeText(error instanceof Error ? error.message : String(error));
     if (json) process.stdout.write(`${JSON.stringify({ type: 'error', message })}\n`);
-    else if (terminal) terminal.print(`\n${color(31, message, terminal.colored)}\n`);
+    else if (terminal) terminal.print(`\n${color(31, '●', terminal.colored)} ${color(31, message, terminal.colored)}\n`);
     else process.stderr.write(`creatine: ${message}\n`);
     process.exitCode ||= 1;
   } finally {
     terminal?.close();
     client?.close();
   }
+}
+
+/** Claude Code's welcome box: product, version and where the tools work. */
+function welcome(version: string, cwd: string, colored: boolean): string {
+  const rows = [
+    `${color(ACCENT, '✻', colored)} Welcome to ${color(1, 'Chat on Creatine', colored)} ${color(DIM, version, colored)}`,
+    '',
+    color(DIM, '  ChatGPT with your account and your local tools', colored),
+    color(DIM, '  /help for commands · ? for shortcuts', colored),
+    '',
+    `  ${color(DIM, 'cwd:', colored)} ${safeText(tilde(cwd))}`
+  ];
+  const inner = Math.min(screenColumns() - 4, Math.max(...rows.map(width)) + 2);
+  const line = (row: string) => {
+    const text = width(row) > inner ? ellipsis(row, inner) : row;
+    return `${color(ACCENT, '│', colored)} ${text}${' '.repeat(Math.max(0, inner - width(text)))} ${color(ACCENT, '│', colored)}`;
+  };
+  return `\n${color(ACCENT, `╭${'─'.repeat(inner + 2)}╮`, colored)}\n${rows.map(line).join('\n')}\n${color(ACCENT, `╰${'─'.repeat(inner + 2)}╯`, colored)}\n`;
 }

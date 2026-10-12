@@ -2,9 +2,11 @@ import { PassThrough } from 'node:stream';
 import { StringDecoder } from 'node:string_decoder';
 import { emitKeypressEvents, type Key } from 'node:readline';
 import { Editor } from './editor';
-import { clip, color, graphemes, safeText, width } from './format';
+import { ACCENT, DIM, clip, color, ellipsis, graphemes, safeText, screenColumns, width } from './format';
+import { duration } from './render';
+import { Viewer } from './viewer';
 
-export interface Choice<T> { label: string; detail?: string; value: T }
+export interface Choice<T> { label: string; detail?: string; value: T; current?: boolean }
 interface Picker {
   title: string;
   choices: Choice<unknown>[];
@@ -13,33 +15,47 @@ interface Picker {
   resolve(value: unknown): void;
 }
 
-function wrap(text: string, columns: number): string[] {
-  const lines: string[] = [];
-  for (const line of safeText(text).split('\n')) {
-    let row = '';
-    for (const part of graphemes(line)) {
-      if (width(row + part) > columns) { lines.push(row); row = ''; }
-      row += part;
-    }
-    lines.push(row);
+const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✽', '✻', '✶', '✳', '✢', '·'];
+const SHORTCUTS = [
+  ['/ for commands', '! for shell commands', '@ for file paths'],
+  ['esc to interrupt', 'ctrl+o for transcript', 'tab to complete'],
+  ['ctrl+j for newline', '↑↓ for history', 'ctrl+c to clear or exit']
+];
+
+/** Character-wraps the draft so the cursor maps onto the same rows; continuation rows are indented. */
+function wrapDraft(text: string, columns: number): string[] {
+  const rows: string[] = [];
+  let row = '';
+  for (const part of graphemes(text)) {
+    if (part === '\n') { rows.push(row); row = '  '; continue; }
+    if (width(row + part) > columns) { rows.push(row); row = '  '; }
+    row += part;
   }
-  return lines;
+  rows.push(row);
+  return rows;
 }
 
-/** Scrollback holds completed work; only the draft and live preview are redrawn. */
+/** Scrollback holds completed work; only the live rows, the prompt and the footer are redrawn. */
 export class Terminal {
   readonly editor = new Editor();
   readonly colored = !process.env.NO_COLOR && process.env.TERM !== 'dumb';
-  status = '';
-  live = '';
-  hints: string[] = [];
+  /** Right side of the footer: model, effort, context and folder. */
+  info = '';
+  /** Left side of the footer, after the permission badge. */
+  hint = '? for shortcuts';
+  /** A permission mode worth a badge, such as unrestricted tools. */
+  mode = '';
+  /** The running turn's gerund and start time, for the spinner line. */
+  busy: { verb: string; since: number } | null = null;
   commands: Choice<string>[] = [];
-  private detailText: string | null = null;
-  private detailOffset = 0;
-  private detailEnd = 0;
-  private detailFollow = true;
-  private detailRows: string[] = [];
-  private detailColumns = 0;
+  /** Live rows above the prompt; read on every frame so running calls stay current. */
+  live: (columns: number) => string[] = () => [];
+  /** Every event in full, for the Ctrl+O transcript. */
+  transcript: (columns: number) => string[] = () => [];
+  private viewer: Viewer | null = null;
+  private held: string[] = [];
+  private shortcuts = false;
+  private notice: { text: string; timer: NodeJS.Timeout } | null = null;
   private commandIndex = 0;
   private commandDraft = '';
   private commandsHidden = false;
@@ -55,7 +71,7 @@ export class Terminal {
   private escapeTimer: NodeJS.Timeout | null = null;
   private readonly input = new PassThrough();
   private readonly onData = (chunk: Buffer) => this.data(this.decoder.write(chunk));
-  private readonly onResize = () => { this.clear(); this.draw(); };
+  private readonly onResize = () => { this.rendered = ''; this.draw(); };
   private readonly ticker: NodeJS.Timeout;
   private frame = 0;
   private rendered = '';
@@ -63,7 +79,6 @@ export class Terminal {
   onSubmit: (text: string) => void = () => {};
   onInterrupt: (exit: boolean) => void = () => {};
   onStop: () => void = () => {};
-  onExpand: () => void = () => {};
   onComplete: () => void = () => {};
 
   constructor() {
@@ -74,114 +89,35 @@ export class Terminal {
     process.stdin.on('data', this.onData);
     process.stdout.on('resize', this.onResize);
     process.stdout.write('\x1b[?2004h');
-    this.ticker = setInterval(() => { this.frame++; if (this.live) this.draw(); }, 150);
+    this.ticker = setInterval(() => { if (this.busy && !this.viewer) { this.frame++; this.draw(); } }, 120);
   }
 
   print(text: string): void {
     if (this.closed) return;
-    this.clear();
-    process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
-    this.draw();
+    const block = text.endsWith('\n') ? text : `${text}\n`;
+    if (this.viewer) { this.held.push(block); this.draw(); return; }
+    this.render(block);
   }
 
-  set details(text: string | null) {
-    if (this.detailText === null || text === null) this.detailFollow = true;
-    if (this.detailText !== text) this.detailColumns = 0;
-    this.detailText = text;
+  /** A short message in the footer that clears itself. */
+  flash(text: string): void {
+    if (this.notice) clearTimeout(this.notice.timer);
+    this.notice = { text, timer: setTimeout(() => { this.notice = null; this.draw(); }, 2000) };
+    this.draw();
   }
 
   draw(): void {
     if (this.closed) return;
-    const columns = Math.max(12, (process.stdout.columns || 80) - 1);
-    const height = Math.max(8, (process.stdout.rows || 24) - 2);
-    const lines: string[] = [];
-    let cursorRow = 0;
-    let cursorCol = 0;
-    if (this.picker) {
-      lines.push(color(90, '─'.repeat(columns), this.colored));
-      lines.push(color(36, clip(this.picker.title, columns), this.colored), this.picker.query ? clip(`Search: ${this.picker.query}`, columns) : '');
-      const choices = this.filteredChoices();
-      const count = Math.min(choices.length, height - 6);
-      const start = Math.min(Math.max(0, this.picker.index - Math.floor(count / 2)), Math.max(0, choices.length - count));
-      for (let i = start; i < start + count; i++) {
-        const choice = choices[i]!;
-        const text = clip(`${i === this.picker.index ? '›' : ' '} ${choice.label}${choice.detail ? `  ${choice.detail}` : ''}`, columns);
-        lines.push(color(i === this.picker.index ? 36 : 39, text, this.colored));
-      }
-      if (!choices.length) lines.push('No matches.');
-      lines.push('', color(90, clip('↑/↓ select · type to filter · Enter confirm · Esc cancel', columns), this.colored));
-      cursorRow = lines.length - 1;
-    } else {
-      const commands = this.commandMatches();
-      const commandCount = Math.min(6, commands.length);
-      const reserved = 6 + (commandCount ? commandCount + 1 : 0) + (this.question ? 1 : 0);
-      const liveCount = this.detailText ? 3 : Math.max(1, Math.min(8, height - reserved - 1));
-      if (this.detailText) {
-        if (this.detailColumns !== columns) {
-          this.detailRows = wrap(this.detailText, columns);
-          this.detailColumns = columns;
-        }
-        const detailRows = this.detailRows;
-        const count = Math.max(1, Math.min(12, height - reserved - (this.live ? liveCount + 1 : 0) - 2));
-        this.detailEnd = Math.max(0, detailRows.length - count);
-        this.detailOffset = this.detailFollow ? this.detailEnd : Math.min(this.detailOffset, this.detailEnd);
-        lines.push(color(36, clip(`Tool transcript · Ctrl+O hide · PgUp/PgDn scroll (${this.detailOffset + 1}–${Math.min(detailRows.length, this.detailOffset + count)}/${detailRows.length})`, columns), this.colored));
-        lines.push(...detailRows.slice(this.detailOffset, this.detailOffset + count), '');
-      }
-      if (this.live) {
-        const spinner = ['·', '✶', '✳', '✴'][this.frame % 4];
-        const preview = wrap(`${spinner} ${this.live}`, columns);
-        lines.push(...preview.slice(-liveCount), '');
-      }
-      lines.push(color(90, '─'.repeat(columns), this.colored));
-      const prefix = this.question ? '? ' : '› ';
-      if (this.question) lines.push(clip(this.question.title, columns));
-      const draft = this.question?.secret ? '•'.repeat(graphemes(this.editor.text).length) : this.editor.text;
-      const before = this.question?.secret ? '•'.repeat(graphemes(this.editor.text.slice(0, this.editor.cursor)).length) : this.editor.text.slice(0, this.editor.cursor);
-      const draftRows = wrap(prefix + draft, columns);
-      if (commands.length) {
-        const ghost = commands[this.commandIndex]!.value.slice(draft.length);
-        const last = draftRows.length - 1;
-        draftRows[last] += color(90, clip(ghost, Math.max(0, columns - width(draftRows[last]!))), this.colored);
-      }
-      const beforeRows = wrap(prefix + before, columns);
-      const maxDraft = Math.max(2, height - lines.length - 3);
-      const start = Math.max(0, beforeRows.length - maxDraft);
-      cursorRow = lines.length + beforeRows.length - 1 - start;
-      cursorCol = width(beforeRows.at(-1) ?? '');
-      lines.push(...draftRows.slice(start, start + maxDraft));
-      if (commands.length) {
-        lines.push(color(90, clip('Commands · ↑/↓ select · Tab complete · Enter run', columns), this.colored));
-        const start = Math.min(Math.max(0, this.commandIndex - Math.floor(commandCount / 2)), Math.max(0, commands.length - commandCount));
-        for (let i = start; i < start + commandCount; i++) {
-          const command = commands[i]!;
-          lines.push(color(i === this.commandIndex ? 36 : 39, clip(`${i === this.commandIndex ? '›' : ' '} ${command.label}  ${command.detail ?? ''}`, columns), this.colored));
-        }
-      }
-      lines.push(color(90, '─'.repeat(columns), this.colored));
-      lines.push(color(90, clip(this.status || 'Enter send · Ctrl+J newline · /help · /exit quit', columns), this.colored));
-      if (this.hints.length && !this.question) {
-        const hints = clip(this.hints.join('  '), columns);
-        lines.push(hints.startsWith('/exit')
-          ? `${color(36, '/exit', this.colored)}${color(90, hints.slice(5), this.colored)}`
-          : color(90, hints, this.colored));
-      }
+    if (this.viewer) {
+      process.stdout.write(`\x1b[?2026h${this.viewer.frame(screenColumns(), process.stdout.rows || 24)}\x1b[?2026l`);
+      return;
     }
-    const rendered = `${lines.join('\n')}|${cursorRow}:${cursorCol}`;
-    if (this.rows && rendered === this.rendered) return;
-    this.clear();
-    this.rendered = rendered;
-    process.stdout.write(`\x1b[?25l${lines.join('\n')}\r`);
-    const up = lines.length - 1 - cursorRow;
-    if (up > 0) process.stdout.write(`\x1b[${up}A`);
-    if (cursorCol > 0) process.stdout.write(`\x1b[${cursorCol}C`);
-    process.stdout.write(this.picker ? '\x1b[?25l' : '\x1b[?25h');
-    this.rows = lines.length;
-    this.cursorRow = cursorRow;
+    this.render('');
   }
 
   pick<T>(title: string, choices: Choice<T>[], selected = 0): Promise<T | null> {
     if (!choices.length) return Promise.resolve(null);
+    this.closeViewer();
     return new Promise((resolve) => {
       this.picker = { title, choices, index: selected, query: '', resolve: (value) => resolve(value as T | null) };
       this.draw();
@@ -189,6 +125,7 @@ export class Terminal {
   }
 
   ask(title: string, secret = false): Promise<string | null> {
+    this.closeViewer();
     this.savedDraft = this.editor.text;
     this.editor.set('');
     return new Promise((resolve) => { this.question = { title, secret, resolve }; this.draw(); });
@@ -196,10 +133,12 @@ export class Terminal {
 
   close(): void {
     if (this.closed) return;
-    this.clear();
+    this.closeViewer();
+    process.stdout.write(this.erase());
     this.closed = true;
     clearInterval(this.ticker);
     if (this.escapeTimer) clearTimeout(this.escapeTimer);
+    if (this.notice) clearTimeout(this.notice.timer);
     this.picker?.resolve(null);
     this.question?.resolve(null);
     process.stdout.write('\x1b[?2004l\x1b[?25h\x1b[0m');
@@ -210,11 +149,139 @@ export class Terminal {
     this.input.destroy();
   }
 
-  private clear(): void {
-    if (!this.rows) return;
-    process.stdout.write(`\r${this.cursorRow ? `\x1b[${this.cursorRow}A` : ''}\x1b[J`);
+  /** Writes `text` into scrollback above the live area and redraws it, as one synchronized update. */
+  private render(text: string): void {
+    const { lines, cursorRow, cursorCol } = this.layout();
+    const frame = `${lines.join('\n')}|${cursorRow}:${cursorCol}`;
+    if (!text && this.rows && frame === this.rendered) return;
+    let output = `\x1b[?2026h\x1b[?25l${this.erase()}${text}${lines.join('\n')}\r`;
+    const up = lines.length - 1 - cursorRow;
+    if (up > 0) output += `\x1b[${up}A`;
+    if (cursorCol > 0) output += `\x1b[${cursorCol}C`;
+    output += `${this.picker ? '' : '\x1b[?25h'}\x1b[?2026l`;
+    process.stdout.write(output);
+    this.rendered = frame;
+    this.rows = lines.length;
+    this.cursorRow = cursorRow;
+  }
+
+  private erase(): string {
+    if (!this.rows) return '';
+    const text = `\r${this.cursorRow ? `\x1b[${this.cursorRow}A` : ''}\x1b[J`;
     this.rows = 0;
     this.cursorRow = 0;
+    return text;
+  }
+
+  private layout(): { lines: string[]; cursorRow: number; cursorCol: number } {
+    const columns = screenColumns();
+    const height = Math.max(6, (process.stdout.rows || 24) - 1);
+    const c = this.colored;
+    const rule = color(DIM, '─'.repeat(columns), c);
+    const bottom: string[] = [];
+    let cursorRow = 0;
+    let cursorCol = 0;
+    if (this.picker) {
+      bottom.push('', color(ACCENT, '─'.repeat(columns), c), ` ${color(1, clip(this.picker.title, columns - 1), c)}`);
+      if (this.picker.query) bottom.push(color(DIM, ` ${clip(`Filter: ${this.picker.query}`, columns - 1)}`, c));
+      bottom.push('');
+      const choices = this.filteredChoices();
+      const count = Math.max(1, Math.min(choices.length, height - bottom.length - 3));
+      const start = Math.min(Math.max(0, this.picker.index - Math.floor(count / 2)), Math.max(0, choices.length - count));
+      const labelWidth = Math.min(32, Math.max(...choices.map((choice) => width(choice.label) + (choice.current ? 2 : 0)), 0));
+      for (let i = start; i < start + count && i < choices.length; i++) {
+        const choice = choices[i]!;
+        const selected = i === this.picker.index;
+        const label = `${choice.label}${choice.current ? ' ✓' : ''}`;
+        const padded = label + ' '.repeat(Math.max(0, labelWidth - width(label)));
+        const row = ellipsis(`${padded}${choice.detail ? `  ${choice.detail}` : ''}`, columns - 3);
+        bottom.push(`${selected ? color(ACCENT, ' ❯', c) : '  '} ${color(selected ? ACCENT : choice.current ? 32 : 39, row, c)}`);
+      }
+      if (!choices.length) bottom.push(color(DIM, '   No matches', c));
+      bottom.push('', color(DIM, clip(' ↑↓ to select · enter to confirm · esc to cancel · type to filter', columns), c));
+      cursorRow = bottom.length - 1;
+    } else {
+      if (this.busy) {
+        const spinner = color(ACCENT, SPINNER[this.frame % SPINNER.length]!, c);
+        bottom.push('', `${spinner} ${color(ACCENT, `${this.busy.verb}…`, c)} ${color(DIM, `(${duration(Date.now() - this.busy.since)} · esc to interrupt)`, c)}`);
+      }
+      bottom.push('');
+      if (this.question) bottom.push(` ${color(1, clip(this.question.title, columns - 1), c)}`);
+      bottom.push(rule);
+      const secret = (text: string) => this.question?.secret ? '•'.repeat(graphemes(text).length) : text;
+      const prefix = this.question ? '? ' : '❯ ';
+      const draft = secret(this.editor.text);
+      const rows = wrapDraft(prefix + draft, columns);
+      const before = wrapDraft(prefix + secret(this.editor.text.slice(0, this.editor.cursor)), columns);
+      const commands = this.commandMatches();
+      if (commands.length) {
+        const ghost = commands[this.commandIndex]!.value.slice(draft.length);
+        rows[rows.length - 1] += color(DIM, clip(ghost, Math.max(0, columns - width(rows.at(-1)!))), c);
+      }
+      if (!draft && !this.question) rows[0] += color(DIM, clip(this.busy ? 'Steer the running task, or queue with /queue' : 'Try "fix the failing tests" or /help', columns - 2), c);
+      const maxDraft = Math.max(1, height - bottom.length - 3);
+      const first = Math.max(0, before.length - maxDraft);
+      cursorRow = bottom.length + before.length - 1 - first;
+      cursorCol = width(before.at(-1) ?? '');
+      if (cursorCol >= columns) { cursorRow++; cursorCol = 2; }
+      bottom.push(...rows.slice(first, first + maxDraft).map((row, index) => index === 0 && first === 0 ? `${color(1, row.slice(0, 2), c)}${row.slice(2)}` : row), rule);
+      bottom.push(...this.below(commands, columns));
+    }
+    const room = Math.max(0, height - bottom.length);
+    const live = room ? this.live(columns).slice(-room) : [];
+    let lines = [...live, ...bottom];
+    cursorRow += live.length;
+    if (lines.length > height) {
+      const cut = lines.length - height;
+      lines = lines.slice(cut);
+      cursorRow = Math.max(0, cursorRow - cut);
+    }
+    return { lines, cursorRow, cursorCol };
+  }
+
+  /** Under the prompt: command suggestions, the shortcut list, or the footer. */
+  private below(commands: Choice<string>[], columns: number): string[] {
+    const c = this.colored;
+    if (commands.length) {
+      const count = Math.min(6, commands.length);
+      const start = Math.min(Math.max(0, this.commandIndex - Math.floor(count / 2)), Math.max(0, commands.length - count));
+      const name = Math.min(18, Math.max(...commands.map((command) => width(command.label))));
+      return commands.slice(start, start + count).map((command, offset) => {
+        const selected = start + offset === this.commandIndex;
+        const text = ellipsis(`${command.label.padEnd(name)}  ${command.detail ?? ''}`, columns - 2);
+        return `  ${selected ? color(ACCENT, text, c) : color(DIM, text, c)}`;
+      });
+    }
+    if (this.shortcuts) {
+      const cell = Math.floor((columns - 2) / 3);
+      return cell >= 22
+        ? SHORTCUTS.map((row) => `  ${row.map((item) => color(DIM, item.padEnd(cell), c)).join('')}`)
+        : SHORTCUTS.flat().map((item) => `  ${color(DIM, item, c)}`);
+    }
+    const badge = this.mode ? `${color(ACCENT, `⏵⏵ ${this.mode}`, c)}${color(DIM, ' · ', c)}` : '';
+    const left = `  ${badge}${color(DIM, this.notice?.text ?? this.hint, c)}`;
+    const room = columns - width(left) - 2;
+    const right = ellipsis(this.info, Math.max(0, room));
+    return room > 12 ? [`${left}${' '.repeat(Math.max(2, columns - width(left) - width(right)))}${color(DIM, right, c)}`]
+      : [left, `  ${color(DIM, ellipsis(this.info, columns - 2), c)}`];
+  }
+
+  private openViewer(): void {
+    if (this.viewer || this.picker) return;
+    process.stdout.write(`${this.erase()}\x1b[?1049h\x1b[?25l`);
+    this.viewer = new Viewer(this.transcript, this.colored);
+    this.draw();
+  }
+
+  private closeViewer(): void {
+    if (!this.viewer) return;
+    this.viewer = null;
+    process.stdout.write('\x1b[?1049l');
+    this.rows = 0;
+    this.rendered = '';
+    const held = this.held.join('');
+    this.held = [];
+    this.render(held);
   }
 
   private data(chunk: string): void {
@@ -245,6 +312,11 @@ export class Terminal {
   }
 
   private key(sequence: string, key: Key): void {
+    if (this.viewer) {
+      if (!this.viewer.key(sequence, key, process.stdout.rows || 24)) this.closeViewer();
+      else this.draw();
+      return;
+    }
     if (this.picker) {
       const picker = this.picker;
       const choices = this.filteredChoices();
@@ -262,11 +334,8 @@ export class Terminal {
       }
       this.draw(); return;
     }
-    if (this.detailText && (key.name === 'pageup' || key.name === 'pagedown')) {
-      this.detailOffset = Math.max(0, this.detailOffset + (key.name === 'pageup' ? -8 : 8));
-      this.detailFollow = key.name === 'pagedown' && this.detailOffset >= this.detailEnd;
-      this.draw(); return;
-    }
+    if (sequence === '?' && !this.editor.text && !this.question) { this.shortcuts = !this.shortcuts; this.draw(); return; }
+    this.shortcuts = false;
     const commands = this.commandMatches();
     if (commands.length && ['up', 'down', 'tab', 'return', 'escape'].includes(key.name ?? '') && !key.ctrl && !key.meta && !key.shift) {
       if (key.name === 'up') this.commandIndex = (this.commandIndex + commands.length - 1) % commands.length;
@@ -289,7 +358,7 @@ export class Terminal {
       if (action === 'submit') { const text = this.editor.submit(); if (text) this.onSubmit(text); }
       if (action === 'interrupt' || action === 'exit') this.onInterrupt(action === 'exit');
       if (action === 'stop') this.onStop();
-      if (action === 'expand') this.onExpand();
+      if (action === 'expand') { this.openViewer(); return; }
       if (action === 'complete') this.onComplete();
     }
     this.draw();
