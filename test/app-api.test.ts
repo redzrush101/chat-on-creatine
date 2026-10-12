@@ -47,26 +47,29 @@ it('does not create a replacement session when an explicit session ID is stale',
 
 it('shell commands use the backend cwd and policy, while YOLO bypasses the root and command restrictions', async () => {
   dir = await mkdtemp(join(tmpdir(), 'creatine-api-command-'));
+  const marker = 'backend-working-directory';
+  await writeFile(join(dir, 'cwd.txt'), marker);
+  const command = `node -e "process.stdout.write(require('node:fs').readFileSync('cwd.txt', 'utf8'))"`;
   const config = defaultConfig();
   config.roots = [{ id: 'test', path: dir, label: '' }];
   const processes = new ProcessManager();
   const services = { config: { get: () => config }, processes } as unknown as Services;
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   try {
-    let result = await api['commands:exec']('pwd', dir);
+    let result = await api['commands:exec'](command, dir);
     let output = result.output;
     while (result.sessionId) { result = await api['commands:poll'](result.sessionId, ''); output += result.output; }
-    expect(output).toContain(dir);
+    expect(output).toContain(marker);
     config.readOnly = true;
-    await expect(api['commands:exec']('pwd', dir)).rejects.toThrow('disabled');
+    await expect(api['commands:exec'](command, dir)).rejects.toThrow('disabled');
     config.readOnly = false;
-    config.commandPolicy = { enabled: true, mode: 'denylist', rules: ['pwd'] };
-    await expect(api['commands:exec']('pwd', dir)).rejects.toThrow('not allowed');
+    config.commandPolicy = { enabled: true, mode: 'denylist', rules: [command] };
+    await expect(api['commands:exec'](command, dir)).rejects.toThrow('not allowed');
     config.roots = [];
     config.yolo = true;
-    let unrestricted = await api['commands:exec']('pwd', dir);
+    let unrestricted = await api['commands:exec'](command, dir);
     let unrestrictedOutput = unrestricted.output;
     while (unrestricted.sessionId) { unrestricted = await api['commands:poll'](unrestricted.sessionId, ''); unrestrictedOutput += unrestricted.output; }
-    expect(unrestrictedOutput).toContain(dir);
+    expect(unrestrictedOutput).toContain(marker);
   } finally { await processes.dispose(); }
 });

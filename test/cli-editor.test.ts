@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { Editor } from '../src/cli/editor';
 import { parseOptions } from '../src/cli/options';
@@ -41,8 +43,9 @@ it('inserts pasted multiline text without submitting and removes terminal contro
 });
 
 it('parses execution arguments without losing literal prompts or changing attachment resolution', () => {
-  const options = parseOptions(['exec', '-C', 'repo', '--attach', 'notes.txt', '--json', '--yolo', '-r', 'abc', '--', '--literal', 'task'], '/tmp');
-  expect(options).toMatchObject({ cwd: '/tmp/repo', attachments: ['/tmp/notes.txt'], json: true, print: true, yolo: true, resume: 'abc', prompt: '--literal task' });
+  const cwd = tmpdir();
+  const options = parseOptions(['exec', '-C', 'repo', '--attach', 'notes.txt', '--json', '--yolo', '-r', 'abc', '--', '--literal', 'task'], cwd);
+  expect(options).toMatchObject({ cwd: join(cwd, 'repo'), attachments: [join(cwd, 'notes.txt')], json: true, print: true, yolo: true, resume: 'abc', prompt: '--literal task' });
   expect(() => parseOptions(['--effort', 'invalid'])).toThrow('Unknown effort');
   expect(() => parseOptions(['--timeout', 'NaN'])).toThrow('positive');
   expect(() => parseOptions(['--loop', '--print'])).toThrow('interactive');

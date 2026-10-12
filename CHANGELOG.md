@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.3.1] - 2026-10-12
+
+- Fix Windows release checks for CLI path handling and command working directories.
+
 ## [0.3.0] - 2026-10-12
 
 - Add a coding CLI that shares the desktop app's ChatGPT login, conversations, models,
