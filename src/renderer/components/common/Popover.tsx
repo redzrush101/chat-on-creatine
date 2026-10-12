@@ -152,7 +152,7 @@ interface MenuListProps {
 }
 
 /** Keyboard-navigable menu list (arrows, Home/End; Enter or Space activates; Escape closes via the anchor). */
-function MenuList({ entries, onClose }: MenuListProps) {
+export function MenuList({ entries, onClose }: MenuListProps) {
   const list = useRef<HTMLDivElement>(null);
   const menuItems = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
 

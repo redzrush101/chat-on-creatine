@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent } from 'react';
 import type { AutomationMode, InputDelivery } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { reportError, notify } from '../common/Toasts';
-import type { ModelValue } from './ModelPicker';
+import type { ModelSelection } from '@shared/types';
 import type { ComposerProps } from './types';
 import { useComposerDraft } from './draft';
 
@@ -97,8 +97,8 @@ export function useComposer({
     }
   };
 
-  const modelValue: ModelValue = session ? { model: session.model, reasoning: session.reasoning } : newChat.model;
-  const modelChange = (value: ModelValue) => {
+  const modelValue: ModelSelection = session ? { model: session.model, reasoning: session.reasoning } : newChat.model;
+  const modelChange = (value: ModelSelection) => {
     if (session) invoke('sessions:update', session.id, { model: value.model, reasoning: value.reasoning }).catch(reportError);
     else onNewChatChange({ model: value });
   };

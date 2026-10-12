@@ -22,7 +22,13 @@ export interface GoalState {
   lastDecision: string | null;
 }
 
-export interface SessionMeta {
+/** A concrete model and reasoning choice; null inherits the account default. */
+export interface ModelSelection {
+  model: string | null;
+  reasoning: ReasoningEffort | null;
+}
+
+export interface SessionMeta extends ModelSelection {
   id: string;
   kind: SessionKind;
   title: string;
@@ -33,8 +39,6 @@ export interface SessionMeta {
   conversationId: string | null;
   /** Earlier conversations of this session (Compact & Resume moves forward, never back). */
   lineage: string[];
-  model: string | null;
-  reasoning: ReasoningEffort | null;
   createdAt: number;
   updatedAt: number;
   pinned: boolean;

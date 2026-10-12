@@ -5,7 +5,7 @@ import { Resizer } from './components/common/Resizer';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { ChatView } from './components/chat/ChatView';
 import { Home } from './components/home/Home';
-import type { ModelValue } from './components/composer/ModelPicker';
+import type { ModelSelection } from '@shared/types';
 import type { NewChatDraft } from './components/composer/types';
 import { SettingsView } from './settings/SettingsView';
 import { isPanelTab, WorkPanel, type PanelTab } from './workpanel/WorkPanel';
@@ -31,7 +31,7 @@ interface Visits {
 /** New-chat choices; `model` stays null until the user picks one, so config defaults apply. */
 interface DraftChoices {
   projectId: string | null;
-  model: ModelValue | null;
+  model: ModelSelection | null;
   mode: NewChatDraft['mode'];
 }
 

@@ -1,13 +1,8 @@
 import type { JSX } from 'react';
 import type { ReasoningEffort } from '@shared/config';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
-import type { ModelCatalog } from '@shared/types';
+import type { ModelCatalog, ModelSelection } from '@shared/types';
 import { Row, SelectField } from './controls';
-
-interface ModelDefault {
-  model: string | null;
-  reasoning: ReasoningEffort | null;
-}
 
 /**
  * A default model and reasoning effort as two settings rows. Unset means "inherit", and then
@@ -21,10 +16,10 @@ export function ModelDefaults({
   onChange
 }: {
   catalog: ModelCatalog;
-  value: ModelDefault;
+  value: ModelSelection;
   inherited: string | null;
   labels: { model: string; modelHint: string; reasoning: string; reasoningHint?: string; unset: string };
-  onChange(value: ModelDefault): void;
+  onChange(value: ModelSelection): void;
 }): JSX.Element {
   const selected = findModel(catalog.models, value.model ?? inherited);
   return (

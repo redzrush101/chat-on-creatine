@@ -1,22 +1,16 @@
-import { Check, ChevronDown, RotateCw } from 'lucide-react';
-import type { ReasoningEffort } from '@shared/config';
+import { ChevronDown, RotateCw } from 'lucide-react';
 import { REASONING_EFFORTS } from '@shared/config';
-import type { ModelCatalog } from '@shared/types';
+import type { ModelCatalog, ModelSelection } from '@shared/types';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
 import { invoke } from '../../lib/bridge';
 import { cx } from '../../lib/format';
 import { reportError } from '../common/Toasts';
-import { Popover } from '../common/Popover';
-
-export interface ModelValue {
-  model: string | null;
-  reasoning: ReasoningEffort | null;
-}
+import { MenuList, Popover } from '../common/Popover';
 
 interface ModelPickerProps {
-  value: ModelValue;
+  value: ModelSelection;
   catalog: ModelCatalog;
-  onChange(value: ModelValue): void;
+  onChange(value: ModelSelection): void;
   disabled?: boolean;
 }
 
@@ -49,28 +43,13 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
       >
         {(close) => (
           <div className="picker">
-            <div className="picker-label">Model</div>
-            <button type="button" className="menu-item" onClick={() => {
-                  onChange({ model: null, reasoning: null });
-                  close();
-                }}>
-              <span className="menu-text">{catalog.defaultModel ? `Default (${labelOf(catalog, catalog.defaultModel)})` : 'Default'}</span>
-              {value.model === null && <Check size={14} className="menu-check" aria-hidden="true" />}
-            </button>
-            {catalog.models.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                className="menu-item"
-                onClick={() => {
-                  onChange(modelSelection(entry, reasoning));
-                  close();
-                }}
-              >
-                <span className="menu-text">{entry.label}</span>
-                {value.model !== null && option === entry && <Check size={14} className="menu-check" aria-hidden="true" />}
-              </button>
-            ))}
+            <MenuList onClose={close} entries={[
+              { kind: 'label', label: 'Model' },
+              { label: catalog.defaultModel ? `Default (${labelOf(catalog, catalog.defaultModel)})` : 'Default',
+                checked: value.model === null, onSelect: () => onChange({ model: null, reasoning: null }) },
+              ...catalog.models.map((entry) => ({ label: entry.label, checked: value.model !== null && option === entry,
+                onSelect: () => onChange(modelSelection(entry, reasoning)) }))
+            ]} />
             {catalog.state === 'loading' && <p className="picker-note">Loading models…</p>}
             {catalog.state === 'error' && (
               <p className="picker-note is-error">
@@ -96,23 +75,14 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
         >
           {(close) => (
             <div className="picker">
-              <div className="picker-label">Reasoning</div>
-              <button type="button" className="menu-item" onClick={() => {
-                  onChange({ ...value, reasoning: null });
-                  close();
-                }}>
-                <span className="menu-text">Default</span>
-                {reasoning === null && <Check size={14} className="menu-check" aria-hidden="true" />}
-              </button>
-              {REASONING_EFFORTS.filter((effort) => efforts.includes(effort)).map((effort) => (
-                <button key={effort} type="button" className="menu-item" onClick={() => {
-                  if (option) onChange(modelSelection(option, effort));
-                  close();
-                }}>
-                  <span className="menu-text">{effortLabel(option, effort)}</span>
-                  {reasoning === effort && <Check size={14} className="menu-check" aria-hidden="true" />}
-                </button>
-              ))}
+              <MenuList onClose={close} entries={[
+                { kind: 'label', label: 'Reasoning' },
+                { label: 'Default', checked: reasoning === null, onSelect: () => onChange({ ...value, reasoning: null }) },
+                ...REASONING_EFFORTS.filter((effort) => efforts.includes(effort)).map((effort) => ({
+                  label: effortLabel(option, effort), checked: reasoning === effort,
+                  onSelect: () => { if (option) onChange(modelSelection(option, effort)); }
+                }))
+              ]} />
             </div>
           )}
         </Popover>

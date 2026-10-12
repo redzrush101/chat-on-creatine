@@ -1,5 +1,5 @@
 import type { ReasoningEffort } from './config';
-import type { ModelOption } from './types';
+import type { ModelOption, ModelSelection } from './types';
 
 const EFFORT_LABEL: Record<ReasoningEffort, string> = {
   none: 'None',
@@ -18,7 +18,7 @@ export function findModel(models: ModelOption[], id: string | null): ModelOption
 }
 
 /** Converts a family and effort into the concrete model that ChatGPT sends. */
-export function modelSelection(option: ModelOption, reasoning: ReasoningEffort | null) {
+export function modelSelection(option: ModelOption, reasoning: ReasoningEffort | null): ModelSelection {
   const preset = option.presets?.find((entry) => entry.reasoning === reasoning)
     ?? option.presets?.find((entry) => entry.model === option.id);
   return preset
