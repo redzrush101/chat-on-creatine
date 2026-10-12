@@ -45,7 +45,7 @@ export class Transcript {
       if (this.printed.has(event.id)) continue;
       this.printed.add(event.id);
       if (event.kind === 'turn') this.onTurn(event);
-      const text = formatEvent(event, this.options());
+      const text = formatEvent(event, { ...this.options(), agentStarted: this.agentStarted(event) });
       if (text) this.write(text);
     }
   }
@@ -103,6 +103,11 @@ export class Transcript {
       }) };
     }
     return this.details.rows;
+  }
+
+  private agentStarted(event: SessionEvent): number | undefined {
+    if (event.kind !== 'agent' || event.action !== 'finished') return undefined;
+    return [...this.events.values()].find((item) => item.kind === 'agent' && item.action === 'spawned' && item.workerSessionId === event.workerSessionId)?.at;
   }
 
   private onTurn(event: Extract<SessionEvent, { kind: 'turn' }>): void {

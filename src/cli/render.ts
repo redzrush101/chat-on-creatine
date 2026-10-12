@@ -10,6 +10,8 @@ export interface RenderOptions {
   columns: number;
   /** The Ctrl+O transcript: arguments, full output and thinking. */
   expanded?: boolean;
+  /** When the agent of a `finished` row started, for its run time. */
+  agentStarted?: number;
 }
 
 /** Rows of a normal-view tool result before the rest folds into "… +N lines". */
@@ -37,9 +39,10 @@ export function assistantText(event: Extract<SessionEvent, { kind: 'assistant' }
   return cited(safeText(event.text), event.citations);
 }
 
+/** A prompt on its own shaded band, as Claude Code shows what you typed. */
 export function userRows(text: string, options: RenderOptions): string[] {
-  const lines = safeText(text).split('\n').map((line) => ({ text: color(DIM, line, options.colored), hang: 0 }));
-  return indent(lines, options.columns, `${color(DIM, '>', options.colored)} `);
+  const rows = indent(safeText(text).split('\n').map((line) => ({ text: line, hang: 0 })), options.columns, '❯ ');
+  return options.colored ? rows.map((row) => `\x1b[48;5;237m${row}${' '.repeat(Math.max(0, options.columns - width(row)))}\x1b[0m`) : rows;
 }
 
 /** Result rows under a `⎿` elbow, the way Claude Code nests output below its call. */
@@ -84,19 +87,6 @@ function hiddenTool(event: ToolEvent, label: ToolLabel): boolean {
 export function toolHeadline(event: ToolEvent): string {
   const title = toolTitle(event, describeTool(event));
   return title.target === null ? title.name : `${title.name}(${safeText(title.target)})`;
-}
-
-export interface WorkerProgress { label: string; state: string; tools: number; current: string | null }
-
-/** Live rows for the agents a chat started: who is working and on what, like Claude Code's tasks. */
-export function workerRows(workers: WorkerProgress[], options: RenderOptions): string[] {
-  const { colored, columns } = options;
-  return workers.flatMap((worker) => {
-    const head = `${color(35, '●', colored)} ${color(1, 'Agent', colored)}(${ellipsis(safeText(worker.label), columns - 20)}) ${color(DIM, `· ${worker.state}`, colored)}`;
-    const step = worker.current ?? (worker.state === 'queued' ? 'Waiting for a free slot' : 'Starting');
-    const uses = worker.tools ? ` · ${worker.tools} tool use${worker.tools === 1 ? '' : 's'}` : '';
-    return ['', head, `  ${color(DIM, '⎿', colored)}  ${color(DIM, ellipsis(`${step}${uses}`, columns - 5), colored)}`];
-  });
 }
 
 function fold(lines: string[], limit: number, options: RenderOptions): string[] {
@@ -234,10 +224,19 @@ export function eventRows(event: SessionEvent, options: RenderOptions): string[]
     case 'plan': return planRows(event, options);
     case 'notice': return indent([{ text: safeText(event.text), hang: 0 }], columns, bullet(event.level === 'error' ? 31 : event.level === 'warn' ? 33 : DIM, options));
     case 'agent': {
-      const lines = trimmed(event.text);
-      const action = event.action === 'spawned' ? 'started' : event.action === 'woke' ? 'woke up' : event.action;
-      const head = `${bullet(35, options)}${color(1, 'Agent', colored)}(${safeText(event.label)}) ${color(DIM, `· ${action}`, colored)}`;
-      return [head, ...lines.length ? nested(expanded ? lines : fold(lines, event.action === 'finished' ? PREVIEW_ROWS : 1, options), options) : []];
+      // Claude Code's shape: a compact start row, message rows, and a finish line; Ctrl+O has the text.
+      const name = safeText(event.label);
+      const details = expanded ? nested(trimmed(event.text), options) : [];
+      const hint = expanded ? '' : color(DIM, ' (ctrl+o to expand)', colored);
+      switch (event.action) {
+        case 'spawned': return [`${bullet(32, options)}${color(1, 'Agent', colored)}(${name})`, ...nested([`Started in the background${hint}`], options), ...details];
+        case 'messaged': return [`${color(DIM, '›', colored)} ${color(DIM, `Message to @${name}`, colored)}${hint}`, ...details];
+        case 'woke': return [`${color(DIM, '›', colored)} ${color(DIM, `@${name} picked up a new message`, colored)}`, ...details];
+        case 'finished': {
+          const took = options.agentStarted === undefined ? '' : color(DIM, ` · ${duration(event.at - options.agentStarted)}`, colored);
+          return [`${bullet(32, options)}Agent "${name}" finished${took}${hint}`, ...details];
+        }
+      }
     }
     case 'handoff': return [color(ACCENT, '✻ Compacted · continuing in a fresh conversation', colored)];
     case 'reasoning': return expanded && event.text.trim() ? indent(safeText(event.text).split('\n').map((text) => ({ text: color(DIM, text, colored), hang: 0 })), columns, color(DIM, '✻ ', colored)) : [];

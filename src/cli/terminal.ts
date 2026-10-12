@@ -48,6 +48,8 @@ export class Terminal {
   /** The running turn's gerund and start time, for the spinner line. */
   busy: { verb: string; since: number } | null = null;
   commands: Choice<string>[] = [];
+  /** Working background agents, listed under the footer as Claude Code does. */
+  agents: { label: string; detail: string; since: number }[] = [];
   /** Live rows above the prompt; read on every frame so running calls stay current. */
   live: (columns: number) => string[] = () => [];
   /** Every event in full, for the Ctrl+O transcript. */
@@ -271,8 +273,15 @@ export class Terminal {
     const left = `  ${badge}${color(DIM, this.notice?.text ?? this.hint, c)}`;
     const room = columns - width(left) - 2;
     const right = ellipsis(this.info, Math.max(0, room));
-    return room > 12 ? [`${left}${' '.repeat(Math.max(2, columns - width(left) - width(right)))}${color(DIM, right, c)}`]
+    const footer = room > 12 ? [`${left}${' '.repeat(Math.max(2, columns - width(left) - width(right)))}${color(DIM, right, c)}`]
       : [left, `  ${color(DIM, ellipsis(this.info, columns - 2), c)}`];
+    if (!this.agents.length) return footer;
+    const name = Math.min(24, Math.max(...this.agents.map((agent) => width(agent.label))));
+    return [...footer, '', `  ${color(1, '● main', c)}`, ...this.agents.map((agent) => {
+      const elapsed = duration(Date.now() - agent.since);
+      const text = ellipsis(`○ ${ellipsis(agent.label, name).padEnd(name)}  ${agent.detail}`, columns - width(elapsed) - 6);
+      return `  ${color(DIM, text, c)}${' '.repeat(Math.max(2, columns - 2 - width(text) - width(elapsed)))}${color(DIM, elapsed, c)}`;
+    })];
   }
 
   private openViewer(): void {
