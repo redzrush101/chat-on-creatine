@@ -40,7 +40,7 @@ export function startDriver(transport: DriverTransport, tapChannel: string): voi
 
   async function refreshAuth(): Promise<void> {
     const current = await backend.getSession(true);
-    if (current) emit({ type: 'auth', signedIn: current.signedIn, email: current.email });
+    if (current) emit({ type: 'auth', signedIn: current.signedIn });
   }
 
   const checkPage = observePage(emit);

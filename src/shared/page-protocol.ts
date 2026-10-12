@@ -42,7 +42,7 @@ export interface ChatMessage {
 export type PageEvent =
   | { type: 'hello'; driverVersion: number; url: string; conversationId: string | null; signedIn: boolean | null }
   | { type: 'location'; url: string; conversationId: string | null }
-  | { type: 'auth'; signedIn: boolean; email: string | null }
+  | { type: 'auth'; signedIn: boolean }
   /** A `POST /backend-api/f/conversation` stream opened. `streamId` is local to the page. */
   | { type: 'turn-start'; streamId: string; conversationId: string | null; requestId: string | null }
   | { type: 'message'; streamId: string | null; message: ChatMessage }
@@ -118,3 +118,7 @@ export function conversationIdFromUrl(url: string): string | null {
 }
 
 export const DRIVER_VERSION = 1;
+
+export const PAGE_EVENT_CHANNEL = 'creatine-page:event';
+export const PAGE_COMMAND_CHANNEL = 'creatine-page:command';
+export const PAGE_RESULT_CHANNEL = 'creatine-page:result';

@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { BaseWindow, WebContentsView, ipcMain, session, shell, type Session, type WebContents } from 'electron';
-import { conversationIdFromUrl, type PageCommand, type PageEvent, type PageResult } from '@shared/page-protocol';
+import { PAGE_COMMAND_CHANNEL, PAGE_EVENT_CHANNEL, PAGE_RESULT_CHANNEL, conversationIdFromUrl, type PageCommand, type PageEvent, type PageResult } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
 import type { ChatHost, HostEvents, HostStatus, TabInfo } from './host';
 
 const log = createLogger('browser');
 
-const PAGE_EVENT_CHANNEL = 'creatine-page:event';
-const PAGE_COMMAND_CHANNEL = 'creatine-page:command';
-const PAGE_RESULT_CHANNEL = 'creatine-page:result';
 
 const PARTITION = 'persist:chatgpt';
 

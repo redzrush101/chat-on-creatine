@@ -5,7 +5,6 @@ const SESSION_TTL_MS = 5 * 60_000;
 interface Session {
   signedIn: boolean;
   accessToken: string | null;
-  email: string | null;
   at: number;
 }
 
@@ -24,12 +23,11 @@ export function createBackend() {
     try {
       const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) return session;
-      const body = (await response.json()) as { accessToken?: unknown; user?: { email?: unknown } };
+      const body = (await response.json()) as { accessToken?: unknown };
       const accessToken = typeof body.accessToken === 'string' && body.accessToken ? body.accessToken : null;
       session = {
         signedIn: accessToken !== null,
         accessToken,
-        email: typeof body.user?.email === 'string' ? body.user.email : null,
         at: Date.now()
       };
       return session;

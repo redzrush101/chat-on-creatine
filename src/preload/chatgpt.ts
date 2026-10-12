@@ -1,12 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
+import { PAGE_COMMAND_CHANNEL, PAGE_EVENT_CHANNEL, PAGE_RESULT_CHANNEL, type PageCommand, type PageEvent, type PageResult } from '@shared/page-protocol';
 import { startDriver } from '../page/driver';
 import { installFetchTap } from '../page/tap';
 
-// Must match builtin-host.ts (not imported: that module pulls in the main-process Electron API).
-const PAGE_EVENT_CHANNEL = 'creatine-page:event';
-const PAGE_COMMAND_CHANNEL = 'creatine-page:command';
-const PAGE_RESULT_CHANNEL = 'creatine-page:result';
 
 const tapChannel = `creatine-tap-${crypto.randomUUID()}`;
 

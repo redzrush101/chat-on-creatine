@@ -63,7 +63,7 @@ function setup(selection: PageResult = { ok: true }) {
 
 it('reports sign-in from an unbound browser tab, including the first setup', () => {
   const { onAuth } = setup();
-  page.page('sign-in-tab', { type: 'auth', signedIn: true, email: null });
+  page.page('sign-in-tab', { type: 'auth', signedIn: true });
   expect(onAuth).toHaveBeenCalledWith(true);
 });
 
