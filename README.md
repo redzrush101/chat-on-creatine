@@ -19,7 +19,7 @@ Follow the conversation, inspect file changes and manage background tasks in one
 
 Work from your project directory with streaming replies, file diffs and command output.
 
-![Chat on Creatine CLI](docs/screenshots/cli.png)
+![A task in the Chat on Creatine CLI](docs/screenshots/cli.gif)
 
 ## Download
 
@@ -58,8 +58,9 @@ The CLI starts Electron in the background when needed. `login` opens the ChatGPT
 signing in from either interface signs you in to both.
 
 Use `/help` for commands, `/model` to choose a model, `/gui` to open the desktop app and
-`/exit` to quit. Slash commands suggest completions as you type; Tab completes the name.
-Ctrl+O opens the full tool transcript; PgUp/PgDn scrolls it. Esc stops a running task.
+`/exit` to quit. Slash commands suggest completions as you type; Tab completes the name and
+`?` lists the shortcuts. Replies render Markdown with tables and highlighted code. Ctrl+O opens
+the full transcript with every tool's arguments and output. Esc stops a running task.
 
 Your current directory is the working folder; `-C` selects another one. Add `--yolo` for
 unrestricted tools. That setting is shared with the desktop app; `/permissions` changes it.
@@ -69,6 +70,7 @@ unrestricted tools. That setting is shared with the desktop app; `/permissions` 
 ```sh
 npm run dev         # electron-vite with HMR
 npm run verify      # repository rules, typecheck, tests, build
+npm run test:live   # the real app against your signed-in ChatGPT account (test/live/README.md)
 npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
 ```
 
@@ -78,6 +80,6 @@ pull requests and releases.
 Code map: `src/cli` terminal frontend · `src/shared` contracts · `src/main/app/api.ts` shared frontend handlers ·
 `src/main/mcp` server + tools · `src/main/chatgpt` browser + router ·
 `src/page` in-page driver · `src/main/sessions` history/outbox/recorder · `src/main/{agents,automation}` workers,
-Goal/Loop, Compact & Resume · `src/main/tunnel` connection · `src/renderer` React UI.
+Goal/Loop, Compact & Resume · `src/main/tunnel` connection · `src/renderer` React UI · `test/live` live tests.
 
 Use it within OpenAI's terms; it automates your own ChatGPT session and is not affiliated with OpenAI.

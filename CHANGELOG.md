@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2026-10-12
+
+- Redesign the CLI after Claude Code: tool calls read as `Bash(npm test)` or `Update(app.ts)`
+  with a short result, plans as todo lists, and turns end with how long they took. A spinner line
+  shows what is running, and the prompt sits between rules with model, context and folder below.
+- Render full Markdown in the terminal: headings, emphasis, nested and task lists, quotes, tables
+  with aligned columns and syntax-highlighted code. Long lines wrap at word boundaries.
+- Open the whole transcript with Ctrl+O on a separate screen that scrolls without touching the
+  conversation, and list shortcuts with `?`.
+- Show web citations as their source sites, and stop printing a reply twice when ChatGPT updates
+  its citations after the text.
+- Stop recording ChatGPT's copy of our own tool calls as extra `api_tool.call_tool` steps in the
+  GUI and CLI, and label such steps in older chats by the tool they called.
+- Add `npm run test:live`: GUI and CLI scenarios against the real app and a signed-in account,
+  with a throwaway profile copy, screenshots, GIFs and logs for every run.
+
 ## [0.3.2] - 2026-10-12
 
 - Keep streamed response lines in terminal history instead of showing only the last few lines.

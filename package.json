@@ -1,6 +1,6 @@
 {
   "name": "chat-on-creatine",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "description": "Desktop and terminal coding workspace that drives ChatGPT and serves local tools over MCP.",
   "author": "redzrush101 <109347215+redzrush101@users.noreply.github.com>",
