@@ -212,10 +212,6 @@ export function readErrorNotice(): ErrorNotice | null {
   return null;
 }
 
-/**
- * Selects a picker family and confirms its native intelligence slider before dismissing it.
- * Older category pickers expose effort menu items instead of a slider.
- */
 /** Calls `listener` whenever the user (not a script) operates ChatGPT's model picker or a menu. */
 export function onUserModelPick(listener: () => void): void {
   const picker = `${SELECTORS.modelTrigger.join(', ')}, [role="menu"]`;
@@ -226,6 +222,7 @@ export function onUserModelPick(listener: () => void): void {
   document.addEventListener('keydown', handle, true);
 }
 
+/** Confirms the native family and effort before dismissing the picker. */
 export async function selectModel(model: string, effort: ReasoningEffort | null, presetIndex?: number): Promise<boolean> {
   const findTrigger = () => first(
     [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')),
@@ -274,8 +271,8 @@ export async function selectModel(model: string, effort: ReasoningEffort | null,
         control()!.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
         if (!(await waitFor(() => current() === next))) return false;
       }
-      return current() === presetIndex && modelItem(true)?.getAttribute('aria-checked') === 'true'
-        && trigger.getAttribute('data-selected-reasoning-effort') === effort;
+      return await waitFor(() => current() === presetIndex && modelItem(true)?.getAttribute('aria-checked') === 'true'
+        && trigger.getAttribute('data-selected-reasoning-effort') === effort);
     }
 
     if (!effort) return true;

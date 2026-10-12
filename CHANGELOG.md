@@ -5,6 +5,8 @@
 - Load the account's models automatically when ChatGPT signs in, including initial setup.
   Share that catalog across tabs, removing a model-list request from every fresh chat and
   Compact & Resume successor. Concurrent authentication requests share one fetch.
+- Wait for the native model picker's full selection confirmation, avoiding a fresh-chat
+  confirmation race when its slider becomes ready before the selected effort is published.
 - Share the final-answer completion rule between the router and page driver, letting queued
   messages proceed while metadata is still arriving. Native send controls still gate delivery.
 - Clear the streaming dot when a response ends or the app restarts, and prevent a delayed

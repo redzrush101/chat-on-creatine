@@ -7,8 +7,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0) {
+function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmationMs = 0) {
   const state = { open: false, modelsVisible: false, selected: 'Current', effort: 1 };
+  let confirmedEffort: number | null = state.effort;
   let transitioning = false;
   let mounted = triggerMs === 0;
   if (triggerMs) setTimeout(() => { mounted = true; }, triggerMs);
@@ -21,8 +22,11 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0) {
       if (event.key === 'Escape') state.open = false;
     }
   });
-  const trigger = node('', () => ({ 'aria-expanded': String(state.open),
-    'data-selected-reasoning-effort': ['none', 'medium', 'high'][state.effort]! }), () => false,
+  const trigger = node('', () => {
+    const attrs: Record<string, string> = { 'aria-expanded': String(state.open) };
+    if (confirmedEffort !== null) attrs['data-selected-reasoning-effort'] = ['none', 'medium', 'high'][confirmedEffort]!;
+    return attrs;
+  }, () => false,
     () => { state.open = !state.open; });
   trigger.id = 'picker';
   const toggle = node('Effort', () => ({}), () => false, () => { state.modelsVisible = !state.modelsVisible; });
@@ -30,6 +34,10 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0) {
     () => !state.modelsVisible, () => {
       state.selected = 'Legacy';
       state.modelsVisible = false;
+      if (confirmationMs) {
+        confirmedEffort = null;
+        setTimeout(() => { confirmedEffort = state.effort; }, confirmationMs);
+      }
       if (transitionMs) {
         transitioning = true;
         setTimeout(() => { transitioning = false; }, transitionMs);
@@ -39,6 +47,7 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0) {
   control.dispatchEvent = (event: KeyboardEvent) => {
     if (!ignoreSlider && event.key === 'ArrowRight') state.effort++;
     if (!ignoreSlider && event.key === 'ArrowLeft') state.effort--;
+    if (!confirmationMs) confirmedEffort = state.effort;
   };
   const slider = node('', () => ({ 'aria-valuenow': String(state.effort), 'aria-valuemin': '0', 'aria-valuemax': '2' }),
     () => false, () => {});
@@ -97,5 +106,13 @@ describe('native model picker', () => {
     await vi.runAllTimersAsync();
     await expect(selecting).resolves.toBe(true);
     expect(state.effort).toBe(0);
+  });
+
+  it('waits for the native selection confirmation after the slider is ready', async () => {
+    const { state } = picker(false, 0, 0, 500);
+    const selecting = selectModel('Legacy', 'medium', 1);
+    await vi.runAllTimersAsync();
+    await expect(selecting).resolves.toBe(true);
+    expect(state.open).toBe(false);
   });
 });
