@@ -11,9 +11,16 @@ interface Session {
 
 export function createBackend() {
   let session: Session | null = null;
+  let inflight: Promise<Session | null> | null = null;
 
-  async function getSession(force = false): Promise<Session | null> {
-    if (!force && session && Date.now() - session.at < SESSION_TTL_MS) return session;
+  function getSession(force = false): Promise<Session | null> {
+    if (inflight) return inflight;
+    if (!force && session && Date.now() - session.at < SESSION_TTL_MS) return Promise.resolve(session);
+    inflight = loadSession().finally(() => { inflight = null; });
+    return inflight;
+  }
+
+  async function loadSession(): Promise<Session | null> {
     try {
       const response = await fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store' });
       if (!response.ok) return session;
