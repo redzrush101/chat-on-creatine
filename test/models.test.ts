@@ -33,6 +33,17 @@ describe('model loading after authentication', () => {
     expect(command).toHaveBeenCalledOnce();
   });
 
+  it('shares its catalog with sends and keeps a failed fetch visible without a hidden retry', async () => {
+    const { service, command } = setup();
+    expect(await service.forSelection()).toEqual(catalog);
+    expect(await service.forSelection()).toEqual(catalog);
+    expect(command).toHaveBeenCalledOnce();
+    command.mockResolvedValueOnce({ ok: false, error: 'Models unavailable.' });
+    await service.refresh();
+    await expect(service.forSelection()).rejects.toThrow('Models unavailable.');
+    expect(command).toHaveBeenCalledTimes(2);
+  });
+
   it('recovers from a failed fetch when the browser authenticates again', async () => {
     const { service, command } = setup();
     command.mockResolvedValueOnce({ ok: false, error: 'Sign in to ChatGPT.' });

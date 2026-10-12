@@ -1,7 +1,7 @@
 import { errorMessage } from '@shared/errors';
 import { readFile } from 'node:fs/promises';
 import type { Config } from '@shared/config';
-import type { ChatMessage, PageEvent, PageFile } from '@shared/page-protocol';
+import type { ChatMessage, ModelsValue, PageEvent, PageFile } from '@shared/page-protocol';
 import { conversationUrl, newChatUrl } from '@shared/page-protocol';
 import type { InputItem, SessionEvent, SessionLive, SessionMeta } from '@shared/types';
 import { createLogger } from '../core/log';
@@ -36,6 +36,7 @@ interface RouterDeps {
   /** Called after every finished turn, before the next queued input is delivered. */
   onTurnEnd(session: SessionMeta, outcome: TurnOutcome): void;
   onAuth(signedIn: boolean): void;
+  models(): Promise<ModelsValue>;
   onLiveChange(): void;
 }
 
@@ -362,7 +363,8 @@ export class ChatRouter {
     try {
       const fresh = !session.conversationId;
       const tabId = await this.ensureTab(session, fresh);
-      const selected = await this.deps.host.command(tabId, { type: 'select-model', model: session.model ?? '', effort: session.reasoning }, 20_000);
+      const catalog = await this.deps.models();
+      const selected = await this.deps.host.command(tabId, { type: 'select-model', model: session.model ?? '', effort: session.reasoning, catalog }, 20_000);
       if (!selected.ok) throw new Error(selected.error);
       const opening = fresh ? await this.deps.openingContext(session) : null;
       const text = opening ? `${opening}\n\n${item.text}` : item.text;

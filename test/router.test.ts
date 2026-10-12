@@ -32,6 +32,8 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+const catalog = { models: [], defaultModel: null };
+
 function setup(selection: PageResult = { ok: true }) {
   const command = vi.fn(async (_tabId: string, cmd: PageCommand): Promise<PageResult> => {
     if (cmd.type === 'select-model') return selection;
@@ -56,7 +58,7 @@ function setup(selection: PageResult = { ok: true }) {
   router = new ChatRouter({ host, store, outbox,
     recorder: new Recorder({ store, isOwnConnectorPath: () => false }),
     getConfig: defaultConfig, openingContext: async () => null, sessionCwd: () => null,
-    canStart: () => true, onTurnEnd: (_session, outcome) => ends.push(outcome), onAuth, onLiveChange: () => {}
+    canStart: () => true, onTurnEnd: (_session, outcome) => ends.push(outcome), onAuth, models: async () => catalog, onLiveChange: () => {}
   });
   return { command, host, ends, onAuth };
 }
@@ -73,7 +75,7 @@ describe('model selection before delivery', () => {
     const session = store.create({ kind: 'chat' });
     const item = outbox.enqueue({ sessionId: session.id, text: 'message', attachments: [], delivery: 'now', source: 'app' });
     await vi.waitFor(() => expect(outbox.get(item.id)?.state).toBe('sent'));
-    expect(command.mock.calls[0]?.[1]).toEqual({ type: 'select-model', model: '', effort: null });
+    expect(command.mock.calls[0]?.[1]).toEqual({ type: 'select-model', model: '', effort: null, catalog });
   });
 
   it('applies changed model and effort on an existing conversation before sending', async () => {
@@ -86,8 +88,8 @@ describe('model selection before delivery', () => {
     const second = outbox.enqueue({ sessionId: session.id, text: 'second', attachments: [], delivery: 'now', source: 'app' });
     await vi.waitFor(() => expect(outbox.get(second.id)?.state).toBe('sent'));
     expect(command.mock.calls.map((call) => call[1])).toEqual([
-      { type: 'select-model', model: 'thinking', effort: 'medium' }, { type: 'send', text: 'first', files: [] },
-      { type: 'select-model', model: 'legacy-thinking', effort: 'high' }, { type: 'send', text: 'second', files: [] }
+      { type: 'select-model', model: 'thinking', effort: 'medium', catalog }, { type: 'send', text: 'first', files: [] },
+      { type: 'select-model', model: 'legacy-thinking', effort: 'high', catalog }, { type: 'send', text: 'second', files: [] }
     ]);
     expect(vi.mocked(host.openTab).mock.calls.filter(([url]) => url.includes('/c/'))).toHaveLength(1);
   });

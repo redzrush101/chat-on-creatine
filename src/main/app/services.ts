@@ -161,6 +161,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
       automation.onTurnEnd(session, outcome);
     },
     onAuth: (signedIn) => models.onAuth(signedIn),
+    models: () => models.forSelection(),
     onLiveChange: hooks.changed
   });
 

@@ -77,7 +77,7 @@ export type PageCommand =
   /** Full conversation history via the backend API, oldest first, visible branch only. */
   | { type: 'conversation'; conversationId: string }
   /** Select model/effort in the native picker of the current chat. */
-  | { type: 'select-model'; model: string; effort: ReasoningEffort | null };
+  | { type: 'select-model'; model: string; effort: ReasoningEffort | null; catalog: ModelsValue };
 
 export type PageResult =
   | { ok: true; value?: unknown }

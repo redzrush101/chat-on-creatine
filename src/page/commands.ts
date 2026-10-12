@@ -21,7 +21,6 @@ function toFile(file: PageFile): File {
 }
 
 export class PageCommands {
-  private models: ModelsValue | null = null;
   /**
    * The picker choice this page last confirmed. Opening the picker costs a few hundred
    * milliseconds per send, so it is skipped until the user touches the picker themselves.
@@ -33,11 +32,6 @@ export class PageCommands {
   /** The user changed ChatGPT's picker themselves, so the next selection must use it again. */
   forgetSelection(): void {
     this.selection = null;
-  }
-
-  private async loadModels(): Promise<ModelsValue> {
-    this.models = parseModels(await this.backend.request(MODELS_PATH));
-    return this.models;
   }
 
   private async send(text: string, files: PageFile[]): Promise<PageResult> {
@@ -64,8 +58,7 @@ export class PageCommands {
     return value ? { ok: true, value } : fail('timeout', 'no conversation stream started after send');
   }
 
-  private async selectModel(model: string, effort: ReasoningEffort | null): Promise<PageResult> {
-    const models = this.models ?? await this.loadModels();
+  private async selectModel(model: string, effort: ReasoningEffort | null, models: ModelsValue): Promise<PageResult> {
     const effective = model || models.defaultModel;
     const option = findModel(models.models, effective);
     if (!option) return fail('not-found', `Model ${effective ?? 'account default'} is not available in ChatGPT's picker. Reload models and choose an available model.`);
@@ -91,13 +84,13 @@ export class PageCommands {
         case 'stop':
           return dom.clickStop() ? DONE : fail('not-found', 'no stop control is visible');
         case 'models':
-          return { ok: true, value: await this.loadModels() };
+          return { ok: true, value: parseModels(await this.backend.request(MODELS_PATH)) };
         case 'conversation': {
           const json = await this.backend.request(`/backend-api/conversation/${encodeURIComponent(command.conversationId)}`);
           return { ok: true, value: conversationToMessages(json) };
         }
         case 'select-model':
-          return await this.selectModel(command.model, command.effort);
+          return await this.selectModel(command.model, command.effort, command.catalog);
       }
     } catch (error) {
       if (error instanceof DriverError) return fail(error.code, error.message);

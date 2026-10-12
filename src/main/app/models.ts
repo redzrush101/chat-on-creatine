@@ -17,6 +17,12 @@ export class ModelService {
     return this.catalog;
   }
 
+  async forSelection(): Promise<ModelsValue> {
+    if (this.catalog.state === 'unknown' || this.catalog.state === 'loading') await this.refresh();
+    if (this.catalog.state !== 'ready') throw new Error(this.catalog.error ?? 'Sign in to ChatGPT to load its models.');
+    return { models: this.catalog.models, defaultModel: this.catalog.defaultModel };
+  }
+
   onAuth(signedIn: boolean): void {
     if (!signedIn) {
       this.inflight = null;

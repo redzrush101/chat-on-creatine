@@ -1,3 +1,4 @@
+import { parseModels } from '../src/page/models';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageCommands } from '../src/page/commands';
 import { StreamRelay } from '../src/page/streams';
@@ -21,13 +22,13 @@ beforeEach(() => {
 });
 
 describe('page model selection', () => {
-  const catalog = { default_model_slug: 'auto', models: [{ slug: 'auto' }, { slug: 'fast' }, { slug: 'think' }], versions: [
+  const catalog = parseModels({ default_model_slug: 'auto', models: [{ slug: 'auto' }, { slug: 'fast' }, { slug: 'think' }], versions: [
     { enabled: true, display_text_for_intelligence: 'Family', slugs: ['auto', 'fast', 'think'], intelligence_presets: [
       { model_slug: 'fast', lane: 'instant', title: 'Instant', preset_type: 'available' },
       { model_slug: 'think', lane: 'thinking', thinking_effort: 'standard', title: 'Medium', preset_type: 'available' },
       { model_slug: 'think', lane: 'thinking', thinking_effort: 'extended', title: 'High', preset_type: 'available' }
     ] }
-  ] };
+  ] });
   function commands() {
     return new PageCommands({ getSession: async () => null, request: async () => catalog }, new StreamRelay(() => {}, () => null));
   }
@@ -35,19 +36,19 @@ describe('page model selection', () => {
   it.each([
     ['fast', null, 'none', 0], ['think', null, 'medium', 1], ['think', 'high', 'high', 2], ['', 'high', 'high', 2]
   ] as const)('selects the native family and preset for %s / %s', async (model, effort, expected, index) => {
-    const selecting = commands().run({ type: 'select-model', model, effort });
+    const selecting = commands().run({ type: 'select-model', model, effort, catalog });
     await expect(selecting).resolves.toEqual({ ok: true });
     expect(selectModel).toHaveBeenCalledExactlyOnceWith('Family', expected, index);
   });
 
   it.each([['internal', null], ['think', 'xhigh']] as const)('rejects unavailable model or effort %s / %s', async (model, effort) => {
-    await expect(commands().run({ type: 'select-model', model, effort })).resolves.toMatchObject({ ok: false, code: 'not-found' });
+    await expect(commands().run({ type: 'select-model', model, effort, catalog })).resolves.toMatchObject({ ok: false, code: 'not-found' });
     expect(selectModel).not.toHaveBeenCalled();
   });
 
   it('skips the picker for a choice it already confirmed until the user opens the picker', async () => {
     const page = commands();
-    const select = () => page.run({ type: 'select-model', model: 'think', effort: 'high' });
+    const select = () => page.run({ type: 'select-model', model: 'think', effort: 'high', catalog });
     await select();
     await select();
     expect(selectModel).toHaveBeenCalledOnce();
@@ -56,9 +57,16 @@ describe('page model selection', () => {
     expect(selectModel).toHaveBeenCalledTimes(2);
   });
 
+  it('uses the account catalog in a fresh page without fetching a second copy', async () => {
+    const request = vi.fn(async () => ({}));
+    const page = new PageCommands({ getSession: async () => null, request }, new StreamRelay(() => {}, () => null));
+    await expect(page.run({ type: 'select-model', model: 'fast', effort: null, catalog })).resolves.toEqual({ ok: true });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('reports failure when the native picker cannot confirm the selection', async () => {
     selectModel.mockResolvedValue(false);
-    await expect(commands().run({ type: 'select-model', model: 'think', effort: 'high' })).resolves.toMatchObject({
+    await expect(commands().run({ type: 'select-model', model: 'think', effort: 'high', catalog })).resolves.toMatchObject({
       ok: false, error: expect.stringContaining('Could not confirm Family (high)')
     });
   });
