@@ -7,3 +7,4 @@ resources/bin/
 .env*
 info.txt
 .DS_Store
+live-results/

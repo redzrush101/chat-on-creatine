@@ -18,13 +18,16 @@ On NixOS run everything inside `nix develop`.
 
 - One logical change per pull request, rebased on `main`.
 - `npm run verify` passes locally; CI runs it on Linux, macOS and Windows.
-- The description says what changed, why, and how you checked it (including a live ChatGPT
-  session when the page driver, router or stream parser changed).
+- The description says what changed, why, and how you checked it. When the page driver, router,
+  stream parser or an interface changed, include `npm run test:live` (see
+  [test/live/README.md](test/live/README.md)).
 
 ## Releases
 
-1. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under a new version heading and
+1. Refresh the README images with `LIVE_DOCS=1 npm run test:live -- test/live/interface.live.ts`
+   when either interface changed visibly.
+2. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under a new version heading and
    set the version in `package.json`.
-2. Commit, then tag and push: `git tag v<version> && git push origin v<version>`.
-3. The Release workflow packages Windows, macOS and Linux (x64 and arm64), smoke-tests every
+3. Commit, then tag and push: `git tag v<version> && git push origin v<version>`.
+4. The Release workflow packages Windows, macOS and Linux (x64 and arm64), smoke-tests every
    package and publishes the GitHub release with checksums.

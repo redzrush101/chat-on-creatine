@@ -65,7 +65,8 @@ is noise, and noise is not free: it slows every run and hides the tests that cou
 - **Keep fixtures minimal** and inline. Test files stay under 400 lines.
 - No `.only`, `.skip` or `.todo` in committed tests.
 - Changes to the page driver, router or stream parser need a check against a signed-in ChatGPT
-  session as well; unit tests cannot see what chatgpt.com actually sends.
+  session as well; unit tests cannot see what chatgpt.com actually sends. `npm run test:live`
+  runs those checks and keeps screenshots and logs (see `test/live/README.md`).
 
 ## Privacy
 
