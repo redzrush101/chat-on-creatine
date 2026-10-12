@@ -32,15 +32,21 @@ export function clip(text: string, columns: number): string {
 
 export const color = (code: number, text: string, enabled = true): string => enabled ? `\x1b[${code}m${text}\x1b[0m` : text;
 
-export function markdown(text: string, colored: boolean): string {
-  let fenced = false;
+export function markdown(text: string, colored: boolean, fenced = false): string {
   return safeText(text).split('\n').map((line) => {
+    if (!line) return '';
     if (line.startsWith('```')) { fenced = !fenced; return color(90, line, colored); }
     if (fenced) return color(line.startsWith('+') ? 32 : line.startsWith('-') ? 31 : 36, line, colored);
     return line.replace(/^#{1,6}\s+(.+)$/, (_match, heading: string) => color(1, heading, colored))
       .replace(/\*\*(.+?)\*\*/g, (_match, body: string) => color(1, body, colored))
       .replace(/`([^`]+)`/g, (_match, body: string) => color(36, body, colored));
   }).join('\n');
+}
+
+export function assistantText(event: Extract<SessionEvent, { kind: 'assistant' }>): string {
+  let text = event.text;
+  for (const citation of event.citations ?? []) text = text.replaceAll(citation.marker, citation.sources.map((source) => ` [${source.title}](${source.url})`).join(''));
+  return safeText(text.replace(/\ue200[^\ue201]*\ue201/g, '').replace(/\ue200[^\ue201]*$/, ''));
 }
 
 function output(part: ToolOutputPart, colored: boolean): string[] {
@@ -60,15 +66,15 @@ export function formatEvent(event: SessionEvent, colored: boolean, expanded = fa
   switch (event.kind) {
     case 'user': return `\n${color(1, '›', colored)} ${safeText(event.text)}${event.attachments.length ? `\n  Attached: ${event.attachments.map((file) => safeText(file.name)).join(', ')}` : ''}\n`;
     case 'assistant': {
-      let text = event.text;
-      for (const citation of event.citations ?? []) text = text.replaceAll(citation.marker, citation.sources.map((source) => ` [${source.title}](${source.url})`).join(''));
-      text = text.replace(/\ue200[^\ue201]*\ue201/g, '').replace(/\ue200[^\ue201]*$/, '');
+      const text = assistantText(event);
       return text.trim() ? `\n${color(event.channel === 'final' ? 32 : 90, '●', colored)} ${markdown(text, colored)}\n` : null;
     }
     case 'tool': {
       const label = describeTool(event);
       const title = `${event.status === 'running' ? label.active : label.verb}${label.target ? ` ${safeText(label.target)}` : ''}`;
-      const lines = event.output.flatMap((part) => output(part, colored)).filter((line) => line.trim());
+      const args = expanded ? typeof event.args === 'string' ? event.args : JSON.stringify(event.args, null, 2) : '';
+      const lines = [...(args ? ['Arguments:', ...safeText(args).split('\n'), 'Output:'] : []),
+        ...event.output.flatMap((part) => output(part, colored))].filter((line) => line.trim());
       const limit = Math.max(30, (process.stdout.columns || 100) - 6);
       const selected = expanded || event.status === 'error' ? lines : lines.slice(0, 5);
       const shown = expanded ? selected : selected.map((line) => width(line) > limit ? `${clip(line, limit - 1)}…` : line);

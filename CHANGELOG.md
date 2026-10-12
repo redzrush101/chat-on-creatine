@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2026-10-12
+
+- Keep streamed response lines in terminal history instead of showing only the last few lines.
+- Hide startup instructions when ChatGPT echoes escaped or incomplete context tags.
+- Show the full tool transcript with Ctrl+O. Scroll through every tool with PgUp/PgDn without
+  losing your position when new results arrive.
+
 ## [0.3.1] - 2026-10-12
 
 - Fix Windows release checks for CLI path handling and command working directories.

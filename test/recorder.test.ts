@@ -58,7 +58,7 @@ function events(): SessionEvent[] {
 }
 
 describe('Recorder', () => {
-  it('records the browser echo of an app-sent message once, keeping the app event', () => {
+  it.each(['', '\\'])('records an app-sent echo once with tag escape %j', (escape) => {
     store.append(sessionId, [
       { id: 'input:1', at: 1, kind: 'user', text: 'fix the bug', inputId: '1', attachments: [], source: 'app' }
     ]);
@@ -71,7 +71,7 @@ describe('Recorder', () => {
         role: 'user',
         recipient: 'all',
         channel: null,
-        text: '<creatine_context>\nworkspace notes\n</creatine_context>\n\nfix the bug'
+        text: `${escape}<creatine_context>\nworkspace notes\n${escape}</creatine_context>\n\nfix the bug`
       })
     );
     // The stream repeats the user message (delta + input_message); the repeat must not record it again.
@@ -81,12 +81,28 @@ describe('Recorder', () => {
     expect(events()[0]).toMatchObject({ id: 'input:1', source: 'app' });
   });
 
-  it('records a user message the app did not send as a browser event, without the context frame', () => {
+  it.each(['', '\\'])('records a browser message without its context frame with tag escape %j', (escape) => {
     recorder.handle(
       sessionId,
-      message({ id: 'u2', role: 'user', text: '<creatine_context>x</creatine_context>hello there' })
+      message({ id: 'u2', role: 'user', text: `${escape}<creatine_context>x${escape}</creatine_context>hello there` })
     );
     expect(events()).toEqual([expect.objectContaining({ id: 'msg:u2', kind: 'user', text: 'hello there', source: 'browser' })]);
+  });
+
+  it('keeps partial and context-only user echoes out of the transcript', () => {
+    recorder.handle(sessionId, message({ id: 'u1', role: 'user', text: '\\<creatine_context>\nstartup instructions' }));
+    recorder.handle(sessionId, message({ id: 'u1', role: 'user', text: '\\<creatine_context>\nstartup instructions\n\\</creatine_context>' }));
+    expect(events()).toEqual([]);
+    recorder.handle(sessionId, message({ id: 'u1', role: 'user', text: '\\<creatine_context>\nstartup instructions\n\\</creatine_context>\nActual task' }));
+    expect(events()).toEqual([expect.objectContaining({ kind: 'user', text: 'Actual task' })]);
+  });
+
+  it('matches an escaped context echo when ChatGPT converts a pasted URL into a Markdown link', () => {
+    const text = 'Review https://example.com/project';
+    store.append(sessionId, [{ id: 'input:link', at: 1, kind: 'user', text, inputId: 'link', attachments: [], source: 'app' }]);
+    recorder.expectUserEcho(sessionId, 'input:link', text);
+    recorder.handle(sessionId, message({ id: 'url', role: 'user', text: '\\<creatine_context>startup instructions\\</creatine_context>\nReview [https://example.com/project](https://example.com/project)' }));
+    expect(events()).toEqual([expect.objectContaining({ id: 'input:link', text })]);
   });
 
   it('streams an assistant answer into one event that ends as final', () => {

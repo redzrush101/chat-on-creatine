@@ -6,7 +6,8 @@ const DEFAULT_TITLE = 'New chat';
 const OUTPUT_LIMIT = 4000;
 const ARGS_LIMIT = 20000;
 const ECHO_LIMIT = 20;
-const CONTEXT_FRAME = /^\s*<creatine_context>[\s\S]*?<\/creatine_context>/;
+const CONTEXT_FRAME = /^\s*\\?<creatine_context>[\s\S]*?\\?<\/creatine_context>/;
+const CONTEXT_START = /^\s*\\?<creatine_context>/;
 
 interface SessionState {
   /** App-sent user texts waiting for ChatGPT's echo, oldest first. */
@@ -140,7 +141,10 @@ export class Recorder {
     if (message.hidden) return;
     const state = this.state(sessionId);
     if (state.claimed.has(message.id)) return;
+    // ChatGPT can echo Markdown-escaped tags or publish the frame before its closing tag.
+    if (CONTEXT_START.test(message.text) && !CONTEXT_FRAME.test(message.text)) return;
     const text = message.text.replace(CONTEXT_FRAME, '').trim();
+    if (!text) return;
     const incoming = normalize(text);
 
     const index = state.echoes.findIndex(
@@ -244,7 +248,7 @@ function toolEventId(callMessageId: string): string {
 }
 
 function normalize(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();
 }
 
 function parseJson(text: string): unknown {

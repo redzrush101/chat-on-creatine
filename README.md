@@ -59,7 +59,7 @@ signing in from either interface signs you in to both.
 
 Use `/help` for commands, `/model` to choose a model, `/gui` to open the desktop app and
 `/exit` to quit. Slash commands suggest completions as you type; Tab completes the name.
-Ctrl+O opens tool details, and Esc stops a running task.
+Ctrl+O opens the full tool transcript; PgUp/PgDn scrolls it. Esc stops a running task.
 
 Your current directory is the working folder; `-C` selects another one. Add `--yolo` for
 unrestricted tools. That setting is shared with the desktop app; `/permissions` changes it.

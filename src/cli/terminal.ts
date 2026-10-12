@@ -36,6 +36,10 @@ export class Terminal {
   commands: Choice<string>[] = [];
   private detailText: string | null = null;
   private detailOffset = 0;
+  private detailEnd = 0;
+  private detailFollow = true;
+  private detailRows: string[] = [];
+  private detailColumns = 0;
   private commandIndex = 0;
   private commandDraft = '';
   private commandsHidden = false;
@@ -81,7 +85,8 @@ export class Terminal {
   }
 
   set details(text: string | null) {
-    if (this.detailText !== text) this.detailOffset = 0;
+    if (this.detailText === null || text === null) this.detailFollow = true;
+    if (this.detailText !== text) this.detailColumns = 0;
     this.detailText = text;
   }
 
@@ -112,10 +117,15 @@ export class Terminal {
       const reserved = 6 + (commandCount ? commandCount + 1 : 0) + (this.question ? 1 : 0);
       const liveCount = this.detailText ? 3 : Math.max(1, Math.min(8, height - reserved - 1));
       if (this.detailText) {
-        const detailRows = wrap(this.detailText, columns);
+        if (this.detailColumns !== columns) {
+          this.detailRows = wrap(this.detailText, columns);
+          this.detailColumns = columns;
+        }
+        const detailRows = this.detailRows;
         const count = Math.max(1, Math.min(12, height - reserved - (this.live ? liveCount + 1 : 0) - 2));
-        this.detailOffset = Math.min(this.detailOffset, Math.max(0, detailRows.length - count));
-        lines.push(color(36, clip(`Tool details · Ctrl+O hide · PgUp/PgDn scroll (${this.detailOffset + 1}–${Math.min(detailRows.length, this.detailOffset + count)}/${detailRows.length})`, columns), this.colored));
+        this.detailEnd = Math.max(0, detailRows.length - count);
+        this.detailOffset = this.detailFollow ? this.detailEnd : Math.min(this.detailOffset, this.detailEnd);
+        lines.push(color(36, clip(`Tool transcript · Ctrl+O hide · PgUp/PgDn scroll (${this.detailOffset + 1}–${Math.min(detailRows.length, this.detailOffset + count)}/${detailRows.length})`, columns), this.colored));
         lines.push(...detailRows.slice(this.detailOffset, this.detailOffset + count), '');
       }
       if (this.live) {
@@ -254,6 +264,7 @@ export class Terminal {
     }
     if (this.detailText && (key.name === 'pageup' || key.name === 'pagedown')) {
       this.detailOffset = Math.max(0, this.detailOffset + (key.name === 'pageup' ? -8 : 8));
+      this.detailFollow = key.name === 'pagedown' && this.detailOffset >= this.detailEnd;
       this.draw(); return;
     }
     const commands = this.commandMatches();
