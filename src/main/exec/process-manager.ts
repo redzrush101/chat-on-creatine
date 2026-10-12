@@ -262,12 +262,8 @@ export class ProcessManager implements ProcessRunner {
     child.once('exit', (code) => session.finish(code));
     child.once('close', () => session.close());
     session.attach(child.pid, (data) => {
-      if (data === INTERRUPT && process.platform !== 'win32' && child.pid !== undefined) {
-        try {
-          process.kill(-child.pid, 'SIGINT');
-        } catch {
-          /* already gone */
-        }
+      if (data === INTERRUPT && child.pid !== undefined) {
+        void terminateProcessTree(child.pid, 'SIGINT');
         return true;
       }
       const stdin = child.stdin;

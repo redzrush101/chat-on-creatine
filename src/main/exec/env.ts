@@ -41,7 +41,7 @@ export function childEnv(extra: Record<string, string> = {}): Record<string, str
  * Signals a process and its descendants: the POSIX process group, or the Windows process tree.
  * Windows always forces: a process without a console window cannot be asked to close.
  */
-export function terminateProcessTree(pid: number, signal: 'SIGTERM' | 'SIGKILL' = 'SIGKILL'): Promise<void> {
+export function terminateProcessTree(pid: number, signal: 'SIGTERM' | 'SIGKILL' | 'SIGINT' = 'SIGKILL'): Promise<void> {
   if (process.platform === 'win32') {
     return new Promise((resolve) => {
       const killer = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });

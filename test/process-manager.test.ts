@@ -42,7 +42,7 @@ describe('ProcessManager', () => {
 
   it('keeps a running command as a session and releases it once its exit is reported', async () => {
     const started = await manager.exec(
-      { cmd: 'sleep 0.5; echo late; exit 3', workdir: os.homedir(), yieldTimeMs: 250 },
+      { cmd: `node -e "setTimeout(() => { process.stdout.write('late'); process.exit(3); }, 1500)"`, workdir: os.homedir(), yieldTimeMs: 250 },
       'chat-a'
     );
     expect(started.sessionId).not.toBeNull();
@@ -68,7 +68,7 @@ describe('ProcessManager', () => {
 
   it('runs a batch in one shell, continues past a failing item and exits with its code', async () => {
     const result = await manager.exec(
-      { cmds: ['echo one', 'false', 'echo three'], workdir: os.homedir(), yieldTimeMs: 2000 },
+      { cmds: ['echo one', 'node -e "process.exit(1)"', 'echo three'], workdir: os.homedir(), yieldTimeMs: 10_000 },
       'chat-a'
     );
     expect(result.exitCode).toBe(1);
@@ -77,8 +77,17 @@ describe('ProcessManager', () => {
     expect(result.output).toContain('three');
   });
 
+  it('interrupts a piped command instead of writing a literal Ctrl+C byte', async () => {
+    const started = await manager.exec({
+      cmd: `node -e "setInterval(() => {}, 1000)"`, workdir: os.homedir(), yieldTimeMs: 250
+    }, 'chat-a');
+    expect(started.sessionId).not.toBeNull();
+    const stopped = await manager.writeStdin({ sessionId: started.sessionId!, chars: '\u0003', yieldTimeMs: 10_000 }, 'chat-a');
+    expect(stopped.sessionId).toBeNull();
+  });
+
   it('refuses a session id that belongs to another owner', async () => {
-    const started = await manager.exec({ cmd: 'cat', workdir: os.homedir(), yieldTimeMs: 250 }, 'chat-owner');
+    const started = await manager.exec({ cmd: `node -e "process.stdin.pipe(process.stdout)"`, workdir: os.homedir(), yieldTimeMs: 250 }, 'chat-owner');
     const attempt = manager.writeStdin({ sessionId: started.sessionId!, chars: 'x' }, 'chat-other');
     await expect(attempt).rejects.toBeInstanceOf(ToolError);
     await expect(attempt).rejects.toMatchObject({ code: 'UNKNOWN_SESSION' });
@@ -91,7 +100,7 @@ describe('ProcessManager', () => {
   });
 
   it('truncates output to the token budget and reports the original size', async () => {
-    const result = await manager.exec({ cmd: 'seq 1 2000', workdir: os.homedir(), yieldTimeMs: 2000, maxOutputTokens: 20 }, 'chat-a');
+    const result = await manager.exec({ cmd: `node -e "for (let i = 1; i <= 2000; i++) console.log(i)"`, workdir: os.homedir(), yieldTimeMs: 2000, maxOutputTokens: 20 }, 'chat-a');
     expect(result.originalTokenCount).toBeGreaterThan(20);
     expect(result.output).toContain('tokens truncated');
     expect(Buffer.byteLength(result.output)).toBeLessThan(200);
