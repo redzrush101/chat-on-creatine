@@ -26,7 +26,7 @@ afterEach(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function message(overrides: Partial<ChatMessage> & { id: string }): PageEvent {
+function message(overrides: Partial<ChatMessage> & { id: string }): Extract<PageEvent, { type: 'message' }> {
   return {
     type: 'message',
     streamId: 's1',
@@ -95,6 +95,32 @@ describe('Recorder', () => {
 
     expect(events()).toEqual([
       expect.objectContaining({ id: 'msg:a1', kind: 'assistant', text: 'Hello world', channel: 'final', streaming: false, model: 'gpt-6' })
+    ]);
+  });
+
+  it.each(['text', 'thoughts'])('keeps completed %s after a stale conversation snapshot', (contentType) => {
+    recorder.handle(sessionId, message({ id: 'a1', contentType, text: 'Hello world', status: 'finished_successfully' }));
+    const stale = message({ id: 'a1', contentType, text: 'Hel', status: 'in_progress' });
+    recorder.handle(sessionId, { ...stale, streamId: null });
+
+    expect(events()).toEqual([expect.objectContaining({ text: 'Hello world', streaming: false })]);
+  });
+
+  it.each(['complete', 'aborted', 'error'] as const)('settles streaming messages when a turn ends %s', (outcome) => {
+    recorder.handle(sessionId, message({ id: 'answer', text: 'Answer', status: 'in_progress' }));
+    recorder.handle(sessionId, message({ id: 'thought', contentType: 'thoughts', text: 'Thinking', status: 'in_progress' }));
+    recorder.handle(sessionId, message({ id: 'native', recipient: 'web.run', text: '{}' }));
+    store.append(sessionId, [{ id: 'core', at: 1, kind: 'tool', surface: 'core', name: 'exec_command', args: {}, status: 'running', output: [], endedAt: null }]);
+
+    recorder.handle(sessionId, { type: 'turn-end', streamId: 's1', conversationId: 'c1', outcome, error: null });
+    recorder.handle(sessionId, message({ id: 'answer', text: 'Stale answer', status: 'in_progress' }));
+
+    expect(events()).toEqual([
+      expect.objectContaining({ text: 'Answer', streaming: false }),
+      expect.objectContaining({ text: 'Thinking', streaming: false }),
+      expect.objectContaining({ id: 'tool:native', status: 'ok' }),
+      expect.objectContaining({ id: 'core', status: 'running' }),
+      expect.objectContaining({ kind: 'turn', phase: 'end' })
     ]);
   });
 

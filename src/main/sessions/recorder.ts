@@ -63,12 +63,13 @@ export class Recorder {
         ]);
         return;
       case 'turn-end': {
-        // ChatGPT-side tools (its own code runner, web search…) have no result once the turn is over.
         const now = Date.now();
-        const settled = this.store
-          .events(sessionId)
-          .filter((e): e is Extract<SessionEvent, { kind: 'tool' }> => e.kind === 'tool' && e.surface === 'chatgpt' && e.status === 'running')
-          .map((e) => ({ ...e, status: 'ok' as const, endedAt: now }));
+        const settled = this.store.events(sessionId).flatMap<SessionEvent>((e) => {
+          if ((e.kind === 'assistant' || e.kind === 'reasoning') && e.streaming) return [{ ...e, streaming: false }];
+          // Our MCP tools can outlive the turn; ChatGPT's own tools cannot.
+          if (e.kind === 'tool' && e.surface === 'chatgpt' && e.status === 'running') return [{ ...e, status: 'ok', endedAt: now }];
+          return [];
+        });
         if (settled.length) this.store.append(sessionId, settled);
         this.store.append(sessionId, [
           {
@@ -230,8 +231,11 @@ export class Recorder {
 
   /** Upserts an event by id, keeping its original timestamp so streaming never reorders the transcript. */
   private put(sessionId: string, id: string, build: (id: string, at: number) => SessionEvent): void {
-    const at = this.store.event(sessionId, id)?.at ?? Date.now();
-    this.store.append(sessionId, [build(id, at)]);
+    const previous = this.store.event(sessionId, id);
+    const next = build(id, previous?.at ?? Date.now());
+    // A delayed conversation snapshot must not restart a completed message or replace its final text.
+    if (previous && 'streaming' in previous && !previous.streaming && 'streaming' in next && next.streaming) return;
+    this.store.append(sessionId, [next]);
   }
 }
 

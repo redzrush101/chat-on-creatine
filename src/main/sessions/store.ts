@@ -185,6 +185,8 @@ export class SessionStore {
         lines++;
         try {
           const event = JSON.parse(line) as SessionEvent;
+          // Persisted messages have no live stream after the app restarts.
+          if (event.kind === 'assistant' || event.kind === 'reasoning') event.streaming = false;
           events.set(event.id, event);
         } catch {
           this.log.warn(`skipping unreadable event line in session ${id}`);

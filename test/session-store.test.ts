@@ -56,6 +56,22 @@ describe('SessionStore', () => {
     expect(readFileSync(file, 'utf8').trim().split('\n')).toHaveLength(2);
   });
 
+  it('restores assistant and reasoning text without a stale live streaming state', async () => {
+    const store = openStore();
+    const meta = store.create({ kind: 'chat' });
+    store.append(meta.id, [
+      { id: 'answer', at: 1, kind: 'assistant', messageId: 'a1', text: 'Hello', channel: 'final', model: null, streaming: true },
+      { id: 'thought', at: 2, kind: 'reasoning', messageId: 'r1', text: 'Thinking', streaming: true }
+    ]);
+    await store.flush();
+
+    expect(store.events(meta.id).every((event) => 'streaming' in event && event.streaming)).toBe(true);
+    expect(openStore().events(meta.id)).toEqual([
+      expect.objectContaining({ id: 'answer', text: 'Hello', streaming: false }),
+      expect.objectContaining({ id: 'thought', text: 'Thinking', streaming: false })
+    ]);
+  });
+
   it('skips a corrupt event line instead of failing the session', async () => {
     const store = openStore();
     const meta = store.create({ kind: 'chat' });

@@ -7,6 +7,8 @@
   Compact & Resume successor. Concurrent authentication requests share one fetch.
 - Share the final-answer completion rule between the router and page driver, letting queued
   messages proceed while metadata is still arriving. Native send controls still gate delivery.
+- Clear the streaming dot when a response ends or the app restarts, and prevent a delayed
+  conversation snapshot from marking a completed answer as streaming again.
 - Use only the built-in browser. Remove the companion Chrome extension, bridge, host switch,
   extension settings and extension release artifacts; keep tab state in one browser owner.
 - Share the model pickers' menu controls and model-selection contract. Focus menus when they
