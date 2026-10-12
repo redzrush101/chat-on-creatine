@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { dirname, resolve, basename } from 'node:path';
 import { COMMANDS, runCommand } from './commands';
 import { ACCENT, DIM, color, safeText, screenColumns, tilde } from './format';
-import { nested, userRows } from './render';
+import { nested, toolHeadline, userRows, workerRows } from './render';
 import type { CliSession } from './session';
 import { Transcript } from './transcript';
 
@@ -18,6 +18,9 @@ export async function interactive(session: CliSession): Promise<void> {
   const error = (reason: unknown) => terminal.print(`\n${color(31, '●', terminal.colored)} ${color(31, safeText(reason instanceof Error ? reason.message : String(reason)), terminal.colored)}\n`);
   const echo = (text: string) => terminal.print(`\n${userRows(text, { colored: terminal.colored, columns: screenColumns() }).join('\n')}`);
   let busySince: number | null = null;
+  /** Tool calls seen per worker chat, for its live progress row. */
+  const progress = new Map<string, { tools: Set<string>; current: string | null }>();
+  const workers = () => session.state.agents.find((run) => run.primeSessionId === session.id)?.workers ?? [];
   const reset = () => {
     session.id = null;
     session.mode = 'off';
@@ -43,8 +46,14 @@ export async function interactive(session: CliSession): Promise<void> {
   const offState = client.on('state', () => update());
   const offEvents = client.on('session:events', (batch) => {
     if (batch.sessionId === session.id) { session.transcript.consume(batch.events); update(); }
-    else if (session.state.agents.some((run) => run.primeSessionId === session.id && run.workers.some((worker) => worker.sessionId === batch.sessionId))) {
-      for (const event of batch.events) if (event.kind === 'notice' && event.level === 'error') terminal.print(`\nAgent: ${safeText(event.text)}\n`);
+    else if (workers().some((worker) => worker.sessionId === batch.sessionId)) {
+      const entry = progress.get(batch.sessionId) ?? { tools: new Set<string>(), current: null };
+      for (const event of batch.events) {
+        if (event.kind === 'tool') { entry.tools.add(event.id); entry.current = toolHeadline(event); }
+        if (event.kind === 'notice' && event.level === 'error') terminal.print(`\nAgent: ${safeText(event.text)}\n`);
+      }
+      progress.set(batch.sessionId, entry);
+      terminal.draw();
     }
   });
   const offDisconnect = client.onDisconnect((reason) => { error(reason); process.exitCode = 1; done(); });
@@ -100,7 +109,10 @@ export async function interactive(session: CliSession): Promise<void> {
     if (Date.now() - lastInterrupt < 1500) done();
     else { lastInterrupt = Date.now(); terminal.flash('Press Ctrl+C again to exit'); }
   };
-  terminal.live = (columns) => session.transcript.preview(columns);
+  terminal.live = (columns) => [...session.transcript.preview(columns), ...workerRows(workers()
+    .filter((worker) => worker.state === 'working' || worker.state === 'queued')
+    .map((worker) => ({ label: worker.label, state: worker.state, tools: progress.get(worker.sessionId)?.tools.size ?? 0, current: progress.get(worker.sessionId)?.current ?? null })),
+  { colored: terminal.colored, columns })];
   terminal.transcript = (columns) => session.transcript.transcript(columns);
   terminal.onComplete = () => {
     void (async () => {

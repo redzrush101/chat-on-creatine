@@ -72,11 +72,31 @@ function toolTitle(event: ToolEvent, label: ToolLabel): { name: string; target: 
   }
 }
 
-/** Steps whose story another row tells: plans print as todos, agents as agent rows, scripts as their nested calls. */
+/**
+ * Steps whose story another row tells: plans print as todos, scripts as their nested calls, and
+ * agent calls (spawning, messaging, polling) as the agent rows and live worker progress.
+ */
 function hiddenTool(event: ToolEvent, label: ToolLabel): boolean {
-  if (event.status === 'error') return false;
-  const action = (event.args as { action?: unknown } | null)?.action;
-  return label.category === 'plan' || label.category === 'script' || label.category === 'agent' && (action === 'spawn' || action === 'message');
+  return event.status !== 'error' && ['plan', 'script', 'agent'].includes(label.category);
+}
+
+/** `Bash(npm test)`: a call as one plain line, for worker progress. */
+export function toolHeadline(event: ToolEvent): string {
+  const title = toolTitle(event, describeTool(event));
+  return title.target === null ? title.name : `${title.name}(${safeText(title.target)})`;
+}
+
+export interface WorkerProgress { label: string; state: string; tools: number; current: string | null }
+
+/** Live rows for the agents a chat started: who is working and on what, like Claude Code's tasks. */
+export function workerRows(workers: WorkerProgress[], options: RenderOptions): string[] {
+  const { colored, columns } = options;
+  return workers.flatMap((worker) => {
+    const head = `${color(35, '●', colored)} ${color(1, 'Agent', colored)}(${ellipsis(safeText(worker.label), columns - 20)}) ${color(DIM, `· ${worker.state}`, colored)}`;
+    const step = worker.current ?? (worker.state === 'queued' ? 'Waiting for a free slot' : 'Starting');
+    const uses = worker.tools ? ` · ${worker.tools} tool use${worker.tools === 1 ? '' : 's'}` : '';
+    return ['', head, `  ${color(DIM, '⎿', colored)}  ${color(DIM, ellipsis(`${step}${uses}`, columns - 5), colored)}`];
+  });
 }
 
 function fold(lines: string[], limit: number, options: RenderOptions): string[] {
@@ -215,7 +235,8 @@ export function eventRows(event: SessionEvent, options: RenderOptions): string[]
     case 'notice': return indent([{ text: safeText(event.text), hang: 0 }], columns, bullet(event.level === 'error' ? 31 : event.level === 'warn' ? 33 : DIM, options));
     case 'agent': {
       const lines = trimmed(event.text);
-      const head = `${bullet(35, options)}${color(1, 'Agent', colored)}(${safeText(event.label)}) ${color(DIM, `· ${event.action}`, colored)}`;
+      const action = event.action === 'spawned' ? 'started' : event.action === 'woke' ? 'woke up' : event.action;
+      const head = `${bullet(35, options)}${color(1, 'Agent', colored)}(${safeText(event.label)}) ${color(DIM, `· ${action}`, colored)}`;
       return [head, ...lines.length ? nested(expanded ? lines : fold(lines, event.action === 'finished' ? PREVIEW_ROWS : 1, options), options) : []];
     }
     case 'handoff': return [color(ACCENT, '✻ Compacted · continuing in a fresh conversation', colored)];

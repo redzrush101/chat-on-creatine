@@ -75,12 +75,13 @@ it('shows running calls live, prints each finished call once and folds long outp
   expect(transcript.preview(80)).toEqual([]);
 });
 
-it('leaves plan and connector plumbing to the rows that tell it better', () => {
+it('leaves plan, script and agent plumbing to the rows that tell it better', () => {
   const output: string[] = [];
   const transcript = new Transcript((text) => output.push(text), false);
   transcript.consume([
     { id: 'plan-call', at: 1, kind: 'tool', surface: 'core', name: 'update_plan', args: { plan: [] }, status: 'ok', endedAt: 2, output: [{ type: 'text', text: 'Plan: 1 of 2 done.', truncated: false }] },
     { id: 'script', at: 1, kind: 'tool', surface: 'core', name: 'exec', args: { code: 'text(await tools.exec_command({cmd:"ls"}))' }, status: 'ok', endedAt: 2, output: [{ type: 'text', text: '{"isError":false}', truncated: false }] },
+    { id: 'poll', at: 1, kind: 'tool', surface: 'core', name: 'agents', args: { action: 'status' }, status: 'ok', endedAt: 2, output: [{ type: 'text', text: 'Workers in this run: none', truncated: false }] },
     { id: 'plan', at: 2, kind: 'plan', explanation: null, items: [{ step: 'Inspect', status: 'completed' }, { step: 'Fix', status: 'in_progress' }] }
   ]);
   expect(output.join('')).toBe('\n● Update Todos\n  ⎿  ☒ Inspect\n     ☐ Fix\n');
