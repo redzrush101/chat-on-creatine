@@ -176,9 +176,10 @@ export class Recorder {
     const parsed = parseJson(message.text);
     let name = message.recipient;
     if (message.recipient === 'api_tool.call_tool') {
-      const path = recordPath(parsed);
-      if (path && this.isOwnConnectorPath(path)) return;
-      name = path ?? message.recipient;
+      // The connector path decides whose call this is; until it has streamed in, record nothing.
+      const path = recordPath(parsed) ?? streamedPath(message.text);
+      if (!path || this.isOwnConnectorPath(path)) return;
+      name = path;
     }
 
     const id = toolEventId(message.id);
@@ -257,6 +258,11 @@ function parseJson(text: string): unknown {
   } catch {
     return undefined;
   }
+}
+
+/** The `path` of call_tool arguments that are still streaming, once its string is complete. */
+function streamedPath(text: string): string | null {
+  return /^\s*\{\s*"path"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text)?.[1] ?? null;
 }
 
 function recordPath(parsed: unknown): string | null {

@@ -29,8 +29,10 @@ describe('tool labels', () => {
 
   it('describes commands, reads, edits and agents', () => {
     expect(describeTool(tool('exec_command', { cmd: 'ls -la', workdir: '/repo' }))).toMatchObject({ category: 'command', verb: 'Ran', target: 'ls -la', code: true });
+    expect(describeTool(tool('exec_command', { cmds: ['uname -r', 'ls'] }))).toMatchObject({ target: 'uname -r; ls', code: true });
     expect(describeTool(tool('read', { paths: ['/repo/a.ts', '/repo/b.ts'] }))).toMatchObject({ category: 'read', target: 'a.ts, b.ts' });
     expect(describeTool(tool('/Core/link_1/read', { path: '/Core/link_1/read', args: { paths: ['/x/hello.txt'] } }))).toMatchObject({ target: 'hello.txt' });
+    expect(describeTool(tool('api_tool.call_tool', '{"path":"/Core/link_1/update_plan","args":{"pl', [], 'chatgpt'))).toMatchObject({ category: 'plan' });
     expect(describeTool(tool('apply_patch', { patch: '' }, [editDiff]))).toMatchObject({ category: 'edit', verb: 'Edited', target: 'report.md' });
     expect(describeTool(tool('apply_patch', { patch: '' }, [createDiff]))).toMatchObject({ category: 'create', verb: 'Created', target: 'notes.md' });
     // Before the result arrives, the patch headers name the file.

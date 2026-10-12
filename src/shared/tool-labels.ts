@@ -79,12 +79,17 @@ function patchFiles(event: ToolEvent, args: Record<string, unknown>): { files: T
 }
 
 export function describeTool(event: ToolEvent): ToolLabel {
+  // Older recordings kept ChatGPT's call_tool wrapper with its arguments cut mid-stream.
+  if (event.name === 'api_tool.call_tool' && typeof event.args === 'string') {
+    const path = /"path"\s*:\s*"([^"]+)"/.exec(event.args)?.[1];
+    if (path) return describeTool({ ...event, name: path, args: {} });
+  }
   const name = toolBaseName(event.name);
   const args = unwrapArgs(event.args);
   const raw = typeof event.args === 'string' ? event.args : null;
 
   if (name === 'exec_command' || name === 'container.exec' || name === 'shell') {
-    const command = str(args.cmd) ?? str(args.command) ?? (strings(args.command).join(' ') || raw);
+    const command = str(args.cmd) ?? str(args.command) ?? (strings(args.command).join(' ') || strings(args.cmds).join('; ') || raw);
     return label('command', 'Ran', 'Running', command ? singleLine(command) : 'a command', command !== null);
   }
   if (name === 'write_stdin') {

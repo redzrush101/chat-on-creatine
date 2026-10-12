@@ -111,7 +111,8 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const recorder = new Recorder({
     store,
     // `/<Connector Name>/link_…/<tool>`: our own calls are recorded by the MCP server itself.
-    isOwnConnectorPath: (path) => path.replace(/^\//, '').toLowerCase().startsWith(CONNECTOR_BRAND.toLowerCase())
+    // Connectors created before the app was renamed still carry its old name.
+    isOwnConnectorPath: (path) => [CONNECTOR_BRAND, 'Chat on Steroids'].some((brand) => path.replace(/^\//, '').toLowerCase().startsWith(brand.toLowerCase()))
   });
   const compacting = new Set<string>();
 

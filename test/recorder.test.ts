@@ -171,6 +171,17 @@ describe('Recorder', () => {
     ]);
   });
 
+  it('waits for a streamed call_tool path before deciding whose call it is', () => {
+    const own = '{"path":"/mcp/update_plan","args":{"plan":[]}}';
+    for (const end of [8, 20, own.length]) {
+      recorder.handle(sessionId, message({ id: 'own', recipient: 'api_tool.call_tool', contentType: 'code', text: own.slice(0, end), status: end < own.length ? 'in_progress' : 'finished_successfully' }));
+    }
+    recorder.handle(sessionId, message({ id: 'own-res', role: 'tool', parentId: 'own', text: '{"text":"Plan updated"}' }));
+    recorder.handle(sessionId, message({ id: 'gh', recipient: 'api_tool.call_tool', contentType: 'code', text: '{"path":"/GitHub/link_1/fetch","ar', status: 'in_progress' }));
+
+    expect(events()).toEqual([expect.objectContaining({ id: 'tool:gh', name: '/GitHub/link_1/fetch', status: 'running' })]);
+  });
+
   it('keeps web results that arrive later in a chain of tool messages', () => {
     const page = { title: 'Rust 1.99.0', url: 'https://blog.rust-lang.org/1.99.0', domain: 'blog.rust-lang.org', ref: 'turn7search0' };
     recorder.handle(sessionId, message({ id: 'call', recipient: 'web.run', text: '', channel: null }));
