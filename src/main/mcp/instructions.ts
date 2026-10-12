@@ -31,7 +31,7 @@ Working rules:
 - If a call returns "blocked by OpenAI because we couldn't determine the safety status", that came from ChatGPT before the call reached the app. Retry the identical call once.
 - Send progress updates while working, and end with a self-contained answer.`;
 
-const DESKTOP_GUIDE = `Browser control runs through the companion extension inside the user's browser. Prefer browser_* tools for web work: they read the DOM and operate background tabs without moving the cursor or taking focus.
+const DESKTOP_GUIDE = `Browser control runs in the app's built-in browser. Prefer browser_* tools for web work: they read the DOM and operate background tabs without moving the cursor or taking focus.
 - Start with browser_tabs action=list and choose a tabId by title or URL. Attach the tab before input, screenshots, console or network capture, and attach before reproducing a problem.
 - browser_snapshot returns the page structure with refs. Snapshot again after navigation or when refs go stale.
 - browser_action clicks, hovers, types, fills, selects, presses keys, scrolls and drags. Input acceptance is not proof of the result: verify with a snapshot or evaluate. Never blindly replay an action that may have completed.

@@ -3,7 +3,7 @@ import { effortLabel } from '@shared/model-selection';
 import type { AppState } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { ModelDefaults } from '../ModelDefaults';
-import { Button, Group, NumberField, Pill, Row, Segmented, Toggle, useRun, useSave } from '../controls';
+import { Button, Group, NumberField, Pill, Row, Toggle, useRun, useSave } from '../controls';
 
 export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
   const { config, browser, models, usage } = state;
@@ -12,37 +12,7 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
 
   return (
     <div className="st-stack">
-      <Group title="Browser" description="Where ChatGPT runs. Signing in happens in that browser.">
-        <Row stacked label="Browser host">
-          <Segmented
-            label="Browser host"
-            value={config.browser.host}
-            options={[
-              { value: 'builtin', label: 'Built-in browser' },
-              { value: 'extension', label: 'Chrome extension (beta)' }
-            ]}
-            onChange={(host) => save({ browser: { host } })}
-          />
-          <p className="st-muted st-pad-top">
-            {config.browser.host === 'builtin'
-              ? 'The app runs its own ChatGPT window.'
-              : 'Uses your Chrome profile through the companion extension. Load the extension once from chrome://extensions.'}
-          </p>
-        </Row>
-        {config.browser.host === 'extension' && (
-          <Row
-            label="Extension bridge port"
-            hint={browser.extensionConnected ? 'The extension is connected.' : 'Waiting for the extension to connect.'}
-          >
-            <NumberField
-              label="Extension bridge port"
-              min={1024}
-              max={65535}
-              value={config.browser.bridgePort}
-              onCommit={(bridgePort) => save({ browser: { bridgePort } })}
-            />
-          </Row>
-        )}
+      <Group title="Browser" description="ChatGPT runs in the app's browser. Sign in once to keep using your account.">
         <Row label="ChatGPT session" hint={browser.detail || undefined}>
           <span className="st-inline">
             {browser.signedIn === null ? <Pill>Unknown</Pill> : browser.signedIn ? <Pill tone="ok">Signed in</Pill> : <Pill tone="warn">Signed out</Pill>}

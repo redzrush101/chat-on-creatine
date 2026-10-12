@@ -47,7 +47,7 @@ export const SURFACES: Record<SurfaceId, SurfaceDefinition> = {
       'Attach existing Chrome, Edge or Brave tabs or open new tabs; inspect DOM refs, page screenshots, JavaScript, console errors and network requests; ' +
       'click, fill forms, navigate and scroll without foreground activation. ' +
       'Use for: reading and testing web pages, debugging front-end behaviour, and automating the browser the user already signed in to.',
-    cardSummary: 'Browser tabs through the companion extension.',
+    cardSummary: 'Browser tabs in the built-in browser.',
     required: false
   },
   plugins: {

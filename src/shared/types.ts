@@ -217,13 +217,10 @@ export interface ModelCatalog {
 }
 
 export interface BrowserStatus {
-  host: 'builtin' | 'extension';
   /** The host is running and a page driver answered. */
   ready: boolean;
   /** ChatGPT session state: null while unknown. */
   signedIn: boolean | null;
-  /** Companion extension connected (extension host only). */
-  extensionConnected: boolean;
   openTabs: number;
   windowVisible: boolean;
   detail: string;

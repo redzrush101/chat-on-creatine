@@ -78,7 +78,6 @@ bypass the hooks with `--no-verify`.
 
 ```sh
 npm run verify          # repository rules, typecheck, tests, build
-npm run build:extension # when src/page changed: the extension bundle is committed and CI compares it
 ```
 
 One logical change per commit, with a subject that says what the change does in the imperative

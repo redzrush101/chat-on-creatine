@@ -43,7 +43,7 @@ jobs:
 
       - name: Tag matches the package version
         if: github.ref_type == 'tag'
-        run: node -e "const v=require('./package.json').version,e=require('./extension/manifest.json').version;if(process.env.GITHUB_REF_NAME!=='v'+v)throw new Error('Tag '+process.env.GITHUB_REF_NAME+' does not match package version '+v);if(e!==v)throw new Error('extension/manifest.json is '+e+', package.json is '+v)"
+        run: node -e "const v=require('./package.json').version;if(process.env.GITHUB_REF_NAME!=='v'+v)throw new Error('Tag '+process.env.GITHUB_REF_NAME+' does not match package version '+v)"
 
       - name: Runner is the target
         run: node -e "const want={win:'win32',mac:'darwin',linux:'linux'}['${{ matrix.os }}'];if(process.platform!==want||process.arch!=='${{ matrix.arch }}')throw new Error('Expected '+want+'-${{ matrix.arch }}, got '+process.platform+'-'+process.arch)"
@@ -113,11 +113,6 @@ jobs:
           pattern: package-*
           path: release
           merge-multiple: true
-
-      - name: Package the companion extension
-        run: |
-          (cd extension && zip -qr ../release/Chat-on-Creatine-Extension.zip . -x '*.map')
-          zip -q release/Chat-on-Creatine-Extension.zip LICENSE
 
       - name: Checksums
         run: |

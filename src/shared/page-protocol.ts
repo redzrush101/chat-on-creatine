@@ -1,7 +1,6 @@
 /**
  * Protocol between the app (main process) and the driver script running inside a chatgpt.com
- * page. The same protocol is used by the built-in browser (Electron IPC) and the companion
- * Chrome extension (WebSocket), so the driver never knows which host it runs in.
+ * page, carried by Electron IPC through the ChatGPT preload.
  */
 import type { ReasoningEffort } from './config';
 import type { Citation, ModelOption, WebSource } from './types';

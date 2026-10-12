@@ -41,8 +41,8 @@ function setup(selection: PageResult = { ok: true }) {
   const ends: string[] = [];
   const opened: ReturnType<ChatHost['tabs']> = [];
   const host: ChatHost = {
-    kind: 'builtin', start: async () => {}, stop: async () => {},
-    status: () => ({ ready: true, signedIn: true, windowVisible: false, extensionConnected: false, detail: '' }),
+    start: async () => {}, stop: async () => {},
+    status: () => ({ ready: true, signedIn: true, windowVisible: false, detail: '' }),
     tabs: () => opened,
     openTab: vi.fn(async (url: string) => {
       const tabId = `tab${opened.length}`;

@@ -22,10 +22,8 @@ export class StateHub {
     if (!s) throw new Error('App is starting');
     const hostStatus = s.host.status();
     const browser: BrowserStatus = {
-      host: s.config.get().browser.host,
       ready: hostStatus.ready,
       signedIn: hostStatus.signedIn,
-      extensionConnected: hostStatus.extensionConnected,
       openTabs: s.host.tabs().length,
       windowVisible: hostStatus.windowVisible,
       detail: hostStatus.detail

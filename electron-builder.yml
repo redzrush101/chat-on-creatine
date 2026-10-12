@@ -26,9 +26,6 @@ extraResources:
   - from: resources/bin
     to: bin
     filter: ['**/*']
-  - from: extension
-    to: extension
-    filter: ['**/*', '!**/*.map']
 
 # node-pty is N-API (prebuilt for macOS and Windows, compiled by `npm ci` on Linux), so it loads in
 # Electron as is. Rebuilding would compile it from source on every runner for nothing.

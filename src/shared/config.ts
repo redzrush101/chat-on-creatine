@@ -86,16 +86,12 @@ export const configSchema = z.object({
     })),
   browser: z
     .object({
-      /** Where ChatGPT runs: the app's own browser, or the user's Chrome through the companion extension. */
-      host: z.enum(['builtin', 'extension']).default('builtin'),
-      /** Loopback port the companion extension connects to. */
-      bridgePort: z.number().int().min(1024).max(65535).default(8765),
       /** Idle app-owned ChatGPT tabs close after this many minutes (history is kept). */
       idleTabMinutes: z.number().int().min(1).max(240).default(10),
       /** Allow tool calls whose ChatGPT conversation cannot be identified. */
       allowUnattributed: z.boolean().default(true)
     })
-    .default(() => ({ host: 'builtin' as const, bridgePort: 8765, idleTabMinutes: 10, allowUnattributed: true })),
+    .default(() => ({ idleTabMinutes: 10, allowUnattributed: true })),
   sessions: z
     .object({
       recording: z.boolean().default(true),
@@ -223,5 +219,5 @@ export function effectiveCapabilities(config: Config): Capabilities {
 }
 
 /** Secret slots kept outside config.json, encrypted with the OS keychain. */
-const SECRET_KEYS = ['tunnelApiKey', 'automationApiKey', 'extensionToken'] as const;
+const SECRET_KEYS = ['tunnelApiKey', 'automationApiKey'] as const;
 export type SecretKey = (typeof SECRET_KEYS)[number] | `plugin:${string}`;

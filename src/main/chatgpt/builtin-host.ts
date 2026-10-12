@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { BaseWindow, WebContentsView, ipcMain, session, shell, type Session, type WebContents } from 'electron';
-import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
+import { conversationIdFromUrl, type PageCommand, type PageEvent, type PageResult } from '@shared/page-protocol';
 import { createLogger } from '../core/log';
-import type { ChatHost, HostStatus } from './host';
-import { newTabInfo, TabHost, type HostTab } from './tab-host';
+import type { ChatHost, HostEvents, HostStatus, TabInfo } from './host';
 
 const log = createLogger('browser');
 
@@ -34,9 +33,17 @@ function staysInApp(url: string): boolean {
   }
 }
 
-interface Tab extends HostTab {
+interface Tab {
+  info: TabInfo;
+  readyWaiters: Array<() => void>;
   view: WebContentsView;
   title: string;
+}
+
+interface Pending {
+  tabId: string;
+  resolve(result: PageResult): void;
+  timer: NodeJS.Timeout;
 }
 
 /**
@@ -44,17 +51,19 @@ interface Tab extends HostTab {
  * WebContentsView per tab. Only the revealed tab is attached to the window; the rest keep
  * running detached with throttling disabled.
  */
-export class BuiltinHost extends TabHost<Tab> implements ChatHost {
-  readonly kind = 'builtin' as const;
+export class BuiltinHost implements ChatHost {
+  private readonly tabsById = new Map<string, Tab>();
+  private selected: string | null = null;
+  private listener: HostEvents | null = null;
+  private signedIn: boolean | null = null;
+  private readonly pending = new Map<string, Pending>();
   private window: BaseWindow | null = null;
   private readonly byContentsId = new Map<number, string>();
   private browserSession: Session | null = null;
   private quitting = false;
   private readonly ipcHandlers: Array<() => void> = [];
 
-  constructor(private readonly options: { preloadPath: string }) {
-    super();
-  }
+  constructor(private readonly options: { preloadPath: string }) {}
 
   async start(): Promise<void> {
     const ses = session.fromPartition(PARTITION);
@@ -93,7 +102,6 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
       ready: this.browserSession !== null,
       signedIn: this.signedIn,
       windowVisible: this.window?.isVisible() ?? false,
-      extensionConnected: false,
       detail: this.signedIn === false ? 'Sign in to ChatGPT in the built-in browser.' : this.tabCountDetail()
     };
   }
@@ -112,7 +120,10 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
         spellcheck: true
       }
     });
-    const tab: Tab = { view, title: 'ChatGPT', readyWaiters: [], info: newTabInfo(tabId, url) };
+    const tab: Tab = {
+      view, title: 'ChatGPT', readyWaiters: [],
+      info: { tabId, url, conversationId: conversationIdFromUrl(url), driverReady: false, signedIn: null, generating: false, createdAt: Date.now() }
+    };
     this.tabsById.set(tabId, tab);
     this.byContentsId.set(view.webContents.id, tabId);
     this.wireContents(tab, view.webContents);
@@ -132,7 +143,7 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
     if (!tab) return;
     this.tabsById.delete(tabId);
     this.byContentsId.delete(tab.view.webContents.id);
-    this.failPending(tabId, 'Tab closed', 'failed');
+    this.failPending(tabId);
     if (this.selected === tabId) {
       this.window?.contentView.removeChildView(tab.view);
       this.selected = null;
@@ -142,7 +153,7 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
     this.listener?.status();
   }
 
-  protected sendCommand(tab: Tab, command: PageCommand, timeoutMs: number): Promise<PageResult> {
+  private sendCommand(tab: Tab, command: PageCommand, timeoutMs: number): Promise<PageResult> {
     const { id, result } = this.awaitResult(tab.info.tabId, timeoutMs, `Timed out waiting for the ChatGPT page (${command.type})`);
     tab.view.webContents.send(PAGE_COMMAND_CHANNEL, { id, command });
     return result;
@@ -243,5 +254,111 @@ export class BuiltinHost extends TabHost<Tab> implements ChatHost {
     const tab = this.tabsById.get(this.selected);
     const { width, height } = this.window.getContentBounds();
     tab?.view.setBounds({ x: 0, y: 0, width, height });
+  }
+
+  setListener(events: HostEvents): void {
+    this.listener = events;
+  }
+
+  tabs(): TabInfo[] {
+    return [...this.tabsById.values()].map((tab) => ({ ...tab.info }));
+  }
+
+  /** Waits for the tab's driver (after load/navigation) and runs one command. */
+  async command(tabId: string, command: PageCommand, timeoutMs = 30_000): Promise<PageResult> {
+    const tab = this.tabsById.get(tabId);
+    if (!tab) return { ok: false, error: 'No such tab', code: 'failed' };
+    if (!(await this.waitForDriver(tab, Math.min(timeoutMs, 45_000)))) {
+      return { ok: false, error: 'ChatGPT page did not finish loading', code: 'not-ready' };
+    }
+    return this.sendCommand(tab, command, timeoutMs);
+  }
+
+  private requireTab(tabId: string): Tab {
+    const tab = this.tabsById.get(tabId);
+    if (!tab) throw new Error(`No such tab ${tabId}`);
+    return tab;
+  }
+
+  private tabCountDetail(): string {
+    const count = this.tabsById.size;
+    return `${count} ChatGPT tab${count === 1 ? '' : 's'} open.`;
+  }
+
+  /** Registers a request before it is sent; `result` settles with its answer, a failure, or `timeoutError`. */
+  private awaitResult(tabId: string, timeoutMs: number, timeoutError: string): { id: string; result: Promise<PageResult> } {
+    const id = randomUUID();
+    const result = new Promise<PageResult>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        resolve({ ok: false, error: timeoutError, code: 'timeout' });
+      }, timeoutMs);
+      this.pending.set(id, { tabId, resolve, timer });
+    });
+    return { id, result };
+  }
+
+  /** Settles one request; with `fromTab`, only when it was sent to that tab. */
+  private settle(id: string, result: PageResult, fromTab?: string): void {
+    const pending = this.pending.get(id);
+    if (!pending || (fromTab !== undefined && pending.tabId !== fromTab)) return;
+    this.pending.delete(id);
+    clearTimeout(pending.timer);
+    pending.resolve(result);
+  }
+
+  private failPending(tabId: string): void {
+    for (const [id, pending] of this.pending) {
+      if (pending.tabId === tabId) this.settle(id, { ok: false, error: 'Tab closed', code: 'failed' });
+    }
+  }
+
+  private handlePageEvent(tabId: string, event: PageEvent): void {
+    const tab = this.tabsById.get(tabId);
+    if (!tab) return;
+    switch (event.type) {
+      case 'hello':
+        tab.info.driverReady = true;
+        tab.info.url = event.url;
+        tab.info.conversationId = event.conversationId;
+        if (event.signedIn !== null) this.noteSignedIn(tab, event.signedIn);
+        for (const waiter of tab.readyWaiters.splice(0)) waiter();
+        break;
+      case 'location':
+        tab.info.url = event.url;
+        tab.info.conversationId = event.conversationId;
+        break;
+      case 'auth':
+        this.noteSignedIn(tab, event.signedIn);
+        break;
+      case 'generating':
+        tab.info.generating = event.value;
+        break;
+      default:
+        break;
+    }
+    this.listener?.page(tabId, event);
+  }
+
+  private noteSignedIn(tab: Tab, signedIn: boolean): void {
+    tab.info.signedIn = signedIn;
+    if (this.signedIn === signedIn) return;
+    this.signedIn = signedIn;
+    this.listener?.status();
+  }
+
+  private waitForDriver(tab: Tab, timeoutMs: number): Promise<boolean> {
+    if (tab.info.driverReady) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        tab.readyWaiters = tab.readyWaiters.filter((waiter) => waiter !== done);
+        resolve(false);
+      }, timeoutMs);
+      const done = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      tab.readyWaiters.push(done);
+    });
   }
 }

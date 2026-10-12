@@ -24,7 +24,7 @@ On NixOS run everything inside `nix develop`.
 ## Releases
 
 1. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under a new version heading and
-   set the same version in `package.json` and `extension/manifest.json`.
+   set the version in `package.json`.
 2. Commit, then tag and push: `git tag v<version> && git push origin v<version>`.
 3. The Release workflow packages Windows, macOS and Linux (x64 and arm64), smoke-tests every
    package and publishes the GitHub release with checksums.

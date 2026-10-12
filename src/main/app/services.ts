@@ -7,9 +7,6 @@ import type { SessionMeta, SurfaceId } from '@shared/types';
 import { AgentController } from '../agents/controller';
 import { Automation } from '../automation/automation';
 import { BuiltinHost } from '../chatgpt/builtin-host';
-import { ExtensionHost } from '../chatgpt/extension-host';
-import type { ChatHost } from '../chatgpt/host';
-import { HostSwitch } from '../chatgpt/host-switch';
 import { ChatRouter } from '../chatgpt/router';
 import { ConfigStore } from '../core/config-store';
 import { readJsonSync, writeJson } from '../core/durable';
@@ -70,7 +67,7 @@ export interface Services {
   skills: SkillLibrary;
   processes: ProcessManager;
   terminals: TerminalManager;
-  host: HostSwitch;
+  host: BuiltinHost;
   router: ChatRouter;
   agents: AgentController;
   automation: Automation;
@@ -109,15 +106,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const processes = new ProcessManager();
   const terminals = new TerminalManager({ onData: hooks.terminalData, onExit: hooks.terminalExit });
   const roots = new RootGuard(getConfig);
-  const createHost = (kind: ChatHost['kind']): ChatHost =>
-    kind === 'extension'
-      ? new ExtensionHost({
-          port: getConfig().browser.bridgePort,
-          loadToken: () => secrets.get('extensionToken'),
-          saveToken: (token) => secrets.set('extensionToken', token)
-        })
-      : new BuiltinHost({ preloadPath: join(preloadDir, 'chatgpt.js') });
-  const host = new HostSwitch(createHost(getConfig().browser.host), createHost);
+  const host = new BuiltinHost({ preloadPath: join(preloadDir, 'chatgpt.js') });
   const recorder = new Recorder({
     store,
     // `/<Connector Name>/link_…/<tool>`: our own calls are recorded by the MCP server itself.
@@ -231,11 +220,8 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
     logs: (limit) => recentLogs(limit)
   });
   const syncControlApi = () => void Promise.resolve(controlApi.sync()).catch((error: unknown) => log.error('control API', error));
-  config.onChange((next, previous) => {
+  config.onChange(() => {
     hooks.changed();
-    if (next.browser.host !== previous.browser.host || next.browser.bridgePort !== previous.browser.bridgePort) {
-      void host.use(next.browser.host, next.browser.host === 'extension' && next.browser.bridgePort !== previous.browser.bridgePort);
-    }
     void plugins.reconcile();
     syncControlApi();
   });

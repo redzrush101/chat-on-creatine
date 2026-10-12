@@ -47,9 +47,3 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Companion extension bundle is up to date
-        if: runner.os == 'Linux'
-        run: |
-          npm run build:extension
-          git diff --exit-code -- extension || { echo "::error::Run npm run build:extension and commit extension/"; exit 1; }

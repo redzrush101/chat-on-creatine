@@ -1,3 +1,4 @@
+import type { BrowserStatus } from '@shared/types';
 import type { PageCommand, PageEvent, PageResult } from '@shared/page-protocol';
 
 export interface TabInfo {
@@ -11,13 +12,7 @@ export interface TabInfo {
   createdAt: number;
 }
 
-export interface HostStatus {
-  ready: boolean;
-  signedIn: boolean | null;
-  windowVisible: boolean;
-  extensionConnected: boolean;
-  detail: string;
-}
+export type HostStatus = Omit<BrowserStatus, 'openTabs'>;
 
 export interface HostEvents {
   /** An event from the driver running in one tab. */
@@ -28,12 +23,8 @@ export interface HostEvents {
   status(): void;
 }
 
-/**
- * Where ChatGPT pages run. The built-in browser and the Chrome extension bridge both implement
- * this, so everything above it (routing, sending, recording) is host-agnostic.
- */
+/** The built-in ChatGPT browser surface used by routing, sending and recording. */
 export interface ChatHost {
-  readonly kind: 'builtin' | 'extension';
   start(): Promise<void>;
   stop(): Promise<void>;
   status(): HostStatus;

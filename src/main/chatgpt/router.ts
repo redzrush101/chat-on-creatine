@@ -60,7 +60,7 @@ export class ChatRouter {
   private readonly answeredStreams = new Set<string>();
 
   /**
-   * A new-chat tab loaded ahead of time (built-in browser only), so a new chat or worker does not
+   * A new-chat tab loaded ahead of time, so a new chat or worker does not
    * wait the seconds chatgpt.com takes to load before its first message.
    */
   private spareTab: string | null = null;
@@ -182,7 +182,7 @@ export class ChatRouter {
 
   private async warmSpare(): Promise<void> {
     const { host } = this.deps;
-    if (this.spareTab || this.warming || host.kind !== 'builtin' || host.status().signedIn !== true) return;
+    if (this.spareTab || this.warming || host.status().signedIn !== true) return;
     this.warming = true;
     try {
       this.spareTab = await host.openTab(newChatUrl(null));

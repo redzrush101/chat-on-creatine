@@ -21,7 +21,7 @@ commands, changes, files and a terminal sit in the side panel; the composer show
 ## How it works
 
 ```
-ChatGPT (built-in browser or your Chrome + companion extension)
+ChatGPT (built-in browser)
    │  page driver: reads the conversation stream, types and sends messages
    ▼
 Electron main ── router ── sessions / outbox / recorder ── Goal·Loop / workers / Compact & Resume
@@ -63,14 +63,13 @@ unsigned; the release notes explain the one-time step each system asks for.
 ```sh
 npm run dev         # electron-vite with HMR
 npm run verify      # repository rules, typecheck, tests, build
-npm run build:extension   # companion extension for the Chrome host
 npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
 ```
 
 Read [AGENTS.md](AGENTS.md) before changing code, and [CONTRIBUTING.md](CONTRIBUTING.md) for
 pull requests and releases.
 
-Code map: `src/shared` contracts · `src/main/mcp` server + tools · `src/main/chatgpt` hosts + router ·
+Code map: `src/shared` contracts · `src/main/mcp` server + tools · `src/main/chatgpt` browser + router ·
 `src/page` in-page driver · `src/main/sessions` history/outbox/recorder · `src/main/{agents,automation}` workers,
 Goal/Loop, Compact & Resume · `src/main/tunnel` connection · `src/renderer` React UI.
 
