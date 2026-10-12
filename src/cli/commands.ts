@@ -181,7 +181,7 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
     case 'connect': await client.invoke('connection:connect'); print('Connecting…'); break;
     case 'disconnect': await client.invoke('connection:disconnect'); print('Disconnected.'); break;
     case 'logs': print((await client.invoke('app:logs', 30)).map((entry) => `${entry.level} [${entry.scope}] ${entry.message}`).join('\n')); break;
-    case 'clear': process.stdout.write('\x1b[2J\x1b[H'); break;
+    case 'clear': terminal.clearScreen(); break;
     case 'exit': case 'quit': hooks.exit(); break;
     default:
       if (!session.state.skills.some((skill) => skill.id === name)) throw new Error(`Unknown command /${name}. Use /help.`);

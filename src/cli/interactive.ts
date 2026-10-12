@@ -88,7 +88,7 @@ export async function interactive(session: CliSession): Promise<void> {
     if (text === '/exit' || text === '/quit') { done(); return; }
     if (handling) { terminal.editor.set(text); return; }
     handling = true;
-    if (text.startsWith('/')) echo(text);
+    if (text.startsWith('/') && text !== '/clear') echo(text);
     void (text.startsWith('!') ? shell(text.slice(1)) : runCommand(text, session, { newChat: reset, exit: done }))
       .catch(error).finally(() => { handling = false; update(); });
   };

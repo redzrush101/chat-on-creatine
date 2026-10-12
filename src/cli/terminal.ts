@@ -99,6 +99,15 @@ export class Terminal {
     this.render(block);
   }
 
+  /** Clears the screen and its scrollback, then draws the prompt at the top. */
+  clearScreen(): void {
+    this.rows = 0;
+    this.cursorRow = 0;
+    this.rendered = '';
+    process.stdout.write('\x1b[2J\x1b[3J\x1b[H');
+    this.draw();
+  }
+
   /** A short message in the footer that clears itself. */
   flash(text: string): void {
     if (this.notice) clearTimeout(this.notice.timer);
