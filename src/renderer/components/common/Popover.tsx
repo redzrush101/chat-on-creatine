@@ -105,12 +105,19 @@ export function Popover({ trigger, children, align = 'start', panelClassName, la
       if (!anchor.current?.contains(event.target as Node)) setOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
-    const first = panel.current?.querySelector<HTMLElement>('button:not(:disabled), input, select, textarea');
-    first?.focus({ preventScroll: true });
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  const close = () => setOpen(false);
+  useLayoutEffect(() => {
+    const element = panel.current;
+    if (!open || !placement || !element || element.contains(document.activeElement)) return;
+    element.querySelector<HTMLElement>('button:not(:disabled), input, select, textarea')?.focus({ preventScroll: true });
+  }, [open, placement]);
+
+  const close = () => {
+    setOpen(false);
+    anchor.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus({ preventScroll: true });
+  };
   const style: CSSProperties = placement
     ? { left: placement.left, top: placement.top, bottom: placement.bottom, maxHeight: placement.maxHeight }
     : { left: 0, top: 0, visibility: 'hidden' };
@@ -154,11 +161,7 @@ interface MenuListProps {
 /** Keyboard-navigable menu list (arrows, Home/End; Enter or Space activates; Escape closes via the anchor). */
 export function MenuList({ entries, onClose }: MenuListProps) {
   const list = useRef<HTMLDivElement>(null);
-  const menuItems = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
-
-  useEffect(() => {
-    menuItems()[0]?.focus();
-  }, []);
+  const menuItems = () => Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? []);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = menuItems();
@@ -185,7 +188,8 @@ export function MenuList({ entries, onClose }: MenuListProps) {
           <button
             key={index}
             type="button"
-            role="menuitem"
+            role={entry.checked === undefined ? 'menuitem' : 'menuitemcheckbox'}
+            aria-checked={entry.checked}
             className={cx('menu-item', entry.danger && 'is-danger', entry.checked && 'is-checked')}
             disabled={entry.disabled}
             onClick={() => {
