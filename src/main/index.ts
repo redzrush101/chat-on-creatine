@@ -80,10 +80,6 @@ async function start(): Promise<void> {
   await services.host.start();
   services.router.start();
   if (services.config.get().connection.autoConnect) void services.connection.connect();
-  // Learn the account's models (and sign-in state) shortly after startup.
-  setTimeout(() => {
-    if (services?.host.status().signedIn) void services.models.refresh();
-  }, 3_000);
   log.info(`started ${app.getVersion()} (userData ${paths.userData})`);
 
   let disposed = false;

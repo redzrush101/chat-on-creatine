@@ -39,6 +39,7 @@ function setup(selection: PageResult = { ok: true }) {
     return { ok: true, value: { conversationId: 'conversation' } };
   });
   const ends: string[] = [];
+  const onAuth = vi.fn();
   const opened: ReturnType<ChatHost['tabs']> = [];
   const host: ChatHost = {
     start: async () => {}, stop: async () => {},
@@ -55,10 +56,16 @@ function setup(selection: PageResult = { ok: true }) {
   router = new ChatRouter({ host, store, outbox,
     recorder: new Recorder({ store, isOwnConnectorPath: () => false }),
     getConfig: defaultConfig, openingContext: async () => null, sessionCwd: () => null,
-    canStart: () => true, onTurnEnd: (_session, outcome) => ends.push(outcome), onLiveChange: () => {}
+    canStart: () => true, onTurnEnd: (_session, outcome) => ends.push(outcome), onAuth, onLiveChange: () => {}
   });
-  return { command, host, ends };
+  return { command, host, ends, onAuth };
 }
+
+it('reports sign-in from an unbound browser tab, including the first setup', () => {
+  const { onAuth } = setup();
+  page.page('sign-in-tab', { type: 'auth', signedIn: true, email: null });
+  expect(onAuth).toHaveBeenCalledWith(true);
+});
 
 describe('model selection before delivery', () => {
   it('applies the account default instead of keeping the previous native selection', async () => {

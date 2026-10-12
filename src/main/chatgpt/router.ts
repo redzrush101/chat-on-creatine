@@ -35,6 +35,7 @@ interface RouterDeps {
   canStart(session: SessionMeta): boolean;
   /** Called after every finished turn, before the next queued input is delivered. */
   onTurnEnd(session: SessionMeta, outcome: TurnOutcome): void;
+  onAuth(signedIn: boolean): void;
   onLiveChange(): void;
 }
 
@@ -214,6 +215,9 @@ export class ChatRouter {
   }
 
   private onPage(tabId: string, event: PageEvent): void {
+    if ((event.type === 'auth' || event.type === 'hello') && event.signedIn !== null) {
+      this.deps.onAuth(event.signedIn);
+    }
     let sessionId = this.tabSession.get(tabId) ?? null;
     const eventConversation =
       event.type === 'message' ? event.message.conversationId : 'conversationId' in event ? event.conversationId : null;

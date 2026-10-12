@@ -17,16 +17,29 @@ export class ModelService {
     return this.catalog;
   }
 
-  refresh(): Promise<void> {
-    this.inflight ??= this.load().finally(() => {
+  onAuth(signedIn: boolean): void {
+    if (!signedIn) {
       this.inflight = null;
-    });
+      this.set({ state: 'unknown', models: [], defaultModel: null, fetchedAt: null, error: null });
+    } else if (this.catalog.state === 'unknown' || this.catalog.state === 'error') {
+      void this.refresh();
+    }
+  }
+
+  refresh(): Promise<void> {
+    if (!this.inflight) {
+      const inflight = this.load().finally(() => {
+        if (this.inflight === inflight) this.inflight = null;
+      });
+      this.inflight = inflight;
+    }
     return this.inflight;
   }
 
   private async load(): Promise<void> {
-    this.set({ ...this.catalog, state: 'loading', error: null });
-    const existing = this.host.tabs().find((tab) => tab.driverReady && tab.signedIn !== false);
+    const loading: ModelCatalog = { ...this.catalog, state: 'loading', error: null };
+    this.set(loading);
+    const existing = this.host.tabs().find((tab) => tab.signedIn !== false);
     let tabId = existing?.tabId ?? null;
     let opened = false;
     try {
@@ -37,11 +50,15 @@ export class ModelService {
       const result = await this.host.command(tabId, { type: 'models' }, 45_000);
       if (!result.ok) throw new Error(result.error);
       const value = result.value as ModelsValue;
-      this.set({ state: 'ready', models: value.models, defaultModel: value.defaultModel, fetchedAt: Date.now(), error: null });
+      if (this.catalog === loading) {
+        this.set({ state: 'ready', models: value.models, defaultModel: value.defaultModel, fetchedAt: Date.now(), error: null });
+      }
     } catch (error) {
-      const message = errorMessage(error);
-      log.warn(`model list unavailable: ${message}`);
-      this.set({ ...this.catalog, state: 'error', error: message });
+      if (this.catalog === loading) {
+        const message = errorMessage(error);
+        log.warn(`model list unavailable: ${message}`);
+        this.set({ ...this.catalog, state: 'error', error: message });
+      }
     } finally {
       if (opened && tabId) await this.host.closeTab(tabId);
     }

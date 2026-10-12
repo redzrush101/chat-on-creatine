@@ -107,6 +107,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const terminals = new TerminalManager({ onData: hooks.terminalData, onExit: hooks.terminalExit });
   const roots = new RootGuard(getConfig);
   const host = new BuiltinHost({ preloadPath: join(preloadDir, 'chatgpt.js') });
+  const models = new ModelService(host, hooks.changed);
   const recorder = new Recorder({
     store,
     // `/<Connector Name>/link_…/<tool>`: our own calls are recorded by the MCP server itself.
@@ -159,6 +160,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
       agents.onTurnEnd(session, outcome);
       automation.onTurnEnd(session, outcome);
     },
+    onAuth: (signedIn) => models.onAuth(signedIn),
     onLiveChange: hooks.changed
   });
 
@@ -202,7 +204,6 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
     onConfigChange: (listener) => config.onChange((next) => listener(next))
   });
   connection.onStatus(hooks.changed);
-  const models = new ModelService(host, hooks.changed);
 
   store.onMeta(hooks.changed);
   outbox.onChange(hooks.changed);
