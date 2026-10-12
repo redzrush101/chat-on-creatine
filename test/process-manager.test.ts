@@ -107,8 +107,14 @@ describe('ProcessManager', () => {
   });
 
   it.skipIf(!ptyLoads)('runs a command on a pseudo-terminal when tty is requested', async () => {
-    const result = await manager.exec({ cmd: 'echo tty-ok', workdir: os.homedir(), tty: true, yieldTimeMs: 2000 }, 'chat-a');
-    expect(result.output).toContain('tty-ok');
+    let result = await manager.exec({ cmd: 'echo tty-ok', workdir: os.homedir(), tty: true, yieldTimeMs: 2000 }, 'chat-a');
+    let output = result.output;
+    if (result.sessionId) {
+      const finished = await pollUntilExit(result.sessionId, 'chat-a');
+      output += finished.output;
+      result = finished.result;
+    }
+    expect(output).toContain('tty-ok');
     expect(result.exitCode).toBe(0);
   });
 });
