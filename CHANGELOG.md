@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1] - 2026-10-12
+
+- Show agents in the CLI the way Claude Code does: a compact start row, message rows, a finish
+  line with the run time, and a list of working agents under the footer with their current step.
+  Hide the main chat's agent polling so its own steps are no longer mistaken for the agent's.
+- Put prompts on a shaded band and say when the CLI is only waiting for background agents.
+- Redraw the prompt right after `/clear` instead of leaving the screen empty.
+
 ## [0.4.0] - 2026-10-12
 
 - Redesign the CLI after Claude Code: tool calls read as `Bash(npm test)` or `Update(app.ts)`
