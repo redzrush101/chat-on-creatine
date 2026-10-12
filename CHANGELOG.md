@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.2] - 2026-10-12
+
+- Load the account's models automatically when ChatGPT signs in, including initial setup.
+  Share that catalog across tabs, removing a model-list request from every fresh chat and
+  Compact & Resume successor. Concurrent authentication requests share one fetch.
+- Let queued messages proceed after the conversation completion marker while trailing
+  metadata is still arriving, keeping the native send controls as the readiness check.
+- Use only the built-in browser. Remove the companion Chrome extension, bridge, host switch,
+  extension settings and extension release artifacts; keep tab state in one browser owner.
+- Share the model pickers' menu controls and model-selection contract. Focus menus when they
+  become visible and return focus to the trigger on dismissal.
+- Interrupt piped command trees on Windows as well as macOS and Linux. Close a loading tab's
+  pending commands immediately, and keep the tray with its window so closing cannot hide the
+  app when a tray could not be created.
+- Share UTF-8 file decoding and size formatting between tools and the file viewer. Treat
+  invalid bytes as binary while allowing a valid character to cross a read limit. Remove
+  unused page commands, usage placeholders and account-email plumbing.
+
 ## [0.2.1] - 2026-10-11
 
 - Opening a message search result scrolls the chat to that message and marks it, instead of
