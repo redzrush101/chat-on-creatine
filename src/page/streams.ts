@@ -1,5 +1,5 @@
 import { ConversationStreamParser } from '@shared/chatgpt-stream';
-import type { ChatMessage, PageEvent, SendValue } from '@shared/page-protocol';
+import { isFinalAnswer, type ChatMessage, type PageEvent, type SendValue } from '@shared/page-protocol';
 
 const MESSAGE_INTERVAL_MS = 100;
 
@@ -67,6 +67,7 @@ export class StreamRelay {
   }
 
   private queueMessage(stream: Stream, message: ChatMessage): void {
+    if (isFinalAnswer(message)) stream.complete = true;
     const now = Date.now();
     const last = stream.lastEmit.get(message.id) ?? 0;
     if (message.status !== 'in_progress' || now - last >= MESSAGE_INTERVAL_MS) {

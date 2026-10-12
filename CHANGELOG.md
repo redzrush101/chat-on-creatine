@@ -5,8 +5,8 @@
 - Load the account's models automatically when ChatGPT signs in, including initial setup.
   Share that catalog across tabs, removing a model-list request from every fresh chat and
   Compact & Resume successor. Concurrent authentication requests share one fetch.
-- Let queued messages proceed after the conversation completion marker while trailing
-  metadata is still arriving, keeping the native send controls as the readiness check.
+- Share the final-answer completion rule between the router and page driver, letting queued
+  messages proceed while metadata is still arriving. Native send controls still gate delivery.
 - Use only the built-in browser. Remove the companion Chrome extension, bridge, host switch,
   extension settings and extension release artifacts; keep tab state in one browser owner.
 - Share the model pickers' menu controls and model-selection contract. Focus menus when they

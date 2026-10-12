@@ -2,7 +2,7 @@ import { errorMessage } from '@shared/errors';
 import { readFile } from 'node:fs/promises';
 import type { Config } from '@shared/config';
 import type { ChatMessage, ModelsValue, PageEvent, PageFile } from '@shared/page-protocol';
-import { conversationUrl, newChatUrl } from '@shared/page-protocol';
+import { conversationUrl, isFinalAnswer, newChatUrl } from '@shared/page-protocol';
 import type { InputItem, SessionEvent, SessionLive, SessionMeta } from '@shared/types';
 import { createLogger } from '../core/log';
 import type { Caller } from '../mcp/tool';
@@ -464,15 +464,4 @@ export class ChatRouter {
     this.live.set(sessionId, { ...live, ...patch });
     this.deps.onLiveChange();
   }
-}
-
-/** The model's last message of a turn: a finished answer to the user that ends the turn. */
-function isFinalAnswer(message: ChatMessage): boolean {
-  return (
-    message.role === 'assistant' &&
-    message.recipient === 'all' &&
-    (message.channel === null || message.channel === 'final') &&
-    message.status === 'finished_successfully' &&
-    message.endTurn === true
-  );
 }

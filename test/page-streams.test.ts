@@ -16,6 +16,19 @@ function setup() {
 }
 
 describe('page stream relay', () => {
+  it('becomes ready at the finished final answer without waiting for a later completion marker', () => {
+    const { relay, events, tap } = setup();
+    tap({ kind: 'start' });
+    tap({ kind: 'chunk', chunk: `data: ${JSON.stringify({ v: { conversation_id: 'c1', message: {
+      id: 'answer', author: { role: 'assistant' }, recipient: 'all', channel: 'final',
+      content: { content_type: 'text', parts: ['Done.'] }, status: 'finished_successfully', end_turn: true
+    } } })}\n\n` });
+    expect(relay.idle()).toBe(true);
+    expect(events.at(-1)).toMatchObject({ type: 'message', message: { text: 'Done.' } });
+    tap({ kind: 'end' });
+    expect(events.at(-1)).toMatchObject({ type: 'turn-end', outcome: 'complete' });
+  });
+
   it('allows the next send after completion while retaining the stream for trailing metadata', () => {
     const { relay, events, tap } = setup();
     tap({ kind: 'start' });

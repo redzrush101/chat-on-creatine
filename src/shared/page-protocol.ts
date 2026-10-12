@@ -38,6 +38,13 @@ export interface ChatMessage {
   citations: Citation[];
 }
 
+/** A finished answer to the user ends the turn even if stream metadata follows. */
+export function isFinalAnswer(message: ChatMessage): boolean {
+  return message.role === 'assistant' && message.recipient === 'all'
+    && (message.channel === null || message.channel === 'final')
+    && message.status === 'finished_successfully' && message.endTurn === true;
+}
+
 /** Events the page driver sends to the app. */
 export type PageEvent =
   | { type: 'hello'; driverVersion: number; url: string; conversationId: string | null; signedIn: boolean | null }
