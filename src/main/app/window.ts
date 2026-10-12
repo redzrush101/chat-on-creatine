@@ -6,6 +6,8 @@ interface WindowOptions {
   resourcesDir: string;
   closeToTray: () => boolean;
   isQuitting: () => boolean;
+  showChatGpt(): void;
+  quit(): void;
 }
 
 /** The app's own window: loads the renderer, refuses navigation, opens links externally. */
@@ -36,11 +38,19 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
+  const tray = createTray(options.resourcesDir, {
+    show: () => { window.show(); window.focus(); },
+    showChatGpt: options.showChatGpt,
+    quit: options.quit
+  });
   window.on('close', (event) => {
-    if (!options.isQuitting() && options.closeToTray()) {
+    if (tray && !options.isQuitting() && options.closeToTray()) {
       event.preventDefault();
       window.hide();
     }
+  });
+  window.on('closed', () => {
+    if (!options.isQuitting()) options.quit();
   });
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) void window.loadURL(devUrl);
@@ -48,7 +58,7 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   return window;
 }
 
-export function createTray(resourcesDir: string, actions: { show(): void; showChatGpt(): void; quit(): void }): Tray | null {
+function createTray(resourcesDir: string, actions: { show(): void; showChatGpt(): void; quit(): void }): Tray | null {
   try {
     const tray = new Tray(nativeImage.createFromPath(join(resourcesDir, 'tray.png')));
     tray.setToolTip('Chat on Creatine');

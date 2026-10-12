@@ -7,7 +7,7 @@ import { resolvePaths } from './core/paths';
 import { registerIpc } from './app/ipc';
 import { createServices, type Services } from './app/services';
 import { StateHub } from './app/state';
-import { createMainWindow, createTray } from './app/window';
+import { createMainWindow } from './app/window';
 
 const log = createLogger('app');
 app.setName('Chat on Creatine');
@@ -64,12 +64,8 @@ async function start(): Promise<void> {
 
   registerIpc(() => services, () => hub.snapshot(), (contents) => contents === window?.webContents);
 
-  window = createMainWindow({ preloadDir, resourcesDir, isQuitting: () => quitting, closeToTray: () => services?.config.get().ui.closeToTray ?? false });
-  createTray(resourcesDir, {
-    show: () => {
-      window?.show();
-      window?.focus();
-    },
+  window = createMainWindow({
+    preloadDir, resourcesDir, isQuitting: () => quitting, closeToTray: () => services?.config.get().ui.closeToTray ?? false,
     showChatGpt: () => services?.host.reveal(null),
     quit: () => {
       markQuitting();
@@ -93,8 +89,5 @@ async function start(): Promise<void> {
       .catch((error: unknown) => log.error('shutdown failed', error))
       .then(() => flushWrites())
       .finally(() => app.exit(0));
-  });
-  app.on('window-all-closed', () => {
-    if (!services?.config.get().ui.closeToTray) app.quit();
   });
 }
