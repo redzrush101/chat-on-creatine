@@ -41,7 +41,6 @@ export class StateHub {
       connection: s.connection.status(),
       browser,
       models: s.models.get(),
-      usage: { summary: null, fetchedAt: null },
       sessions: s.store.list(),
       live,
       inputs: s.outbox.list(),

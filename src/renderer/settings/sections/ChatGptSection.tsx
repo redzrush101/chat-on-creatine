@@ -6,7 +6,7 @@ import { ModelDefaults } from '../ModelDefaults';
 import { Button, Group, NumberField, Pill, Row, Toggle, useRun, useSave } from '../controls';
 
 export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
-  const { config, browser, models, usage } = state;
+  const { config, browser, models } = state;
   const save = useSave();
   const run = useRun();
 
@@ -93,11 +93,6 @@ export function ChatGptSection({ state }: { state: AppState }): JSX.Element {
         />
       </Group>
 
-      <Group title="Usage">
-        <Row label="Usage limits" hint={usage.fetchedAt ? 'As reported by ChatGPT.' : 'Not fetched yet.'}>
-          <span className="st-muted">{usage.summary ?? 'Unknown'}</span>
-        </Row>
-      </Group>
     </div>
   );
 }

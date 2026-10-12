@@ -70,7 +70,6 @@ export interface PageFile {
 
 /** Commands the app sends to the page driver. Each resolves with `PageResult`. */
 export type PageCommand =
-  | { type: 'status' }
   /** Type the text into the composer, attach files, press send. Resolves once the stream started. */
   | { type: 'send'; text: string; files: PageFile[] }
   | { type: 'stop' }
@@ -78,20 +77,11 @@ export type PageCommand =
   /** Full conversation history via the backend API, oldest first, visible branch only. */
   | { type: 'conversation'; conversationId: string }
   /** Select model/effort in the native picker of the current chat. */
-  | { type: 'select-model'; model: string; effort: ReasoningEffort | null }
-  | { type: 'usage' };
+  | { type: 'select-model'; model: string; effort: ReasoningEffort | null };
 
 export type PageResult =
   | { ok: true; value?: unknown }
   | { ok: false; error: string; code?: 'not-ready' | 'signed-out' | 'busy' | 'timeout' | 'not-found' | 'failed' };
-
-export interface PageStatus {
-  url: string;
-  conversationId: string | null;
-  signedIn: boolean | null;
-  generating: boolean;
-  composerReady: boolean;
-}
 
 export interface SendValue {
   conversationId: string | null;

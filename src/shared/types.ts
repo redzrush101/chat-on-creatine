@@ -230,12 +230,6 @@ export interface BrowserStatus {
   detail: string;
 }
 
-interface UsageInfo {
-  /** Free text the provider shows, e.g. "Resets in 3h". */
-  summary: string | null;
-  fetchedAt: number | null;
-}
-
 export type WorkerState = 'queued' | 'working' | 'asleep' | 'finished' | 'failed';
 
 export interface WorkerInfo {
@@ -309,7 +303,6 @@ export interface AppState {
   connection: ConnectionStatus;
   browser: BrowserStatus;
   models: ModelCatalog;
-  usage: UsageInfo;
   sessions: SessionMeta[];
   live: Record<string, SessionLive>;
   inputs: InputItem[];

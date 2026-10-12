@@ -1,7 +1,7 @@
 import type { ReasoningEffort } from '@shared/config';
 import { errorMessage } from '@shared/errors';
 import { conversationToMessages } from '@shared/chatgpt-stream';
-import { conversationIdFromUrl, type ModelsValue, type PageCommand, type PageFile, type PageResult, type PageStatus } from '@shared/page-protocol';
+import { type ModelsValue, type PageCommand, type PageFile, type PageResult } from '@shared/page-protocol';
 import * as dom from './dom';
 import type { createBackend } from './backend';
 import { DriverError, fail } from './errors';
@@ -38,17 +38,6 @@ export class PageCommands {
   private async loadModels(): Promise<ModelsValue> {
     this.models = parseModels(await this.backend.request(MODELS_PATH));
     return this.models;
-  }
-
-  private async status(): Promise<PageStatus> {
-    const current = await this.backend.getSession();
-    return {
-      url: location.href,
-      conversationId: conversationIdFromUrl(location.href),
-      signedIn: current?.signedIn ?? null,
-      generating: dom.isGenerating(),
-      composerReady: dom.findComposer() !== null
-    };
   }
 
   private async send(text: string, files: PageFile[]): Promise<PageResult> {
@@ -97,8 +86,6 @@ export class PageCommands {
   async run(command: PageCommand): Promise<PageResult> {
     try {
       switch (command.type) {
-        case 'status':
-          return { ok: true, value: await this.status() };
         case 'send':
           return await this.send(command.text, command.files);
         case 'stop':
@@ -111,8 +98,6 @@ export class PageCommands {
         }
         case 'select-model':
           return await this.selectModel(command.model, command.effort);
-        case 'usage':
-          return { ok: false, error: 'unsupported' };
       }
     } catch (error) {
       if (error instanceof DriverError) return fail(error.code, error.message);
