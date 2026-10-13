@@ -65,6 +65,22 @@ the full transcript with every tool's arguments and output. Esc stops a running 
 Your current directory is the working folder; `-C` selects another one. Add `--yolo` for
 unrestricted tools. That setting is shared with the desktop app; `/permissions` changes it.
 
+Include source directly with `@src/main.ts` or `@src/main.ts:10-40`; quote paths as
+`@"notes with spaces.md"`. Images and PDFs become attachments. `!npm test` runs locally and
+includes its output with your next message; `!!npm test` keeps it local. `/context` shows
+pending shell output and `/context clear` discards it.
+
+Ctrl+G opens your draft in `$VISUAL` or `$EDITOR`. Ctrl+P cycles account models and Shift+Tab
+cycles reasoning levels. Paste clipboard images with Ctrl+V, Alt+V or `/paste`; on Linux
+Wayland the CLI reads the native clipboard through `wl-paste` when available (included in
+`nix develop`). Terminal paste shortcuts such as Ctrl+Shift+V generally send only text.
+
+Add reusable prompt commands as Markdown files in `.creatine/prompts/`, then `/reload`.
+Use `/templates` to inspect them, `/name` to label a chat, `/sessions <query>` to find it,
+and `/search <text>` to search past messages. `creatine -r` opens the session picker;
+`creatine -c` continues the latest chat in the current folder. See [CLI workflows](docs/cli.md)
+for templates, session controls and recovery.
+
 ## Development
 
 ```sh

@@ -36,8 +36,8 @@ export async function runCli(args: string[], root: string): Promise<void> {
     if (isInteractive) terminal = new Terminal();
     const transcript = new Transcript((text) => terminal?.print(text), terminal?.colored ?? false);
     const session = new CliSession(client, options, terminal, transcript);
-    if (terminal) terminal.print(welcome(session.state.version, options.cwd, terminal.colored));
     await session.initialize();
+    if (terminal) terminal.print(welcome(session.state.version, session.cwd, terminal.colored));
     switch (options.command) {
       case 'status': process.stdout.write(statusText(session)); break;
       case 'models': {

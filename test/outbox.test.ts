@@ -78,4 +78,21 @@ describe('Outbox', () => {
     expect(reopened.get(stuck.id)).toMatchObject({ state: 'failed', error: 'Interrupted by app restart' });
     expect(reopened.nextFor('s1')).toBeUndefined();
   });
+
+  it('retries a failed input once with its original ID, attachments and delivery', async () => {
+    const outbox = new Outbox(file);
+    const attachment = { id: 'image', name: 'image.png', mime: 'image/png', size: 12, path: join(dir, 'image.png') };
+    const item = outbox.enqueue(input({ attachments: [attachment] }));
+    expect(outbox.retry(item.id)).toBeUndefined();
+    outbox.markSending(item.id);
+    outbox.markFailed(item.id, 'Upload failed');
+    expect(outbox.retry(item.id)).toMatchObject({ ...item, state: 'queued', error: null });
+    expect(outbox.retry(item.id)).toBeUndefined();
+    expect(outbox.list()).toHaveLength(1);
+    await flushWrites();
+    expect(new Outbox(file).nextFor('s1')?.attachments).toEqual([attachment]);
+    outbox.markSending(item.id);
+    outbox.markSent(item.id);
+    expect(outbox.retry(item.id)).toBeUndefined();
+  });
 });

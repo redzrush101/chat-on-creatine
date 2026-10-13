@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Include `@file` excerpts and line ranges, attach inline images/PDFs, and complete quoted paths.
+- Load reusable Markdown prompt commands from personal and project prompt directories, with
+  arguments, defaults, completion and `/reload`.
+- Include `!command` output with the next message; keep `!!command` local and inspect pending
+  shell output with `/context`.
+- Edit drafts in an external editor with Ctrl+G, cycle models and reasoning with shortcuts,
+  search and name sessions, and recall recorded prompts after resuming.
+- Keep failed drafts, edit queued messages and retry failed inputs without duplicating them.
+- Read native Wayland clipboard images through `wl-paste`; add Alt+V and `/paste`, show attachment
+  names, and include `wl-clipboard` in the Nix shell.
+- Keep narrow-terminal footer and activity rows within the available width so redraws do not
+  leave growing blank gaps between the transcript and prompt.
+
 ## [0.5.1] - 2026-10-13
 
 - Paste clipboard images into the GUI composer or the CLI with Ctrl+V. Keep pasted images

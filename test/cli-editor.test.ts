@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { copyFile, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { expect, it, vi } from 'vitest';
 import { Editor } from '../src/cli/editor';
@@ -12,6 +12,7 @@ import { Transcript } from '../src/cli/transcript';
 import type { BackendClient } from '../src/cli/connection';
 import type { Terminal } from '../src/cli/terminal';
 import type { AppState } from '../src/shared/types';
+import { editExternal } from '../src/cli/external-editor';
 
 it('edits Unicode graphemes without splitting emoji, accents or their cursor positions', () => {
   const editor = new Editor();
@@ -59,6 +60,37 @@ it('parses execution arguments without losing literal prompts or changing attach
   expect(() => parseOptions(['--loop', '--print'])).toThrow('interactive');
   expect(() => parseOptions(['--model'])).toThrow('needs a value');
   expect(parseOptions(['--yolo', 'status'])).toMatchObject({ command: 'status', yolo: true, prompt: '' });
+  expect(parseOptions(['-r', '-C', 'repo'], cwd)).toMatchObject({ resume: 'picker', cwd: join(cwd, 'repo') });
+  expect(parseOptions(['-c', '--name', 'Fix tests'])).toMatchObject({ resume: 'latest', name: 'Fix tests' });
+  expect(() => parseOptions(['exec', '-r'])).toThrow('session ID');
+});
+
+it('recalls resumed messages without losing the draft and exposes editor, model and effort shortcuts', () => {
+  const editor = new Editor();
+  editor.set('new draft');
+  editor.restoreHistory(['earlier prompt', 'latest prompt']);
+  editor.key('', { name: 'up' });
+  expect(editor.text).toBe('latest prompt');
+  editor.key('', { name: 'down' });
+  expect(editor.text).toBe('new draft');
+  expect(editor.key('', { name: 'g', ctrl: true })).toBe('external');
+  expect(editor.key('', { name: 'p', ctrl: true })).toBe('model');
+  expect(editor.key('', { name: 'tab', shift: true })).toBe('effort');
+  expect(editor.text).toBe('new draft');
+});
+
+it('returns a draft from a real external editor and removes private temporary files after success or failure', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creatine-editor-'));
+  const observed = join(dir, 'observed.txt');
+  const script = "const fs=require('node:fs'); const file=process.argv.at(-1); fs.writeFileSync(process.argv[1],file); fs.appendFileSync(file,' edited');";
+  const command = [JSON.stringify(process.execPath), '-e', JSON.stringify(script), '--', JSON.stringify(observed)].join(' ');
+  try {
+    expect(await editExternal('draft', command)).toBe('draft edited');
+    await expect(stat(await readFile(observed, 'utf8'))).rejects.toMatchObject({ code: 'ENOENT' });
+    const failure = [JSON.stringify(process.execPath), '-e', JSON.stringify(`${script} process.exit(7);`), '--', JSON.stringify(observed)].join(' ');
+    await expect(editExternal('original', failure)).rejects.toThrow('Your draft was kept');
+    await expect(stat(await readFile(observed, 'utf8'))).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 it('attaches pasted image paths with a prompt instead of interpreting absolute paths as commands', async () => {

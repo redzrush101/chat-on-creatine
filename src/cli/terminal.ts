@@ -5,6 +5,7 @@ import { Editor } from './editor';
 import { ACCENT, DIM, clip, color, ellipsis, graphemes, safeText, screenColumns, width } from './format';
 import { duration } from './render';
 import { Viewer } from './viewer';
+import { editExternal } from './external-editor';
 
 export interface Choice<T> { label: string; detail?: string; value: T; current?: boolean }
 interface Picker {
@@ -19,7 +20,8 @@ const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✽', '✻', '✶', '
 const SHORTCUTS = [
   ['/ for commands', '! for shell commands', '@ for file paths'],
   ['esc to interrupt', 'ctrl+o for transcript', 'tab to complete'],
-  ['ctrl+j for newline', '↑↓ for history', 'ctrl+v to paste image or text'],
+  ['ctrl+j for newline', '↑↓ for history', 'ctrl+v or alt+v to paste'],
+  ['ctrl+g for editor', 'ctrl+p next model', 'shift+tab reasoning'],
   ['ctrl+c to clear or exit']
 ];
 
@@ -71,6 +73,7 @@ export class Terminal {
   private pasteKeys: { sequence: string; key: Key }[] | null = null;
   private buffer = '';
   private closed = false;
+  private suspended = false;
   private readonly decoder = new StringDecoder('utf8');
   private escapeTimer: NodeJS.Timeout | null = null;
   private readonly input = new PassThrough();
@@ -85,6 +88,9 @@ export class Terminal {
   onStop: () => void = () => {};
   onComplete: () => void = () => {};
   onPaste: () => Promise<void> = async () => {};
+  onModel: () => void = () => {};
+  onEffort: () => void = () => {};
+  onError: (error: unknown) => void = () => {};
 
   constructor() {
     emitKeypressEvents(this.input);
@@ -100,7 +106,7 @@ export class Terminal {
   print(text: string): void {
     if (this.closed) return;
     const block = text.endsWith('\n') ? text : `${text}\n`;
-    if (this.viewer) { this.held.push(block); this.draw(); return; }
+    if (this.viewer || this.suspended) { this.held.push(block); this.draw(); return; }
     this.render(block);
   }
 
@@ -121,7 +127,7 @@ export class Terminal {
   }
 
   draw(): void {
-    if (this.closed) return;
+    if (this.closed || this.suspended) return;
     if (this.viewer) {
       process.stdout.write(`\x1b[?2026h${this.viewer.frame(screenColumns(), process.stdout.rows || 24)}\x1b[?2026l`);
       return;
@@ -138,11 +144,32 @@ export class Terminal {
     });
   }
 
-  ask(title: string, secret = false): Promise<string | null> {
+  ask(title: string, secret = false, initial = ''): Promise<string | null> {
     this.closeViewer();
     this.savedDraft = this.editor.text;
-    this.editor.set('');
+    this.editor.set(initial);
     return new Promise((resolve) => { this.question = { title, secret, resolve }; this.draw(); });
+  }
+
+  async editDraft(): Promise<void> {
+    if (this.suspended || this.question || this.picker) return;
+    this.closeViewer();
+    this.suspended = true;
+    process.stdout.write(`${this.erase()}\x1b[?2004l\x1b[?25h`);
+    process.stdin.off('data', this.onData);
+    process.stdin.setRawMode(false);
+    process.stdin.pause();
+    try { this.editor.set(safeText(await editExternal(this.editor.text))); }
+    finally {
+      this.suspended = false;
+      if (!this.closed) {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', this.onData);
+        process.stdout.write('\x1b[?2004h');
+        this.render(this.held.splice(0).join(''));
+      }
+    }
   }
 
   close(): void {
@@ -237,7 +264,6 @@ export class Terminal {
       const first = Math.max(0, before.length - maxDraft);
       cursorRow = bottom.length + before.length - 1 - first;
       cursorCol = width(before.at(-1) ?? '');
-      if (cursorCol >= columns) { cursorRow++; cursorCol = 2; }
       bottom.push(...rows.slice(first, first + maxDraft).map((row, index) => index === 0 && first === 0 ? `${color(1, row.slice(0, 2), c)}${row.slice(2)}` : row), rule);
       bottom.push(...this.below(commands, columns));
     }
@@ -250,7 +276,8 @@ export class Terminal {
       lines = lines.slice(cut);
       cursorRow = Math.max(0, cursorRow - cut);
     }
-    return { lines, cursorRow, cursorCol };
+    // Physical wrapping would add rows the cursor bookkeeping cannot see.
+    return { lines: lines.map((line) => ellipsis(line, columns)), cursorRow, cursorCol };
   }
 
   /** Under the prompt: command suggestions, the shortcut list, or the footer. */
@@ -359,7 +386,7 @@ export class Terminal {
       }
       this.draw(); return;
     }
-    if (!this.question && key.ctrl && key.name === 'v') {
+    if (!this.question && (key.ctrl || key.meta) && key.name === 'v') {
       this.pasteKeys = [];
       const resume = () => {
         const keys = this.pasteKeys ?? [];
@@ -397,6 +424,9 @@ export class Terminal {
       if (action === 'stop') this.onStop();
       if (action === 'expand') { this.openViewer(); return; }
       if (action === 'complete') this.onComplete();
+      if (action === 'external') { void this.editDraft().catch((error: unknown) => this.onError(error)); return; }
+      if (action === 'model') this.onModel();
+      if (action === 'effort') this.onEffort();
     }
     this.draw();
   }

@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clipboard, type ClipboardItem } from 'electron';
 import { createApi } from '../src/main/app/api';
 import type { Services } from '../src/main/app/services';
@@ -14,7 +14,8 @@ import { ProcessManager } from '../src/main/exec/process-manager';
 vi.mock('electron', () => ({ clipboard: { read: vi.fn(), readText: vi.fn() } }));
 
 let dir = '';
-afterEach(async () => { await flushWrites(); if (dir) await rm(dir, { recursive: true, force: true }); });
+beforeEach(() => { vi.stubEnv('WAYLAND_DISPLAY', ''); });
+afterEach(async () => { vi.unstubAllEnvs(); await flushWrites(); if (dir) await rm(dir, { recursive: true, force: true }); });
 
 it('the shared send boundary preserves cwd, stages attachments, and resumes the same recorded chat', async () => {
   dir = await mkdtemp(join(tmpdir(), 'creatine-api-'));
@@ -26,8 +27,9 @@ it('the shared send boundary preserves cwd, stages attachments, and resumes the 
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   const source = join(dir, 'reference.txt');
   await writeFile(source, 'attached context');
-  const created = await api['chat:send']({ sessionId: null, cwd: dir, projectId: null, text: 'Read this', attachments: [source], delivery: 'now' });
+  const created = await api['chat:send']({ sessionId: null, cwd: dir, projectId: null, title: 'User named task', text: 'Read this', attachments: [source], delivery: 'now' });
   expect(store.get(created.sessionId)?.cwd).toBe(dir);
+  expect(store.get(created.sessionId)?.title).toBe('User named task');
   const attachment = created.input.attachments[0]!;
   expect(attachment.path).not.toBe(source);
   expect(await readFile(attachment.path, 'utf8')).toBe('attached context');

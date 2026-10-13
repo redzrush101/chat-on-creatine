@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { clipboard } from 'electron';
 import type { Attachment } from '@shared/types';
+import { readWaylandClipboard } from './wayland-clipboard';
 
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
@@ -27,16 +28,24 @@ export async function stageAttachments(dir: string, paths: string[]): Promise<At
 
 /** Clipboard bytes stay in the backend; both frontends receive a normal attachment path. */
 export async function readClipboard(dir: string): Promise<{ imagePath: string | null; text: string }> {
-  for (const item of await clipboard.read()) {
-    const type = IMAGE_TYPES.find((type) => item.types.includes(type));
-    if (!type) continue;
-    const blob = await item.getType(type);
-    if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error('The clipboard image is larger than 50 MB.');
-    const extension = Object.keys(MIME).find((key) => MIME[key] === type)!;
-    const imagePath = join(dir, `clipboard-${randomUUID()}${extension}`);
-    await mkdir(dir, { recursive: true });
-    await writeFile(imagePath, Buffer.from(await blob.arrayBuffer()));
-    return { imagePath, text: '' };
+  const wayland = await readWaylandClipboard();
+  if (wayland && 'text' in wayland) return { imagePath: null, text: wayland.text };
+  let image: { type: string; bytes: Buffer } | null = wayland;
+  if (!image) {
+    for (const item of await clipboard.read()) {
+      const type = IMAGE_TYPES.find((type) => item.types.includes(type));
+      if (!type) continue;
+      const blob = await item.getType(type);
+      if (blob.size > MAX_ATTACHMENT_BYTES) throw new Error('The clipboard image is larger than 50 MB.');
+      image = { type, bytes: Buffer.from(await blob.arrayBuffer()) };
+      break;
+    }
   }
-  return { imagePath: null, text: await clipboard.readText() };
+  if (!image) return { imagePath: null, text: await clipboard.readText() };
+  if (!image.bytes.length) throw new Error('The clipboard image is empty. Copy it again and paste.');
+  const extension = Object.keys(MIME).find((key) => MIME[key] === image.type)!;
+  const imagePath = join(dir, `clipboard-${randomUUID()}${extension}`);
+  await mkdir(dir, { recursive: true });
+  await writeFile(imagePath, image.bytes, { mode: 0o600 });
+  return { imagePath, text: '' };
 }

@@ -103,6 +103,7 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
       if (!session) {
         session = services.store.create({
           kind: 'chat',
+          ...(request.title?.trim() ? { title: request.title.trim().slice(0, 120) } : {}),
           projectId: request.projectId ?? null,
           cwd: request.cwd ?? null,
           model: request.model !== undefined ? request.model : config.ui.defaultModel,
@@ -142,6 +143,11 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
     },
     'inputs:cancel': (inputId) => void s().outbox.cancel(inputId),
     'inputs:sendNow': (inputId) => void s().outbox.update(inputId, { delivery: 'now' }),
+    'inputs:retry': (inputId) => {
+      const input = s().outbox.retry(inputId);
+      if (!input) throw new Error('Only failed messages can be retried.');
+      return input;
+    },
 
     'projects:add': (path, name) => s().projects.add(path, name),
     'projects:update': async (projectId, patch) => {

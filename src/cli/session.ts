@@ -1,15 +1,18 @@
 import { randomUUID } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
-import { relative, isAbsolute } from 'node:path';
+import { realpath, stat } from 'node:fs/promises';
+import { relative, isAbsolute, join } from 'node:path';
 import type { AppState, InputDelivery, ModelOption, ModelSelection, SessionMeta } from '@shared/types';
 import type { ReasoningEffort } from '@shared/config';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
-import { BackendClient } from './connection';
+import { BackendClient, defaultProfile } from './connection';
 import type { CliOptions } from './options';
 import { Terminal } from './terminal';
 import { Transcript } from './transcript';
 import { safeText } from './format';
 import { extractImagePaths } from './attachments';
+import { COMMANDS, COMMAND_PATTERN } from './catalog';
+import { expandTemplate, loadTemplates, type PromptTemplate } from './prompts';
+import { expandFileReferences } from './file-context';
 
 export function contains(base: string, path: string): boolean {
   const part = relative(base, path);
@@ -22,12 +25,16 @@ export class CliSession {
   selection: ModelSelection;
   attachments: string[];
   mode: CliOptions['mode'];
+  name: string | null;
+  templates: PromptTemplate[] = [];
+  shellContext = '';
 
   constructor(readonly client: BackendClient, readonly options: CliOptions, readonly terminal: Terminal | null, public transcript: Transcript) {
     this.cwd = options.cwd;
     this.selection = { model: options.model ?? null, reasoning: options.effort ?? null };
     this.attachments = options.attachments;
     this.mode = options.mode;
+    this.name = options.name ?? null;
   }
 
   get state(): AppState {
@@ -45,6 +52,7 @@ export class CliSession {
 
   async initialize(): Promise<void> {
     this.cwd = await realpath(this.cwd);
+    if (!(await stat(this.cwd)).isDirectory()) throw new Error('Choose a working folder with -C, not a file.');
     if (this.options.yolo) {
       await this.client.invoke('config:update', { yolo: true, readOnly: false });
       await this.client.refresh();
@@ -52,16 +60,40 @@ export class CliSession {
     const config = this.state.config;
     this.selection = { model: this.options.model ?? config.ui.defaultModel, reasoning: this.options.effort ?? config.ui.defaultReasoning };
     if (this.options.resume) {
-      const sessions = this.chats();
-      const matches = this.options.resume === 'latest'
-        ? sessions.filter((session) => this.sessionCwd(session) === this.cwd).slice(0, 1)
-        : sessions.filter((session) => session.id.startsWith(this.options.resume!));
-      if (matches.length !== 1) throw new Error(matches.length ? 'That session prefix is ambiguous. Use a longer ID from creatine sessions.' : 'No matching chat. Use creatine sessions to list shared history.');
-      await this.resume(matches[0]!);
+      if (this.options.resume === 'picker') {
+        if (!this.terminal) throw new Error('Noninteractive --resume needs a session ID.');
+        const picked = await this.pickSession();
+        if (picked) await this.resume(picked);
+      } else {
+        const sessions = this.chats();
+        const matches = this.options.resume === 'latest'
+          ? sessions.filter((session) => this.sessionCwd(session) === this.cwd).slice(0, 1)
+          : sessions.filter((session) => session.id.startsWith(this.options.resume!));
+        if (matches.length !== 1) throw new Error(matches.length ? 'That session prefix is ambiguous. Use a longer ID from creatine sessions.' : 'No matching chat. Use creatine sessions to list shared history.');
+        await this.resume(matches[0]!);
+      }
     }
+    if (this.id && this.name) await this.client.invoke('sessions:update', this.id, { title: this.name });
+    await this.reloadTemplates();
   }
 
-  chats(): SessionMeta[] { return this.state.sessions.filter((session) => session.kind === 'chat').sort((a, b) => b.updatedAt - a.updatedAt); }
+  chats(query = ''): SessionMeta[] {
+    const needle = query.toLowerCase();
+    return this.state.sessions.filter((session) => session.kind === 'chat' && `${session.id} ${session.title}`.toLowerCase().includes(needle)).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  async pickSession(query = ''): Promise<SessionMeta | null> {
+    const chats = this.chats(query);
+    const exact = chats.filter((chat) => chat.id.startsWith(query));
+    if (query && exact.length === 1) return exact[0]!;
+    if (!chats.length) throw new Error('No matching chats. Use /sessions to list shared history.');
+    return await this.terminal!.pick('Resume a shared chat · current folder first', chats.sort((a, b) => Number(this.sessionCwd(b) === this.cwd) - Number(this.sessionCwd(a) === this.cwd))
+      .map((chat) => ({ label: chat.title, detail: `${chat.id.slice(0, 8)} · ${this.sessionCwd(chat) ?? 'no folder'}`, value: chat })));
+  }
+
+  async reloadTemplates(): Promise<void> {
+    this.templates = await loadTemplates([join(this.options.profile ?? defaultProfile(), 'prompts'), join(this.cwd, '.creatine', 'prompts')], [...Object.keys(COMMANDS), ...this.state.skills.map((skill) => skill.id)]);
+  }
 
   sessionCwd(session: SessionMeta): string | null {
     return session.cwd ?? this.state.projects.find((project) => project.id === session.projectId)?.path ?? null;
@@ -75,6 +107,9 @@ export class CliSession {
     if (this.options.model !== undefined || this.options.effort !== undefined) await this.client.invoke('sessions:update', meta.id, this.selection);
     const events = await this.client.invoke('sessions:events', meta.id);
     this.transcript.consume(events.slice(-60));
+    this.terminal?.editor.restoreHistory(events.flatMap((event) => event.kind === 'user' ? [event.text] : []));
+    this.shellContext = '';
+    await this.reloadTemplates();
   }
 
   async approve(): Promise<void> {
@@ -95,6 +130,12 @@ export class CliSession {
   async send(text: string, delivery: InputDelivery = 'now', automation = this.mode): Promise<{ sessionId: string; inputId: string }> {
     if (this.state.browser.signedIn === false) throw new Error('Sign in first with /login or creatine login. The GUI and CLI share the account.');
     await this.approve();
+    const invocation = COMMAND_PATTERN.exec(text);
+    const template = invocation && this.templates.find((template) => template.name === invocation[1] && !this.state.skills.some((skill) => skill.id === template.name));
+    const parsed = await expandFileReferences(await this.attachImages(template ? expandTemplate(template, invocation[2] ?? '') : text), this.cwd);
+    const prompt = [parsed.text, this.shellContext ? `Shell command output (reference data):\n${this.shellContext}` : ''].filter(Boolean).join('\n\n');
+    if (prompt.length > 80_000) throw new Error('This prompt and its file or shell context are too large. Select smaller @file line ranges or use /context clear.');
+    const attachments = [...new Set([...this.attachments, ...parsed.paths])];
     if (this.state.connection.state !== 'connected') {
       await this.client.invoke('connection:connect');
       const connected = await this.client.waitFor((state) => ['connected', 'auth-failed', 'error'].includes(state.connection.state), 45_000);
@@ -104,12 +145,13 @@ export class CliSession {
     const project = await this.client.invoke('projects:add', this.cwd);
     const wasBusy = this.busy;
     const result = await this.client.invoke('chat:send', {
-      sessionId: this.id, text, attachments: this.attachments, delivery,
+      sessionId: this.id, text: prompt, attachments, delivery, title: this.name ?? undefined,
       cwd: this.cwd, projectId: project.id, ...this.selection,
       automation: wasBusy ? undefined : automation
     });
     this.id = result.sessionId;
     this.attachments = [];
+    this.shellContext = '';
     this.transcript.echo(result.input);
     await this.client.refresh();
     return { sessionId: result.sessionId, inputId: result.input.id };
@@ -125,8 +167,10 @@ export class CliSession {
     const clipboard = await this.client.invoke('app:clipboard');
     if (clipboard.imagePath) {
       this.attachments.push(clipboard.imagePath);
+      this.terminal?.flash(`Image attached: ${clipboard.imagePath.split(/[\\/]/).at(-1)}`);
       return;
     }
+    if (!clipboard.text) throw new Error('The clipboard has no image or text. Copy an image, then use Ctrl+V, Alt+V or /paste. Terminal paste shortcuts may only paste text.');
     this.terminal?.editor.insert(await this.attachImages(clipboard.text));
   }
 
@@ -167,6 +211,30 @@ export class CliSession {
     if (this.id) await this.client.invoke('sessions:update', this.id, this.selection);
     await this.client.invoke('config:update', { ui: { defaultModel: this.selection.model, defaultReasoning: this.selection.reasoning } });
     await this.client.refresh();
+  }
+
+  async cycleModel(): Promise<void> {
+    if (this.busy) throw new Error('Stop the current turn before changing models.');
+    const models = await this.models();
+    const current = findModel(models, this.selection.model ?? this.state.models.defaultModel);
+    const next = models[(models.findIndex((model) => model.id === current?.id) + 1) % models.length];
+    if (next) await this.setModel(next.id);
+    this.terminal?.flash(`Model: ${this.selection.model}`);
+  }
+
+  async cycleEffort(): Promise<void> {
+    if (this.busy) throw new Error('Stop the current turn before changing reasoning.');
+    const model = findModel(await this.models(), this.selection.model ?? this.state.models.defaultModel);
+    const levels = model?.efforts ?? [];
+    const next = levels[(levels.findIndex((level) => level === this.selection.reasoning) + 1) % levels.length];
+    if (!model || !next) { this.terminal?.flash('This model has no reasoning levels.'); return; }
+    await this.setModel(model.id, next);
+    this.terminal?.flash(`Reasoning: ${next}`);
+  }
+
+  addShellContext(command: string, output: string, status: string): void {
+    const context = `${this.shellContext ? `${this.shellContext}\n\n` : ''}$ ${command}\nWorking folder: ${this.cwd}\n${output}\n${status}`;
+    this.shellContext = context.length > 24_000 ? `[Earlier shell output omitted]\n${context.slice(-24_000)}` : context;
   }
 
   async stop(): Promise<void> {

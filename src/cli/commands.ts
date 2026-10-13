@@ -6,26 +6,11 @@ import { findModel } from '@shared/model-selection';
 import { CliSession } from './session';
 import { DIM, color, safeText, screenColumns } from './format';
 import { nested } from './render';
+import { COMMANDS, COMMAND_PATTERN } from './catalog';
 
-export const COMMANDS: Record<string, string> = {
-  help: 'Show commands and keyboard controls', exit: 'Leave the CLI', quit: 'Leave the CLI',
-  new: 'Start a new chat', resume: 'Choose a shared chat or pass its ID',
-  model: 'Choose a model and reasoning level', effort: 'Change reasoning level', status: 'Account, tools and session status',
-  login: 'Open ChatGPT sign-in', browser: 'Show this chat in ChatGPT', gui: 'Open the desktop workspace',
-  attach: 'Attach a local file; /attach clear removes pending files', cd: 'Change working folder',
-  plan: 'Show the latest plan', agents: 'Inspect workers; /agents stop <id> stops one', tasks: 'Show workers and queued messages',
-  queue: 'List queued inputs; /queue cancel|now|retry <id>', steer: 'Send a message into the running turn', stop: 'Stop the turn and automation',
-  goal: 'Run until an objective is met; /goal off stops automation', loop: 'Repeat a brief until stopped', compact: 'Compact and resume this chat',
-  diff: 'Show project changes or /diff <file>', export: 'Export this chat as Markdown to a file',
-  skills: 'List skills; /skills import <folder> or /skills remove <id>', plugins: 'List plugin servers; /plugins restart <id>',
-  permissions: 'Choose shared tool permissions', approve: 'Approve a folder for local tools', setup: 'Configure the shared MCP tunnel',
-  connect: 'Connect local tools', disconnect: 'Disconnect local tools', logs: 'Show recent backend logs',
-  clear: 'Clear the terminal view'
-};
+export { COMMANDS, COMMAND_PATTERN } from './catalog';
 
 function pathArgument(text: string): string { return text.replace(/^(['"])(.*)\1$/, '$2'); }
-
-export const COMMAND_PATTERN = /^\/([a-z0-9][a-z0-9._-]*)(?:\s+([\s\S]*))?$/i;
 
 export function statusText(session: CliSession): string {
   const state = session.state;
@@ -57,16 +42,43 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
   switch (name) {
     case 'help':
       print(Object.entries(COMMANDS).map(([command, hint]) => `/${command.padEnd(13)} ${color(DIM, hint, terminal.colored)}`).join('\n') +
-        '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript · ctrl+v paste image or text\n!<command> runs a shell command in the working folder.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
+        '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript · ctrl+v or alt+v paste\nctrl+g external editor · ctrl+p next model · shift+tab cycle reasoning\n@file includes text; @file:10-30 selects lines; @"file with spaces" quotes a path.\n!<command> runs a shell command and includes its output with the next message.\n!!<command> runs locally; /context clear removes pending shell output.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
     case 'new': hooks.newChat(); print('New chat.'); break;
     case 'resume': {
-      const chats = session.chats();
-      const found = argument ? chats.filter((chat) => chat.id.startsWith(argument)) : [];
-      if (argument && found.length !== 1) throw new Error('Use one unambiguous chat ID from creatine sessions.');
-      const picked = argument ? found[0] : await terminal.pick('Resume a shared chat', chats.map((chat) => ({ label: chat.title, detail: `${chat.id.slice(0, 8)} · ${session.sessionCwd(chat) ?? 'no folder'}`, value: chat })));
+      if (session.busy) throw new Error('Stop the current turn with /stop before switching chats.');
+      const picked = await session.pickSession(argument);
       if (picked) { hooks.newChat(); await session.resume(picked); print(`Resumed ${picked.id}`); }
       break;
     }
+    case 'sessions':
+      print(session.chats(argument).map((chat) => `${chat.id.slice(0, 8)} · ${chat.title}\n  ${session.sessionCwd(chat) ?? 'no folder'}`).join('\n') || 'No matching chats.'); break;
+    case 'name':
+      if (!argument) { print(session.meta?.title ?? session.name ?? 'New chat'); break; }
+      session.name = argument.slice(0, 120);
+      if (session.id) await client.invoke('sessions:update', session.id, { title: session.name });
+      print(`Chat name: ${session.name}`); break;
+    case 'search': {
+      if (!argument) throw new Error('Usage: /search <text>');
+      if (session.busy) throw new Error('Stop the current turn with /stop before switching chats.');
+      const hits = await client.invoke('sessions:search', argument);
+      const chats = session.chats();
+      const picked = await terminal.pick('Search chat messages', hits.flatMap((hit) => {
+        const chat = chats.find((chat) => chat.id === hit.sessionId);
+        return chat ? [{ label: chat.title, detail: hit.snippet, value: chat }] : [];
+      }));
+      if (picked) { hooks.newChat(); await session.resume(picked); print(`Resumed ${picked.id}`); }
+      else if (!hits.length) print('No matching messages.');
+      break;
+    }
+    case 'editor': await terminal.editDraft(); break;
+    case 'paste': await session.paste(); break;
+    case 'templates':
+      print(session.templates.map((template) => `/${template.name}${template.argumentHint ? ` ${template.argumentHint}` : ''} · ${template.description}\n  ${template.path}`).join('\n') || 'No templates. Add Markdown files to .creatine/prompts/ or your profile\'s prompts/ folder, then /reload.'); break;
+    case 'reload': await session.reloadTemplates(); print(`Loaded ${session.templates.length} prompt templates.`); break;
+    case 'context':
+      if (argument === 'clear') session.shellContext = '';
+      else if (argument) throw new Error('Usage: /context [clear]');
+      print(session.shellContext || 'No pending shell context.'); break;
     case 'model': {
       const [model, effort] = argument.split(/\s+/);
       if (effort && !REASONING_EFFORTS.includes(effort as ReasoningEffort)) throw new Error(`Unknown effort ${effort}.`);
@@ -95,6 +107,8 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       const project = await client.invoke('projects:add', cwd);
       if (session.id) await client.invoke('sessions:update', session.id, { cwd, projectId: project.id });
       session.cwd = cwd;
+      session.shellContext = '';
+      await session.reloadTemplates();
       print(`Working in ${cwd}`); break;
     }
     case 'plan': {
@@ -125,12 +139,21 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       print(session.state.inputs.filter((input) => input.sessionId === session.id && ['queued', 'sending', 'failed'].includes(input.state)).map((input) => `${input.id.slice(0, 8)} ${input.state} ${input.text}`).join('\n') || 'No pending inputs.'); break;
     case 'queue': {
       const [action, prefix] = argument.split(/\s+/);
-      if (['cancel', 'now', 'retry'].includes(action ?? '')) {
+      if (['cancel', 'now', 'retry', 'edit'].includes(action ?? '')) {
         const found = session.state.inputs.filter((input) => input.sessionId === session.id && prefix && input.id.startsWith(prefix));
         if (found.length !== 1) throw new Error('Choose one input ID listed by /queue.');
         if (action === 'cancel') await client.invoke('inputs:cancel', found[0]!.id);
         if (action === 'now') await client.invoke('inputs:sendNow', found[0]!.id);
-        if (action === 'retry') { session.attachments = found[0]!.attachments.map((file) => file.path); await session.send(found[0]!.text); }
+        const input = found[0]!;
+        if (action === 'edit') {
+          if (input.state !== 'queued') throw new Error('Only queued messages can be edited. Retry a failed message first.');
+          const text = await terminal.ask('Edit pending message', false, input.text);
+          if (text?.trim()) await client.invoke('inputs:update', input.id, { text });
+        }
+        if (action === 'retry') {
+          if (input.state !== 'failed') throw new Error('Only failed messages can be retried.');
+          await client.invoke('inputs:retry', input.id);
+        }
       } else if (argument) await session.send(argument, 'after-turn');
       else print(session.state.inputs.filter((input) => input.sessionId === session.id && ['queued', 'sending', 'failed'].includes(input.state)).map((input) => `${input.id.slice(0, 8)} · ${input.state} · ${input.text}`).join('\n') || 'No pending messages.');
       break;
@@ -190,7 +213,7 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
     case 'clear': terminal.clearScreen(); break;
     case 'exit': case 'quit': hooks.exit(); break;
     default:
-      if (!session.state.skills.some((skill) => skill.id === name)) throw new Error(`Unknown command /${name}. Use /help.`);
+      if (!session.state.skills.some((skill) => skill.id === name) && !session.templates.some((template) => template.name === name)) throw new Error(`Unknown command /${name}. Use /help.`);
       await session.send(text);
   }
   await client.refresh();

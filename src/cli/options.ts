@@ -11,6 +11,7 @@ export interface CliOptions {
   trust: boolean;
   yolo: boolean;
   resume: string | null;
+  name?: string;
   model?: string;
   effort?: ReasoningEffort;
   mode: 'off' | 'goal' | 'loop';
@@ -48,8 +49,10 @@ export function parseOptions(args: string[], cwd = process.cwd()): CliOptions {
       case '--json': result.json = true; result.print = true; break;
       case '--trust': result.trust = true; break;
       case '--yolo': result.yolo = true; break;
-      case '--continue': result.resume = 'latest'; break;
-      case '-r': case '--resume': result.resume = value(i++); break;
+      case '-c': case '--continue': result.resume = 'latest'; break;
+      case '-r': case '--resume':
+        result.resume = args[i + 1] && !args[i + 1]!.startsWith('-') ? value(i++) : 'picker'; break;
+      case '-n': case '--name': result.name = value(i++).trim().slice(0, 120); if (!result.name) throw new Error('--name needs a nonempty title.'); break;
       case '-C': case '--cwd': result.cwd = resolve(cwd, value(i++)); break;
       case '--user-data': result.profile = resolve(cwd, value(i++)); break;
       case '-m': case '--model': result.model = value(i++); break;
@@ -72,6 +75,7 @@ export function parseOptions(args: string[], cwd = process.cwd()): CliOptions {
     }
   }
   if (result.mode === 'loop' && result.print) throw new Error('Loop runs until stopped. Use it in interactive mode.');
+  if (result.resume === 'picker' && result.print) throw new Error('Noninteractive --resume needs a session ID. Use --continue for the latest chat.');
   result.prompt = words.join(' ');
   return result;
 }
@@ -86,8 +90,9 @@ Usage: creatine [options] [prompt]
 
 Options:
   -C, --cwd <folder>       Work in this folder (defaults to the current directory)
-  -r, --resume <id>        Resume a shared session; an unambiguous prefix is accepted
-      --continue          Resume the latest chat in this folder
+  -r, --resume [id]        Resume a shared session, or open a searchable picker
+  -c, --continue           Resume the latest chat in this folder
+  -n, --name <title>       Name the new or resumed chat
   -m, --model <id>         Pick a model from your ChatGPT account
       --effort <level>     Pick a supported reasoning level
       --goal               Keep working until the objective is met
@@ -104,6 +109,9 @@ Options:
 
 Piped stdin is included in the prompt. Interactive controls: Enter sends;
 Ctrl+J or Alt+Enter adds a line; Tab completes; Esc stops; Ctrl+C stops or exits.
+@file includes text; @file:10-30 selects lines; @"file with spaces" quotes a path.
+Ctrl+G opens VISUAL/EDITOR; Ctrl+V or Alt+V pastes images; /paste also works.
+Ctrl+P cycles models; Shift+Tab cycles reasoning. /reload loads prompt templates.
 Use /help for sessions, models, plans, agents, skills, permissions and setup.
 The CLI shares login, history, approved folders and settings with the GUI.
 `;

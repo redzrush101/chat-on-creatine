@@ -8,6 +8,7 @@ tunnel, and how both interfaces render a real turn.
 npm run test:live                                  # every scenario, windows on your display
 xvfb-run -a -s "-screen 0 1920x1080x24" npm run test:live                      # Linux without windows on your desktop
 npm run test:live -- test/live/interface.live.ts   # one file
+npm run test:live -- test/live/cli-agent.live.ts   # CLI workflows and native Wayland image paste
 LIVE_DOCS=1 npm run test:live -- test/live/interface.live.ts   # also refresh docs/screenshots
 ```
 

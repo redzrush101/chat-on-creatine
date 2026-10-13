@@ -17,6 +17,12 @@ export class Editor {
 
   set(text: string): void { this.text = text; this.cursor = text.length; }
 
+  restoreHistory(messages: string[]): void {
+    this.history.splice(0, this.history.length, ...messages.slice(-100));
+    this.historyIndex = this.history.length;
+    this.savedDraft = this.text;
+  }
+
   submit(): string {
     const text = this.text.trim();
     if (text && this.history.at(-1) !== text) this.history.push(text);
@@ -26,12 +32,14 @@ export class Editor {
     return text;
   }
 
-  key(sequence: string, key: Key): 'submit' | 'interrupt' | 'stop' | 'complete' | 'expand' | 'exit' | 'edit' {
+  key(sequence: string, key: Key): 'submit' | 'interrupt' | 'stop' | 'complete' | 'expand' | 'exit' | 'edit' | 'external' | 'model' | 'effort' {
     if (key.ctrl && key.name === 'c') return 'interrupt';
     if (key.ctrl && key.name === 'd' && !this.text) return 'exit';
     if (key.name === 'escape') return 'stop';
-    if (key.name === 'tab') return 'complete';
+    if (key.name === 'tab') return key.shift ? 'effort' : 'complete';
     if (key.ctrl && key.name === 'o') return 'expand';
+    if (key.ctrl && key.name === 'g') return 'external';
+    if (key.ctrl && key.name === 'p') return 'model';
     if (key.name === 'return' && !key.meta && !key.shift) {
       if (this.text.endsWith('\\')) { this.text = this.text.slice(0, -1); this.cursor = this.text.length; this.insert('\n'); return 'edit'; }
       return 'submit';

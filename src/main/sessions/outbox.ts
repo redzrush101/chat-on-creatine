@@ -116,6 +116,10 @@ export class Outbox {
     return this.transition(id, 'sending', { state: 'queued' });
   }
 
+  retry(id: string): InputItem | undefined {
+    return this.transition(id, 'failed', { state: 'queued', error: null, sentAt: null });
+  }
+
   onChange(listener: (items: InputItem[]) => void): () => void {
     return this.emitter.on('change', listener);
   }

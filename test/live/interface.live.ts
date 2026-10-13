@@ -113,6 +113,7 @@ it('runs the CLI in the GUI terminal against the same backend', async () => {
   const imageOnly = (input: typeof live.state.inputs[number]) => !input.text && input.attachments.some((file) => file.name.startsWith('clipboard-'));
   const state = await live.api.waitFor((state) => state.inputs.some(imageOnly), 30_000);
   const cliId = state.inputs.find(imageOnly)!.sessionId;
+  await live.shot('cli-image-working', terminal);
   const pasted = await live.until('CLI pasted image', live.idle(cliId, 2), cliId);
   expect(pasted.filter((event) => event.kind === 'user').at(-1)?.attachments).toHaveLength(1);
   expect(answer(pasted)).toMatch(/\bblue\b/i);
@@ -122,12 +123,12 @@ it('runs the CLI in the GUI terminal against the same backend', async () => {
   const pathPrompt = 'Describe the color of the image from this path. Reply with just the color name.';
   await live.ui.type(`${pathPrompt}\n`);
   const fromPath = await live.until('CLI image path', live.idle(cliId, 3), cliId);
+  await live.timeline(cliId, 'cli-images');
   const user = fromPath.filter((event) => event.kind === 'user').at(-1)!;
   expect(user.text).toBe(pathPrompt);
   expect(user.attachments.map((image) => image.name)).toEqual(['screen shot.png']);
   expect(answer(fromPath)).toMatch(/^blue[.!]?$/i);
   expect(await live.ui.text('.xterm-rows')).not.toMatch(/Unknown command/);
-  await live.timeline(cliId, 'cli-images');
   await live.main(async () => {
     const { clipboard } = process.getBuiltinModule('module').createRequire(process.execPath)('electron') as typeof import('electron');
     await clipboard.writeText('Reply with just CLIPBOARD_TEXT_OK.');

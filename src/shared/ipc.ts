@@ -27,6 +27,8 @@ interface SendRequest {
   reasoning?: ReasoningEffort | null;
   /** Turn on Goal or Loop for this chat with the message as objective. */
   automation?: AutomationMode;
+  /** Optional user-provided title for a new chat. */
+  title?: string;
 }
 
 interface SendResult {
@@ -84,6 +86,7 @@ export interface RendererApi {
   'inputs:update': (inputId: string, patch: { text?: string; delivery?: InputDelivery }) => InputItem;
   'inputs:cancel': (inputId: string) => void;
   'inputs:sendNow': (inputId: string) => void;
+  'inputs:retry': (inputId: string) => InputItem;
 
   'projects:add': (path: string, name?: string) => Project;
   'projects:update': (projectId: string, patch: Partial<Pick<Project, 'name'>>) => Project;
@@ -163,6 +166,7 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'inputs:update',
   'inputs:cancel',
   'inputs:sendNow',
+  'inputs:retry',
   'projects:add',
   'projects:update',
   'projects:remove',
