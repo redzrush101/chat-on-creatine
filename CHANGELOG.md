@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0] - 2026-10-13
+
+- Align local command, image and plan tools with Codex's descriptions and structured outputs.
+  Add the shell `login` option while keeping existing command batches and file permissions.
+- Add Codex-style code-mode cells: yield early, call `wait` for new output or completion,
+  stop a running cell, and keep JSON values across fresh scripts with `store` and `load`.
+  Cells and stored values stay isolated by chat; scripts keep their CPU, memory and output limits.
+- Queue history appends and compaction without blocking the main process. Resolve approved
+  folders, shell and tunnel executables, and terminal directories asynchronously.
+- Stop rescanning partial stream lines, rebuilding event indexes and rerendering completed
+  work groups during streaming. Remove redundant parsing, unused exports and flag-only tests.
+- Let the MCP SDK parse and bound requests, validate browser Origins, advertise output schemas,
+  and preserve scalar structured outputs for older protocol clients.
+
 ## [0.4.1] - 2026-10-12
 
 - Show agents in the CLI the way Claude Code does: a compact start row, message rows, a finish
