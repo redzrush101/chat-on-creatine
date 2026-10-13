@@ -10,16 +10,14 @@ export const updatePlanTool = defineTool({
   surface: 'core',
   title: 'Update plan',
   description:
-    'Updates your task plan in the user’s app. Use for work with several meaningful steps; skip simple tasks. ' +
-    'Send the complete plan with short step headlines, useful details and current statuses. Keep at most one step in_progress. ' +
-    'Update after completing a step or changing approach. This only displays a plan; it does not execute steps or advance queued stages.',
+    'Updates the task plan.\nProvide an optional explanation and a list of plan items, each with a step and status.\nAt most one step can be in_progress at a time.',
   input: {
-    explanation: z.string().max(2000).optional().describe('Why the plan changed, in a sentence.'),
+    explanation: z.string().max(2000).optional().describe('Optional explanation for this plan update.'),
     plan: z
       .array(
         z.object({
-          step: z.string().min(1).max(500),
-          status: z.enum(['pending', 'in_progress', 'completed'])
+          step: z.string().min(1).max(500).describe('Task step text.'),
+          status: z.enum(['pending', 'in_progress', 'completed']).describe('Step status.')
         })
       )
       .min(1)
@@ -34,7 +32,7 @@ export const updatePlanTool = defineTool({
     if (plan.filter((item) => item.status === 'in_progress').length > 1) {
       throw new ToolError('INVALID_ARGUMENT', 'At most one plan step may be in_progress.');
     }
-    const items: PlanItem[] = plan.map((item) => ({ step: item.step, status: item.status }));
+    const items: PlanItem[] = plan;
     ctx.services.setPlan(ctx.caller, explanation ?? null, items);
     const done = items.filter((item) => item.status === 'completed').length;
     const summary = [

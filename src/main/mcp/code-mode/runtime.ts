@@ -1,5 +1,4 @@
 import { errorMessage } from '@shared/errors';
-import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { Worker } from 'node:worker_threads';
 import { MAX_IMAGE_BYTES, sniffImage } from '../../fs/files';
@@ -27,6 +26,8 @@ type Invoke = (name: string, args: unknown) => Promise<ToolResult>;
 type WorkerMessage =
   | { type: 'call'; id: number; json: string }
   | { type: 'text' | 'image'; json: string }
+  | { type: 'store'; json: string }
+  | { type: 'yield' }
   | { type: 'done'; status: string | null; detail: string };
 
 const requireRuntime = createRequire(typeof __filename === 'string' ? __filename : import.meta.url);
@@ -37,16 +38,21 @@ const requireRuntime = createRequire(typeof __filename === 'string' ? __filename
  */
 function workerModule(name: string): string {
   const resolved = requireRuntime.resolve(name);
-  const unpacked = resolved.replace(/\.asar([\\/])/, '.asar.unpacked$1');
-  return unpacked !== resolved && existsSync(unpacked) ? unpacked : resolved;
+  return resolved.replace(/\.asar([\\/])/, '.asar.unpacked$1');
 }
+
+const WORKER_MODULES = {
+  coreModule: workerModule('quickjs-emscripten-core'),
+  wasmModule: workerModule('@jitl/quickjs-wasmfile-release-sync')
+};
 
 /** Accepts a PNG/JPEG/GIF/WebP as a data URL or as MCP image content; anything else is refused. */
 function toImage(value: unknown): ToolContent | null {
   let data: unknown;
   let mimeType: unknown;
-  if (typeof value === 'string') {
-    const match = /^data:([^;,]+);base64,(.*)$/s.exec(value);
+  const url = typeof value === 'string' ? value : (value as { image_url?: unknown } | null)?.image_url;
+  if (typeof url === 'string') {
+    const match = /^data:([^;,]+);base64,(.*)$/s.exec(url);
     if (match) [, mimeType, data] = match;
   } else if (value && typeof value === 'object' && (value as { type?: unknown }).type === 'image') {
     ({ data, mimeType } = value as { data?: unknown; mimeType?: unknown });
@@ -72,7 +78,10 @@ function utf8Prefix(text: string, bytes: number): string {
  * returned; nested tool results stay in the script. Stopping the script does not undo calls it
  * already dispatched, and the result says so.
  */
-export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke, signal: AbortSignal): Promise<ToolResult> {
+export function runCodeMode(
+  code: string, tools: CodeModeTool[], invoke: Invoke, signal: AbortSignal,
+  emit: (block: ToolContent) => void, yieldControl: () => void, stored: Map<string, string>
+): Promise<ToolResult> {
   return new Promise<ToolResult>((resolve) => {
     const names = new Set(tools.map((tool) => tool.name));
     const content: ToolContent[] = [];
@@ -82,6 +91,7 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
     let inFlight = 0;
     let textBytes = 0;
     let images = 0;
+    const append = (block: ToolContent) => { content.push(block); emit(block); };
 
     const finish = (status: string | null, detail = '') => {
       if (settled) return;
@@ -101,6 +111,7 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
     const onAbort = () => finish('ABORTED', 'the request was cancelled.');
     const timer = setTimeout(() => finish('TIME_LIMIT', `the script exceeded ${CODE_MODE_LIMITS.wallMs / 1000} s.`), CODE_MODE_LIMITS.wallMs);
     signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) { onAbort(); return; }
 
     const post = (message: { type: 'result'; id: number; json: string }) => {
       if (!settled) worker?.postMessage(message);
@@ -140,17 +151,17 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
         const size = Buffer.byteLength(value, 'utf8');
         if (textBytes + size > CODE_MODE_LIMITS.textBytes) {
           const kept = utf8Prefix(value, CODE_MODE_LIMITS.textBytes - textBytes);
-          if (kept) content.push({ type: 'text', text: kept });
+          if (kept) append({ type: 'text', text: kept });
           return finish('OUTPUT_LIMIT', `text output is limited to ${CODE_MODE_LIMITS.textBytes} UTF-8 bytes; the rest was cut. Filter results or read smaller ranges.`);
         }
         textBytes += size;
-        content.push({ type: 'text', text: value });
+        append({ type: 'text', text: value });
         return;
       }
       const image = toImage(JSON.parse(json));
       if (!image) return finish('IMAGE_INVALID', 'image() takes a PNG, JPEG, GIF or WebP image: a tool result image or a data URL.');
       if (++images > CODE_MODE_LIMITS.images) return finish('OUTPUT_LIMIT', `more than ${CODE_MODE_LIMITS.images} images.`);
-      content.push(image);
+      append(image);
     };
 
     try {
@@ -158,11 +169,11 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
         eval: true,
         workerData: {
           code,
-          tools: tools.map(({ name, description }) => ({ name, description })),
+          tools,
+          stored: [...stored],
           memoryBytes: CODE_MODE_LIMITS.memoryBytes,
           cpuMs: CODE_MODE_LIMITS.cpuMs,
-          coreModule: workerModule('quickjs-emscripten-core'),
-          wasmModule: workerModule('@jitl/quickjs-wasmfile-release-sync')
+          ...WORKER_MODULES
         },
         resourceLimits: { maxOldGenerationSizeMb: 128, stackSizeMb: 4 }
       });
@@ -177,6 +188,13 @@ export function runCodeMode(code: string, tools: CodeModeTool[], invoke: Invoke,
       try {
         if (message.type === 'done') finish(message.status, message.detail);
         else if (message.type === 'call') onCall(message.id, message.json);
+        else if (message.type === 'yield') yieldControl();
+        else if (message.type === 'store') {
+          const { key, value } = JSON.parse(message.json) as { key: string; value: string };
+          const bytes = [...stored].reduce((sum, [name, json]) => sum + (name === key ? 0 : Buffer.byteLength(name + json)), Buffer.byteLength(key + value));
+          if (bytes > CODE_MODE_LIMITS.memoryBytes) finish('MEMORY_LIMIT', 'stored values exceed the JS memory budget.');
+          else stored.set(key, value);
+        }
         else onEmit(message.type, message.json);
       } catch {
         finish('BRIDGE_ERROR', 'the script sent a value the bridge could not read.');

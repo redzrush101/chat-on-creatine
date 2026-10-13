@@ -30,7 +30,7 @@ const describe = (vm, handle) => {
   let cpuUsed = 0;
   let sliceStart = 0;
   const cpuExceeded = () => cpuUsed + performance.now() - sliceStart > workerData.cpuMs;
-  runtime.setInterruptHandler(cpuExceeded);
+  runtime.setInterruptHandler(() => reported || cpuExceeded());
   const timed = fn => {
     sliceStart = performance.now();
     try { return fn(); } finally { cpuUsed += performance.now() - sliceStart; }
@@ -46,7 +46,12 @@ const describe = (vm, handle) => {
   const pending = new Map();
   let nextId = 0;
   const host = vm.newFunction('host', (operation, payload) => {
+    if (reported) return vm.undefined;
     const op = vm.getString(operation);
+    if (op === 'exit') {
+      settle(null, '');
+      return vm.throwError('script exited');
+    }
     const json = vm.getString(payload);
     if (op === 'call') {
       const id = ++nextId;
@@ -70,9 +75,18 @@ const describe = (vm, handle) => {
     '}' +
     'const text = value => host("text", JSON.stringify(typeof value === "string" ? value : (JSON.stringify(value) ?? String(value))));' +
     'const image = value => host("image", JSON.stringify(value) ?? "null");' +
+    'const saved = new Map(' + JSON.stringify(workerData.stored) + ');' +
+    'const store = (key, value) => {' +
+      'if (typeof key !== "string") throw new TypeError("store key must be a string");' +
+      'const json = JSON.stringify(value); if (json === undefined) throw new TypeError("store value must be JSON serializable");' +
+      'saved.set(key, json); host("store", JSON.stringify({key, value: json}));' +
+    '};' +
     'Object.defineProperties(globalThis, {' +
       'tools: { value: Object.freeze(tools) }, ALL_TOOLS: { value: entries },' +
-      'text: { value: text }, image: { value: image }' +
+      'text: { value: text }, image: { value: image },' +
+      'store: { value: store }, load: { value: key => saved.has(key) ? JSON.parse(saved.get(key)) : undefined },' +
+      'exit: { value: () => host("exit", "null") },' +
+      'yield_control: { value: () => host("yield", "null") }' +
     '});' +
   '})()';
   const setup = timed(() => vm.evalCode(bootstrap, 'bootstrap.js'));
@@ -83,17 +97,9 @@ const describe = (vm, handle) => {
   }
   setup.value.dispose();
 
-  const evaluated = timed(() => vm.evalCode(workerData.code, 'exec.js', { type: 'module' }));
-  if (evaluated.error) {
-    const detail = describe(vm, evaluated.error);
-    evaluated.error.dispose();
-    settle(cpuUsed > workerData.cpuMs ? 'CPU_LIMIT' : 'SCRIPT_ERROR', detail);
-    return;
-  }
-  const execution = evaluated.value;
-
   // Runs queued JavaScript until the script settles or waits for a tool result from the host.
   const pump = () => {
+    if (reported) return;
     for (;;) {
       const jobs = timed(() => runtime.executePendingJobs(64));
       if (jobs.error) {
@@ -117,6 +123,43 @@ const describe = (vm, handle) => {
       if (!runtime.hasPendingJob()) return;
     }
   };
+
+  const timers = new Map();
+  const setTimer = vm.newFunction('setTimeout', (callback, delay) => {
+    if (reported) return vm.undefined;
+    if (vm.typeof(callback) !== 'function') return vm.throwError('setTimeout expects a function callback');
+    const id = ++nextId;
+    const held = callback.dup();
+    const timer = setTimeout(() => {
+      timers.delete(id);
+      if (reported) { held.dispose(); return; }
+      const result = timed(() => vm.callFunction(held, vm.undefined));
+      held.dispose();
+      if (result.error) {
+        const detail = describe(vm, result.error);
+        result.error.dispose();
+        settle(cpuUsed > workerData.cpuMs ? 'CPU_LIMIT' : 'SCRIPT_ERROR', detail);
+      } else { result.value.dispose(); pump(); }
+    }, Math.min(2 ** 31 - 1, Math.max(0, vm.getNumber(delay) || 0)));
+    timers.set(id, { timer, held });
+    return vm.newNumber(id);
+  });
+  const clearTimer = vm.newFunction('clearTimeout', id => {
+    const entry = timers.get(vm.getNumber(id));
+    if (entry) { clearTimeout(entry.timer); entry.held.dispose(); timers.delete(vm.getNumber(id)); }
+    return vm.undefined;
+  });
+  vm.setProp(vm.global, 'setTimeout', setTimer); setTimer.dispose();
+  vm.setProp(vm.global, 'clearTimeout', clearTimer); clearTimer.dispose();
+
+  const evaluated = timed(() => vm.evalCode(workerData.code, 'exec.js', { type: 'module' }));
+  if (evaluated.error) {
+    const detail = describe(vm, evaluated.error);
+    evaluated.error.dispose();
+    settle(cpuUsed > workerData.cpuMs ? 'CPU_LIMIT' : 'SCRIPT_ERROR', detail);
+    return;
+  }
+  const execution = evaluated.value;
 
   parentPort.on('message', message => {
     if (reported) return;

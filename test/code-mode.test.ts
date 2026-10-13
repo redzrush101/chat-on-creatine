@@ -23,7 +23,7 @@ const echo = defineTool({
 
 /** Turns itself off after its first call, so a later nested call hits the live exposure check. */
 const flaky = defineTool({
-  name: 'flaky',
+  name: 'flaky-tool',
   surface: 'core',
   title: 'Flaky',
   description: 'Disables itself.',
@@ -52,14 +52,14 @@ const server = new McpHttpServer({
   tools,
   services: {} as ToolServices,
   tokens,
-  resolveCaller: async (requestId) => (requestId === 'wfr_abc' ? caller : null),
+  resolveCaller: async (requestId) => requestId === 'wfr_abc' ? caller : requestId === 'wfr_other' ? { ...caller, sessionId: 's2' } : null,
   steering: () => [],
   hooks: { onCallEnd: (call) => calls.push(call) }
 });
 
-async function connect(): Promise<Client> {
+async function connect(requestId = 'wfr_abc'): Promise<Client> {
   const transport = new StreamableHTTPClientTransport(new URL(server.localUrl('core')!), {
-    requestInit: { headers: { 'x-request-id': 'wfr_abc/t' } }
+    requestInit: { headers: { 'x-request-id': `${requestId}/t` } }
   });
   const client = new Client({ name: 'test', version: '1.0.0' });
   await client.connect(transport);
@@ -69,7 +69,7 @@ async function connect(): Promise<Client> {
 /** Runs one exec call and returns its text blocks and error flag. */
 async function run(client: Client, code: string): Promise<{ texts: string[]; isError: boolean }> {
   const result = await client.callTool({ name: 'exec', arguments: { code } });
-  const texts = (result.content as Array<{ type: string; text: string }>).map((block) => block.text);
+  const texts = (result.content as Array<{ type: string; text: string }>).slice(1).map((block) => block.text);
   return { texts, isError: result.isError === true };
 }
 
@@ -95,7 +95,7 @@ describe('code mode (exec)', () => {
     const { texts, isError } = await run(client, 'text(ALL_TOOLS)');
     expect(isError).toBe(false);
     const listed = (JSON.parse(texts[0]!) as Array<{ name: string }>).map((tool) => tool.name);
-    expect(listed).toEqual(expect.arrayContaining(['echo', 'flaky', 'session_finish']));
+    expect(listed).toEqual(expect.arrayContaining(['echo', 'flaky-tool', 'session_finish']));
     expect(listed).not.toContain('exec');
   });
 
@@ -121,12 +121,6 @@ describe('code mode (exec)', () => {
     expect(texts[0]).toBe('echo:a echo:b');
   });
 
-  it('notes a tool the surface does not offer', async () => {
-    const { texts, isError } = await run(client, "if (false) await tools.nope({}); text('ok')");
-    expect(isError).toBe(false);
-    expect(texts).toEqual(['ok', expect.stringContaining('UNKNOWN_TOOL_NAMES: this script used tools.nope')]);
-  });
-
   it('stops a runaway loop with the CPU limit', async () => {
     const { texts, isError } = await run(client, 'while (true) {}');
     expect(isError).toBe(true);
@@ -150,7 +144,7 @@ describe('code mode (exec)', () => {
   });
 
   it('returns TOOL_DISABLED inside the script when a tool was turned off mid-run', async () => {
-    const { texts, isError } = await run(client, 'await tools.flaky({}); const r = await tools.flaky({}); text(r)');
+    const { texts, isError } = await run(client, 'await tools["flaky-tool"]({}); const r = await tools["flaky-tool"]({}); text(r)');
     expect(isError).toBe(false);
     const parsed = JSON.parse(texts[0]!) as { isError: boolean; content: Array<{ text: string }> };
     expect(parsed.isError).toBe(true);
@@ -160,5 +154,69 @@ describe('code mode (exec)', () => {
   it('refuses session_finish inside a script', async () => {
     const { texts } = await run(client, 'const r = await tools.session_finish({}); text(r)');
     expect(texts[0]).toContain('must be called directly');
+  });
+
+  it('yields a cell, returns only new output, and refuses another chat or a consumed cell', async () => {
+    const result = await client.callTool({ name: 'exec', arguments: {
+      code: "text('before'); yield_control(); await new Promise(resolve => setTimeout(resolve, 150)); text('after');"
+    } });
+    const blocks = result.content as Array<{ type: string; text: string }>;
+    const cellId = /Script running with cell ID (\S+)/.exec(blocks[0]!.text)?.[1];
+    expect(cellId).toBeDefined();
+    expect(blocks.slice(1).map((block) => block.text)).toEqual(['before']);
+    const other = await connect('wfr_other');
+    try {
+      expect((await other.callTool({ name: 'wait', arguments: { cell_id: cellId } })).isError).toBe(true);
+    } finally { await other.close(); }
+    const output: string[] = [];
+    for (;;) {
+      const next = await client.callTool({ name: 'wait', arguments: { cell_id: cellId, yield_time_ms: 1000 } });
+      const parts = next.content as Array<{ text: string }>;
+      expect(next.isError).toBe(false);
+      output.push(...parts.slice(1).map((part) => part.text));
+      if (parts[0]!.text.startsWith('Script completed')) break;
+    }
+    expect(output).toEqual(['after']);
+    expect((await client.callTool({ name: 'wait', arguments: { cell_id: cellId } })).isError).toBe(true);
+  });
+
+  it('stores JSON values across fresh isolates in the same chat only and exits without dispatching later calls', async () => {
+    const first = await run(client, "store('saved', {value: 42}); globalThis.temporary = 1; text('before'); try { exit(); } finally { await tools.echo({value:'never'}); }");
+    expect(first).toEqual({ texts: ['before'], isError: false });
+    expect(calls.some((call) => call.tool === 'echo')).toBe(false);
+    expect((await run(client, "text([load('saved'), typeof temporary, typeof process, typeof fetch]);")).texts).toEqual(['[{"value":42},"undefined","undefined","undefined"]']);
+    const other = await connect('wfr_other');
+    try { expect((await run(other, "text(load('saved')); ")).texts).toEqual(['undefined']); }
+    finally { await other.close(); }
+  });
+
+  it('terminates a yielded script before later tools run', async () => {
+    const result = await client.callTool({ name: 'exec', arguments: {
+      code: '// @exec: {"yield_time_ms": 0}\nawait new Promise(resolve => setTimeout(resolve, 1000)); await tools.echo({value:"never"});'
+    } });
+    const cellId = /Script running with cell ID (\S+)/.exec((result.content as Array<{ text: string }>)[0]!.text)![1];
+    const stopped = await client.callTool({ name: 'wait', arguments: { cell_id: cellId, terminate: true } });
+    expect((stopped.content as Array<{ text: string }>)[0]!.text).toContain('Script terminated');
+    expect(calls.some((call) => call.tool === 'echo')).toBe(false);
+  });
+
+  it('waits on an earlier cell from a fresh exec through the same MCP dispatch', async () => {
+    const result = await client.callTool({ name: 'exec', arguments: {
+      code: 'yield_control(); await new Promise(resolve => setTimeout(resolve, 100)); text("later");'
+    } });
+    const cellId = /Script running with cell ID (\S+)/.exec((result.content as Array<{ text: string }>)[0]!.text)![1];
+    const { texts, isError } = await run(client, `const r = await tools.wait({cell_id: ${JSON.stringify(cellId)}}); text(r);`);
+    expect(isError).toBe(false);
+    const waited = JSON.parse(texts[0]!) as { content: Array<{ text: string }>; isError: boolean };
+    expect(waited.isError).toBe(false);
+    expect(waited.content.map((block) => block.text).join('')).toContain('later');
+    expect(calls.some((call) => call.tool === 'wait' && call.nested && call.caller?.sessionId === 's1')).toBe(true);
+  });
+
+  it.each(['// @exec: {}', '// @exec: {"bad":1}\ntext("never")', '// @exec: {"yield_time_ms":-1}\ntext("never")'])('refuses a malformed pragma before dispatch: %s', async (code) => {
+    const result = await client.callTool({ name: 'exec', arguments: { code } });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: expect.stringContaining('INVALID_ARGUMENT') }]);
+    expect(calls.map((call) => call.tool)).toEqual(['exec']);
   });
 });

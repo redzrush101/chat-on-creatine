@@ -145,13 +145,14 @@ export class ConnectionManager {
   }
 
   /** The tunnel executables this install can find, for the setup screen. */
-  tools(): { tunnelClient: string | null; cloudflared: string | null } {
+  async tools(): Promise<{ tunnelClient: string | null; cloudflared: string | null }> {
     const { connection } = this.deps.getConfig();
     const dirs = { binDir: this.deps.binDir, resourcesBinDir: this.deps.resourcesBinDir };
-    return {
-      tunnelClient: locateBinary('tunnel-client', { explicit: connection.tunnelClientPath, ...dirs }),
-      cloudflared: locateBinary('cloudflared', { explicit: connection.cloudflaredPath, ...dirs })
-    };
+    const [tunnelClient, cloudflared] = await Promise.all([
+      locateBinary('tunnel-client', { explicit: connection.tunnelClientPath, ...dirs }),
+      locateBinary('cloudflared', { explicit: connection.cloudflaredPath, ...dirs })
+    ]);
+    return { tunnelClient, cloudflared };
   }
 
   private enqueue(task: () => Promise<void>): Promise<void> {
@@ -198,7 +199,7 @@ export class ConnectionManager {
         adapter,
         label: id,
         localUrl: localUrl ?? '',
-        binary: this.binaryFor(adapter, config),
+        binary: await this.binaryFor(adapter, config),
         tunnelId: adapter === 'openai' ? tunnelIdFor(config, id) : '',
         apiKey: adapter === 'openai' ? this.deps.getSecret('tunnelApiKey') : null,
         report: (report) => {
@@ -222,7 +223,7 @@ export class ConnectionManager {
     }
   }
 
-  private binaryFor(adapter: TunnelAdapter, config: Config): string | null {
+  private async binaryFor(adapter: TunnelAdapter, config: Config): Promise<string | null> {
     if (adapter === 'manual') return null;
     const { connection } = config;
     const dirs = { binDir: this.deps.binDir, resourcesBinDir: this.deps.resourcesBinDir };

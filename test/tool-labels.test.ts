@@ -50,6 +50,7 @@ describe('tool labels', () => {
     expect(summarizeTools([tool('exec_command', { cmd: 'pwd' })])).toBe('Ran a command');
     expect(summarizeTools([tool('read', { paths: ['/a/x.md', '/a/y.md'] }), tool('exec_command', { cmd: 'ls' })])).toBe('Read 2 files, ran a command');
     expect(summarizeTools([tool('exec', { code: 'await tools.read({})' }), tool('read', { paths: ['/a/x.md'] })])).toBe('Read x.md');
+    expect(summarizeTools([tool('exec', { code: 'await tools.read({})' }), tool('wait', { cell_id: 'c' }), tool('read', { paths: ['/a/x.md'] })])).toBe('Read x.md');
     expect(summarizeTools([tool('exec', { code: 'text(ALL_TOOLS)' })])).toBe('Ran a script');
     expect(summarizeTools([tool('agents', { action: 'spawn', workers: [{ label: 'Reviewer', task: 't' }] })])).toBe('Started agent Reviewer');
     expect(diffTotals(events)).toEqual({ added: 1, removed: 1 });

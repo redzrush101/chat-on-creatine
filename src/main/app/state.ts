@@ -2,6 +2,7 @@ import { app } from 'electron';
 import type { AppState, BrowserStatus, SessionEvent } from '@shared/types';
 import type { MainEvent, MainEvents } from '@shared/ipc';
 import type { Services } from './services';
+import { createLogger } from '../core/log';
 
 const STATE_COALESCE_MS = 50;
 const EVENTS_COALESCE_MS = 80;
@@ -17,9 +18,10 @@ export class StateHub {
     private readonly send: <E extends MainEvent>(event: E, payload: MainEvents[E]) => void
   ) {}
 
-  snapshot(): AppState {
+  async snapshot(): Promise<AppState> {
     const s = this.services();
     if (!s) throw new Error('App is starting');
+    const tools = await s.connection.tools();
     const hostStatus = s.host.status();
     const browser: BrowserStatus = {
       ready: hostStatus.ready,
@@ -33,7 +35,6 @@ export class StateHub {
       const current = live[sessionId] ?? { sessionId, turn: 'idle', tabOpen: false, runningTools: 0, lastActivityAt: null };
       if (current.turn === 'idle') live[sessionId] = { ...current, turn: 'compacting' };
     }
-    const tools = s.connection.tools();
     return {
       version: app.getVersion(),
       platform: process.platform,
@@ -57,8 +58,10 @@ export class StateHub {
   changed(): void {
     if (this.stateTimer) return;
     this.stateTimer = setTimeout(() => {
-      this.stateTimer = null;
-      if (this.services()) this.send('state', this.snapshot());
+      if (!this.services()) { this.stateTimer = null; return; }
+      void this.snapshot().then((state) => this.send('state', state))
+        .catch((error: unknown) => createLogger('state').error('could not assemble app state', error))
+        .finally(() => { this.stateTimer = null; });
     }, STATE_COALESCE_MS);
   }
 

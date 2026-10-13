@@ -1,28 +1,38 @@
-import { mkdir, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, rename, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const queues = new Map<string, Promise<void>>();
 
-/**
- * Atomically replaces a file (temp + rename). Writes to the same path are serialized so a slow
- * earlier write can never land after a newer one.
- */
-function writeFileAtomic(path: string, data: string): Promise<void> {
+/** Serializes writes to a path so an earlier append or replacement cannot land after a newer one. */
+function queueWrite(path: string, write: () => Promise<void>): Promise<void> {
   const previous = queues.get(path) ?? Promise.resolve();
   const next = previous
     .catch(() => {})
     .then(async () => {
       await mkdir(dirname(path), { recursive: true });
-      const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
-      await writeFile(temp, data, 'utf8');
-      await rename(temp, path);
+      await write();
     });
   queues.set(path, next);
-  void next.finally(() => {
+  const clear = () => {
     if (queues.get(path) === next) queues.delete(path);
-  });
+  };
+  void next.then(clear, clear);
   return next;
+}
+
+/** Replaces a file with temp + rename inside its write queue. */
+export function writeFileAtomic(path: string, data: string): Promise<void> {
+  return queueWrite(path, async () => {
+    const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(temp, data, 'utf8');
+    await rename(temp, path);
+  });
+}
+
+/** Appends in the same queue as atomic replacements, so log compaction cannot race an append. */
+export function appendText(path: string, data: string): Promise<void> {
+  return queueWrite(path, () => appendFile(path, data, 'utf8'));
 }
 
 export function writeJson(path: string, value: unknown): Promise<void> {

@@ -26,14 +26,14 @@ export function useAppState(): AppState | null {
   );
 }
 
-const histories = new Map<string, SessionEvent[]>();
+const histories = new Map<string, { events: SessionEvent[]; index: Map<string, number> }>();
 const historyListeners = new Map<string, Set<() => void>>();
 
 function upsert(sessionId: string, incoming: SessionEvent[]): void {
   const current = histories.get(sessionId);
   if (!current) return; // not loaded; it will be fetched whole when opened
-  const next = current.slice();
-  const index = new Map(next.map((event, i) => [event.id, i]));
+  const next = current.events.slice();
+  const index = current.index;
   for (const event of incoming) {
     const at = index.get(event.id);
     if (at === undefined) {
@@ -43,7 +43,7 @@ function upsert(sessionId: string, incoming: SessionEvent[]): void {
       next[at] = event;
     }
   }
-  histories.set(sessionId, next);
+  current.events = next;
   for (const listener of historyListeners.get(sessionId) ?? []) listener();
 }
 
@@ -61,8 +61,8 @@ export function useSessionEvents(sessionId: string | null): SessionEvent[] | nul
     if (!histories.has(sessionId)) {
       void invoke('sessions:events', sessionId).then((events) => {
         const pending = histories.get(sessionId);
-        histories.set(sessionId, events);
-        if (pending) upsert(sessionId, pending);
+        histories.set(sessionId, { events, index: new Map(events.map((event, i) => [event.id, i])) });
+        if (pending) upsert(sessionId, pending.events);
         listener();
       });
     }
@@ -70,5 +70,5 @@ export function useSessionEvents(sessionId: string | null): SessionEvent[] | nul
       listeners.delete(listener);
     };
   }, [sessionId]);
-  return sessionId ? (histories.get(sessionId) ?? null) : null;
+  return sessionId ? (histories.get(sessionId)?.events ?? null) : null;
 }

@@ -7,6 +7,22 @@ const run = useLive('features');
 const running = (name: RegExp) => (events: Parameters<typeof tools>[0]) => tools(events).some((event) => name.test(event.name) && event.status === 'running');
 
 describe.concurrent('a chat', () => {
+  it('runs yielding code mode and waits for nested commands and patches', async () => {
+    const live = run();
+    const code = `text('START'); yield_control();
+await new Promise(resolve => setTimeout(resolve, 1000));
+text(await tools.exec_command({cmd: "printf CODE_MODE_OK", login: false}));
+text(await tools.apply_patch({patch: "*** Begin Patch\\n*** Add File: code-mode.txt\\n+CODE_MODE_OK\\n*** End Patch"}));
+store('live_marker', 'CODE_MODE_OK');`;
+    const id = await live.send(`Use the local Core tools. Run exactly this JavaScript with exec: \n${code}\nNext, run a fresh exec with text(await tools.wait({cell_id: "the returned cell ID"})), using the actual returned ID. Repeat wait until its result says Script completed. Only then run a fresh exec with text(load('live_marker')), and reply with just that value.`);
+    const events = await live.until('code mode completion', live.idle(id), id);
+    await live.timeline(id, 'code-mode');
+    expect(tools(events).map((event) => event.name)).toEqual(expect.arrayContaining(['exec', 'wait', 'exec_command', 'apply_patch']));
+    expect(tools(events).every((event) => event.status === 'ok')).toBe(true);
+    expect(readFileSync(join(live.workspace, 'code-mode.txt'), 'utf8')).toBe('CODE_MODE_OK\n');
+    expect(answer(events).trim()).toBe('CODE_MODE_OK');
+  });
+
   it('follows a plan and takes a steered message while a command runs', async () => {
     const live = run();
     const id = await live.send('Using the local tools: first call update_plan with exactly 3 steps (create a.txt, wait, finish). Then create a.txt containing A, run `sleep 20` with exec_command (yield_time_ms 25000), update the plan as you go, then reply "done".');

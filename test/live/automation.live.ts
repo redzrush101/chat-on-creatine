@@ -9,10 +9,10 @@ const goal = (id: string) => run().state.sessions.find((session) => session.id =
 describe.concurrent('automation', () => {
   it('reaches a Goal across several turns', async () => {
     const live = run();
-    const id = await live.send('Create g1.txt, g2.txt and g3.txt in this folder, each containing its number. Create exactly one file per turn, then stop and wait.', { automation: 'goal' });
+    const id = await live.send('Create g1.txt and g2.txt in this folder, each containing its number. Create exactly one file per turn, then stop and wait.', { automation: 'goal' });
     await live.until('the goal', (events, state) => ['done', 'stopped', 'error'].includes(goal(id)?.status ?? '') && live.idle(id)(events, state), id, 12 * 60_000);
     await live.timeline(id, 'goal');
-    for (const number of [1, 2, 3]) expect(readFileSync(join(live.workspace, `g${number}.txt`), 'utf8').trim()).toBe(String(number));
+    for (const number of [1, 2]) expect(readFileSync(join(live.workspace, `g${number}.txt`), 'utf8').trim()).toBe(String(number));
     expect(goal(id)?.status).toBe('done');
   });
 

@@ -191,7 +191,7 @@ async function resolveScopes(path: string | undefined, ctx: ToolContext): Promis
   const cwd = ctx.caller?.cwd ?? null;
   if (path !== undefined) return [await guard.resolve(path, { cwd, mustExist: true })];
   if (cwd !== null) return [await guard.resolve(cwd, { cwd: null, mustExist: true })];
-  const roots = guard.roots();
+  const roots = await guard.roots();
   if (roots.length === 0) throw new ToolError('PATH_NOT_ALLOWED', NO_ROOTS_MESSAGE);
   return roots;
 }

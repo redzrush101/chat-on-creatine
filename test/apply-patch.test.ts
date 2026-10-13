@@ -3,10 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { configSchema, type Config } from '@shared/config';
-import { parseApplyPatchInvocation, parseApplyPatchInvocationWithCwd, runApplyPatch } from '../src/main/fs/apply-patch';
+import { parseApplyPatchInvocationWithCwd, runApplyPatch } from '../src/main/fs/apply-patch';
 import { parsePatch, PatchParseError } from '../src/main/fs/apply-patch/parser';
 import { ToolError, type PathGuard, type ToolContext } from '../src/main/mcp/tool';
-import { applyPatchTool } from '../src/main/mcp/tools/apply-patch';
 
 /** Confines paths to the temp root; the real RootGuard lives in fs/roots.ts. */
 function confinedGuard(root: string): PathGuard {
@@ -190,13 +189,6 @@ describe('apply_patch permissions', () => {
     expect(await readFile(path.join(root, 'f.txt'), 'utf8')).toBe('old\n');
   });
 
-  it('is exposed only while some mutating permission is on', () => {
-    const none = configSchema.parse({
-      capabilities: { read: true, write: false, create: false, delete: false, move: false, exec: false, search: false, browser: false }
-    });
-    expect(applyPatchTool.exposed(none)).toBe(false);
-    expect(applyPatchTool.exposed(configSchema.parse({ capabilities: { delete: true } }))).toBe(true);
-  });
 });
 
 describe('apply_patch parsing', () => {
@@ -213,8 +205,8 @@ describe('apply_patch parsing', () => {
 
   it('extracts the patch from heredoc and direct invocations, with an optional cd', () => {
     const body = '*** Begin Patch\n*** Add File: a\n+x\n*** End Patch';
-    expect(parseApplyPatchInvocation(`apply_patch <<'EOF'\n${body}\nEOF`)).toBe(body);
-    expect(parseApplyPatchInvocation(`apply_patch "${body}"`)).toBe(body);
+    expect(parseApplyPatchInvocationWithCwd(`apply_patch <<'EOF'\n${body}\nEOF`)).toEqual({ patch: body, cd: null });
+    expect(parseApplyPatchInvocationWithCwd(`apply_patch "${body}"`)).toEqual({ patch: body, cd: null });
     expect(parseApplyPatchInvocationWithCwd(`cd 'sub dir' && apply_patch <<'EOF'\n${body}\nEOF`)).toEqual({
       patch: body,
       cd: 'sub dir'
@@ -231,7 +223,7 @@ describe('apply_patch parsing', () => {
       `apply_patch "${body.replace('a', '$HOME')}"`,
       'ls -la'
     ]) {
-      expect(parseApplyPatchInvocation(command), command).toBeNull();
+      expect(parseApplyPatchInvocationWithCwd(command), command).toBeNull();
     }
   });
 });

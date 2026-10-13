@@ -20,7 +20,7 @@ function isSilent(event: SessionEvent): boolean {
 
 export type TimelineBlock =
   | { type: 'event'; event: SessionEvent }
-  | { type: 'work'; id: string; events: SessionEvent[]; running: boolean; tools: number };
+  | { type: 'work'; id: string; events: SessionEvent[]; running: boolean };
 
 /**
  * Folds each run of tool calls (with the thinking between them) into one collapsible group, the way
@@ -41,8 +41,7 @@ export function buildBlocks(events: SessionEvent[], live: boolean): TimelineBloc
       type: 'work',
       id: `work:${run[0]?.id ?? ''}`,
       events: run,
-      running: tail && live,
-      tools: tools.length
+      running: tail && live
     });
     run = [];
   };

@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionEvent, SessionMeta } from '@shared/types';
-import { flushWrites, writeJson } from '../core/durable';
+import { appendText, flushWrites, writeFileAtomic, writeJson } from '../core/durable';
 import { Emitter } from '../core/emitter';
 import { createLogger } from '../core/log';
 
@@ -28,6 +29,7 @@ export class SessionStore {
   private readonly metas = new Map<string, SessionMeta>();
   private readonly histories = new Map<string, History>();
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly deletions = new Set<Promise<void>>();
   private readonly emitter = new Emitter<{
     meta: MetaChange;
     events: { sessionId: string; events: SessionEvent[] };
@@ -82,8 +84,8 @@ export class SessionStore {
       ...init,
       id: randomUUID()
     };
-    mkdirSync(join(this.dir, meta.id), { recursive: true });
     this.metas.set(meta.id, meta);
+    this.histories.set(meta.id, { events: new Map(), lines: 0 });
     this.scheduleSave(meta.id);
     this.emitter.emit('meta', meta);
     return meta;
@@ -106,16 +108,23 @@ export class SessionStore {
     clearTimeout(this.saveTimers.get(id));
     this.saveTimers.delete(id);
     this.emitter.emit('meta', { deleted: id });
-    void flushWrites().then(() => rmSync(join(this.dir, id), { recursive: true, force: true }));
+    const deletion = flushWrites().then(() => rm(join(this.dir, id), { recursive: true, force: true }));
+    this.deletions.add(deletion);
+    void deletion.then(() => this.deletions.delete(deletion), (error: unknown) => {
+      this.deletions.delete(deletion);
+      this.log.error(`could not delete session ${id}`, error);
+    });
   }
 
   /** The most recently updated session bound to this conversation, current binding first. */
   byConversation(conversationId: string): SessionMeta | undefined {
-    const sessions = this.list();
-    return (
-      sessions.find((meta) => meta.conversationId === conversationId) ??
-      sessions.find((meta) => meta.lineage.includes(conversationId))
-    );
+    let current: SessionMeta | undefined;
+    let earlier: SessionMeta | undefined;
+    for (const meta of this.metas.values()) {
+      if (meta.conversationId === conversationId && (!current || meta.updatedAt > current.updatedAt)) current = meta;
+      if (meta.lineage.includes(conversationId) && (!earlier || meta.updatedAt > earlier.updatedAt)) earlier = meta;
+    }
+    return current ?? earlier;
   }
 
   events(id: string): SessionEvent[] {
@@ -133,7 +142,8 @@ export class SessionStore {
     if (!meta || !history || events.length === 0) return;
     for (const event of events) history.events.set(event.id, event);
     if (this.recording()) {
-      appendFileSync(this.eventsFile(id), events.map((event) => `${JSON.stringify(event)}\n`).join(''));
+      void appendText(this.eventsFile(id), events.map((event) => `${JSON.stringify(event)}\n`).join(''))
+        .catch((error: unknown) => this.log.error(`could not record session ${id}`, error));
       history.lines += events.length;
     }
     meta.updatedAt = Date.now();
@@ -158,6 +168,7 @@ export class SessionStore {
       this.save(id);
     }
     await flushWrites();
+    await Promise.allSettled(this.deletions);
   }
 
   onMeta(listener: (change: MetaChange) => void): () => void {
@@ -202,9 +213,8 @@ export class SessionStore {
 
   private compact(id: string, history: History): void {
     const file = this.eventsFile(id);
-    const temp = `${file}.tmp`;
-    writeFileSync(temp, [...history.events.values()].map((event) => `${JSON.stringify(event)}\n`).join(''));
-    renameSync(temp, file);
+    void writeFileAtomic(file, [...history.events.values()].map((event) => `${JSON.stringify(event)}\n`).join(''))
+      .catch((error: unknown) => this.log.error(`could not compact session ${id}`, error));
     history.lines = history.events.size;
   }
 

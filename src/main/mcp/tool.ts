@@ -54,7 +54,7 @@ export interface PathGuard {
    */
   resolve(path: string, options: { cwd: string | null; mustExist: boolean }): Promise<string>;
   /** Approved root paths (canonical). */
-  roots(): string[];
+  roots(): string[] | Promise<string[]>;
 }
 
 /** Implemented by `exec/process-manager.ts`. */
@@ -87,7 +87,7 @@ interface NestedToolHost {
   /** Tools this surface exposes right now. */
   list(): Array<{ name: string; description: string }>;
   /** Runs one tool as a nested call: live permission check, the parent's identity, hooks, no steering. */
-  call(name: string, args: unknown): Promise<ToolResult>;
+  call(name: string, args: unknown, signal: AbortSignal): Promise<ToolResult>;
 }
 
 export interface ToolContext {
@@ -117,6 +117,7 @@ export interface ToolSpec<Shape extends z.ZodRawShape = z.ZodRawShape> {
   input: Shape;
   /** Advertised verbatim instead of a schema derived from `input` (external MCP tools). */
   jsonSchema?: Record<string, unknown>;
+  outputSchema?: z.ZodObject;
   annotations?: ToolAnnotations;
   /** Whether the tool is advertised under this config. Handlers still re-check permissions. */
   exposed(config: Config): boolean;

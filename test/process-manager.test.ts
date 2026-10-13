@@ -126,21 +126,30 @@ describe('output buffers', () => {
     expect(buffer.text()).toBe('abcde\n... 6 bytes omitted ...\nlmnop');
   });
 
-  it('leaves text within the budget untouched', () => {
-    expect(truncateToTokens('short', 100)).toEqual({ text: 'short', originalTokenCount: null });
+  it.each([
+    ['€'.repeat(20), 2, '€…13 tokens truncated…€'],
+    ['😀'.repeat(20), 1, '…19 tokens truncated…'],
+    ['abc', 0, '…1 tokens truncated…']
+  ])('truncates on UTF-8 boundaries: %j', (text, tokens, expected) => {
+    expect(truncateToTokens(text, tokens).text).toBe(expected);
   });
 });
 
 describe('defaultShell', () => {
   const login = process.platform === 'win32' ? '' : os.userInfo().shell ?? '';
   // Only meaningful where the account's login shell is a POSIX shell other than /bin/sh.
-  it.runIf(/\/(zsh|bash)$/.test(login))('starts the account login shell even when $SHELL points elsewhere', () => {
+  it.runIf(/\/(zsh|bash)$/.test(login))('starts the account login shell even when $SHELL points elsewhere', async () => {
     const saved = process.env.SHELL;
     process.env.SHELL = '/bin/sh';
     try {
-      expect(defaultShell().path).toBe(login);
+      expect((await defaultShell()).path).toBe(login);
     } finally {
       process.env.SHELL = saved;
     }
   });
+});
+
+it.runIf(process.platform !== 'win32').each([true, false])('honors login=%s in a real shell', async (login) => {
+  const result = await manager.exec({ cmd: 'shopt -q login_shell', shell: 'bash', login, workdir: os.homedir() }, 'chat-a');
+  expect(result.exitCode).toBe(login ? 0 : 1);
 });

@@ -1,4 +1,3 @@
-import { realpathSync } from 'node:fs';
 import { lstat, realpath } from 'node:fs/promises';
 import os from 'node:os';
 import nodePath from 'node:path';
@@ -73,18 +72,10 @@ async function isSymbolicLink(p: string): Promise<boolean> {
 export class RootGuard implements PathGuard {
   constructor(private readonly getConfig: () => Config) {}
 
-  roots(): string[] {
-    const roots: string[] = [];
-    for (const root of this.getConfig().roots) {
-      try {
-        // The native realpath, like fs/promises realpath in canonicalize(): the JS one keeps
-        // Windows 8.3 short names (RUNNER~1), so the two sides would never compare equal.
-        roots.push(realpathSync.native(nodePath.resolve(expandHome(root.path))));
-      } catch {
-        // A folder that was moved or unmounted is no longer approved in practice.
-      }
-    }
-    return roots;
+  async roots(): Promise<string[]> {
+    const results = await Promise.allSettled(this.getConfig().roots.map((root) => realpath(nodePath.resolve(expandHome(root.path)))));
+    // A folder that was moved or unmounted is no longer approved in practice.
+    return results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
   }
 
   async resolve(input: string, options: { cwd: string | null; mustExist: boolean }): Promise<string> {
@@ -103,7 +94,7 @@ export class RootGuard implements PathGuard {
 
     const { real, exists } = await canonicalize(nodePath.resolve(absolute));
     // Containment is decided before existence so a caller cannot probe outside the roots.
-    const roots = this.roots();
+    const roots = await this.roots();
     if (!this.getConfig().yolo && !roots.some((root) => isInside(root, real))) throw new ToolError('PATH_NOT_ALLOWED', this.outsideMessage());
     if (options.mustExist && !exists) throw new ToolError('NOT_FOUND', `${input} does not exist`);
     return real;

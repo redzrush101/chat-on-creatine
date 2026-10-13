@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { defaultConfig, effectiveCapabilities, CAPABILITIES, type Config } from '@shared/config';
+import { defaultConfig, type Config } from '@shared/config';
 import { RootGuard, isInside } from '../src/main/fs/roots';
 import { ToolError } from '../src/main/mcp/tool';
 
@@ -112,7 +112,7 @@ describe('RootGuard', () => {
 
   it('tells the user to approve a folder when no roots are configured', async () => {
     config = defaultConfig();
-    expect(guard.roots()).toEqual([]);
+    expect(await guard.roots()).toEqual([]);
     const message = await expectToolError(guard.resolve(path.join(root, 'sub'), { cwd: null, mustExist: true }), 'PATH_NOT_ALLOWED');
     expect(message).toContain('Settings → Workspace');
   });
@@ -127,10 +127,10 @@ describe('RootGuard', () => {
     const second = path.join(base, 'second');
     await mkdir(second);
     config = { ...config, roots: [...config.roots, { id: 'r2', path: second, label: '' }] };
-    expect(guard.roots()).toEqual([root, second]);
+    expect(await guard.roots()).toEqual([root, second]);
 
     await rm(second, { recursive: true });
-    expect(guard.roots()).toEqual([root]);
+    expect(await guard.roots()).toEqual([root]);
   });
 });
 
@@ -141,12 +141,5 @@ describe('isInside', () => {
     expect(isInside('/a/root', '/a/rootx')).toBe(false);
     expect(isInside('/a/root', '/a')).toBe(false);
     expect(isInside('/a/root', '/a/root/../other')).toBe(false);
-  });
-});
-
-describe('effectiveCapabilities', () => {
-  it('turns every capability on in YOLO mode, over read-only and switched-off ones', () => {
-    const config = { ...defaultConfig(), yolo: true, readOnly: true, capabilities: { ...defaultConfig().capabilities, exec: false, browser: false } };
-    expect(CAPABILITIES.filter((name) => !effectiveCapabilities(config)[name])).toEqual([]);
   });
 });

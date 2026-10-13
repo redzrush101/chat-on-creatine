@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { type IPty, spawn } from 'node-pty';
 import { childEnv } from '../exec/env';
@@ -24,8 +24,8 @@ export class TerminalManager {
 
   constructor(private readonly callbacks: TerminalCallbacks) {}
 
-  open({ cwd, cols, rows }: { cwd: string | null; cols: number; rows: number }): string {
-    const shell = defaultShell();
+  async open({ cwd, cols, rows }: { cwd: string | null; cols: number; rows: number }): Promise<string> {
+    const shell = await defaultShell();
     const id = randomUUID();
     const env = childEnv({ TERM: 'xterm-256color', COLORTERM: 'truecolor' });
     // A prompt exported by the launching shell (e.g. `nix develop`) is in another shell's syntax; the login shell sets its own.
@@ -35,7 +35,7 @@ export class TerminalManager {
       name: 'xterm-256color',
       cols,
       rows,
-      cwd: cwd && isDirectory(cwd) ? cwd : homedir(),
+      cwd: cwd && (await stat(cwd).catch(() => null))?.isDirectory() ? cwd : homedir(),
       env
     });
 
@@ -91,13 +91,5 @@ export class TerminalManager {
     const data = entry.pending.join('');
     entry.pending = [];
     this.callbacks.onData(id, data);
-  }
-}
-
-function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
   }
 }

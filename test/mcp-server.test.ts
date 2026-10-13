@@ -17,7 +17,7 @@ const echo = defineTool({
   description: 'Echoes text.',
   input: { text: z.string() },
   exposed: () => true,
-  run: async (args, ctx) => textResult(`echo:${args.text}:${ctx.caller?.sessionId ?? 'none'}`)
+  run: async (args, ctx) => textResult(`echo:${args.text}:${ctx.caller?.sessionId ?? 'none'}`, { structuredContent: 0 })
 });
 
 const fail = defineTool({
@@ -101,9 +101,9 @@ describe('McpHttpServer', () => {
   it('lists only the exposed tools of the surface whose token is used', async () => {
     const core = await connect('core');
     const names = (await core.listTools()).tools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['echo', 'exec', 'fail', 'plan']);
+    expect(names).toEqual(['echo', 'exec', 'fail', 'plan', 'wait']);
     const desktop = await connect('desktop');
-    expect((await desktop.listTools()).tools.map((tool) => tool.name)).toEqual(['browse', 'exec']);
+    expect((await desktop.listTools()).tools.map((tool) => tool.name).sort()).toEqual(['browse', 'exec', 'wait']);
     await core.close();
     await desktop.close();
   });
@@ -116,6 +116,7 @@ describe('McpHttpServer', () => {
     expect(texts[0]).toBe('echo:hi:s1');
     expect(texts[1]).toContain('stop after the next step');
     expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ result: 0 });
     expect(calls.at(-1)?.caller?.sessionId).toBe('s1');
     await client.close();
   });
@@ -144,5 +145,20 @@ describe('McpHttpServer', () => {
     expect(wrong.status).toBe(404);
     const health = await fetch(`http://127.0.0.1:${port}/healthz`);
     expect(health.status).toBe(200);
+  });
+
+  it('rejects a foreign browser Origin before dispatch while allowing loopback clients', async () => {
+    const url = server.localUrl('core')!;
+    const request = { method: 'POST', headers: { 'content-type': 'application/json', Origin: 'https://example.com' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'echo', arguments: { text: 'never' } } }) };
+    const before = calls.length;
+    expect((await fetch(url, request)).status).toBe(403);
+    expect(calls.length).toBe(before);
+    expect((await fetch(new URL('/healthz', url), { headers: { Origin: 'http://localhost:3000' } })).status).toBe(200);
+  });
+
+  it.each([[400, '{'], [413, 'x'.repeat(8 * 1024 * 1024 + 1)]])('refuses malformed or oversized HTTP bodies with status %s', async (status, body) => {
+    const response = await fetch(server.localUrl('core')!, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body });
+    expect(response.status).toBe(status);
   });
 });

@@ -143,13 +143,13 @@ export class ProcessManager implements ProcessRunner {
     const cwd = request.workdir ?? os.homedir();
     await assertDirectory(cwd);
 
-    const shell = resolveShell(request.shell, cwd);
+    const shell = await resolveShell(request.shell, cwd);
     if (!shell) throw new ToolError('INVALID_ARGUMENT', `The shell ${request.shell} was not found.`);
     const script = request.cmd !== undefined ? request.cmd : batchOrThrow(commands, shell);
     const display = commands.join('\n');
 
     this.makeRoom();
-    const session = await this.spawnSession(owner, display, shellArgv(shell, script), cwd, request.tty ?? false);
+    const session = await this.spawnSession(owner, display, shellArgv(shell, script, request.login), cwd, request.tty ?? false);
     this.sessions.set(session.id, session);
 
     const deadline = started + clamp(request.yieldTimeMs ?? DEFAULT_EXEC_YIELD_MS, MIN_YIELD_MS, MAX_YIELD_MS);

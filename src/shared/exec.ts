@@ -4,6 +4,7 @@ export interface ExecRequest {
   cmds?: string[];
   workdir: string | null;
   shell?: string;
+  login?: boolean;
   tty?: boolean;
   yieldTimeMs?: number;
   maxOutputTokens?: number;

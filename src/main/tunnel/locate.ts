@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { findOnPath, isRunnableFile } from '../exec/shell';
 
@@ -22,20 +22,20 @@ function executableName(name: BinaryName): string {
  * copy, then PATH. An explicit setting that does not resolve yields null rather than a silent
  * fallback, so a wrong path is visible instead of being replaced by some other binary.
  */
-export function locateBinary(name: BinaryName, options: LocateOptions): string | null {
+export async function locateBinary(name: BinaryName, options: LocateOptions): Promise<string | null> {
   const file = executableName(name);
   const explicit = options.explicit.trim();
   if (explicit) {
-    if (existsSync(explicit) && statSync(explicit).isDirectory()) {
+    if ((await stat(explicit).catch(() => null))?.isDirectory()) {
       const inside = path.join(explicit, file);
-      return isRunnableFile(inside) ? inside : null;
+      return await isRunnableFile(inside) ? inside : null;
     }
-    return isRunnableFile(explicit) ? explicit : null;
+    return await isRunnableFile(explicit) ? explicit : null;
   }
   for (const dir of [options.binDir, options.resourcesBinDir]) {
     if (!dir) continue;
     const candidate = path.join(dir, file);
-    if (isRunnableFile(candidate)) return candidate;
+    if (await isRunnableFile(candidate)) return candidate;
   }
   return findOnPath(file);
 }

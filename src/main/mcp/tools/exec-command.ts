@@ -10,11 +10,11 @@ const WINDOWS_SHELL_NOTE =
   '\n\nWindows: PowerShell 5.1 has no && or ||; use the cmds array for a sequence, or A; if ($?) { B }. Do not compose destructive filesystem commands across shells; prefer PowerShell cmdlets such as Remove-Item and Move-Item with -LiteralPath, and verify resolved target paths first.';
 
 const EXEC_COMMAND_DESCRIPTION =
-  'Runs a command and returns its output, or a session ID while it keeps running. Use write_stdin to poll a running session, send it input, or read its remaining output.' +
+  'Runs a command in a PTY, returning output or a session ID for ongoing interaction.' +
   (process.platform === 'win32' ? WINDOWS_SHELL_NOTE : '');
 
 const EXEC_COMMAND_INPUT = {
-  cmd: z.string().optional().describe('Shell command to execute. To read a file, use the read tool instead.'),
+  cmd: z.string().optional().describe('Shell command to execute.'),
   cmds: z
     .array(z.string())
     .min(1)
@@ -27,11 +27,12 @@ const EXEC_COMMAND_INPUT = {
   shell: z
     .string()
     .optional()
-    .describe("Shell to run the command in, by name (bash, zsh, sh, pwsh, powershell, cmd) or path. Defaults to the user's shell."),
+    .describe("Shell binary to launch. Defaults to the user's default shell."),
+  login: z.boolean().optional().describe('True runs the shell with -l/-i semantics; false disables them. Defaults to true.'),
   tty: z
     .boolean()
     .optional()
-    .describe('True allocates a terminal for the command; false or omitted uses plain pipes.'),
+    .describe('True allocates a PTY for the command; false or omitted uses plain pipes.'),
   yield_time_ms: z
     .number()
     .int()
@@ -43,10 +44,19 @@ const EXEC_COMMAND_INPUT = {
     .int()
     .min(0)
     .optional()
-    .describe('Maximum output tokens returned, middle-truncated beyond that. Defaults to 10000.')
+    .describe('Output token budget. Defaults to 10000 tokens; larger requests may be capped by policy.')
 };
 
 const DISPLAY_OUTPUT_CHARS = 20_000;
+
+export const execOutputSchema = z.object({
+  chunk_id: z.string().optional(),
+  wall_time_seconds: z.number(),
+  exit_code: z.number().optional(),
+  session_id: z.number().optional(),
+  original_token_count: z.number().optional(),
+  output: z.string()
+});
 
 /** Formats a process result in the Codex exec layout the model is used to reading. */
 export function execToolResult(result: ExecResult): ToolResult {
@@ -96,6 +106,7 @@ export const execCommandTool = defineTool({
   title: 'Run command',
   description: EXEC_COMMAND_DESCRIPTION,
   input: EXEC_COMMAND_INPUT,
+  outputSchema: execOutputSchema,
   annotations: { destructiveHint: true },
   exposed: (config) => effectiveCapabilities(config).exec,
   async run(args, ctx) {
@@ -104,7 +115,7 @@ export const execCommandTool = defineTool({
     }
     const commands = args.cmd !== undefined ? [args.cmd] : args.cmds!;
 
-    const chatFolder = ctx.caller?.cwd ?? ctx.services.paths.roots()[0] ?? os.homedir();
+    const chatFolder = ctx.caller?.cwd ?? (await ctx.services.paths.roots())[0] ?? os.homedir();
     const workdir =
       args.workdir === undefined
         ? chatFolder
@@ -123,7 +134,14 @@ export const execCommandTool = defineTool({
     // A single apply_patch invocation is run by the patch engine instead of spawning a shell.
     if (args.cmd !== undefined) {
       const patch = parseApplyPatchInvocationWithCwd(args.cmd);
-      if (patch) return runApplyPatch(patch.patch, ctx, patch.cd);
+      if (patch) {
+        const started = Date.now();
+        const result = await runApplyPatch(patch.patch, ctx, patch.cd);
+        return { ...result, structuredContent: {
+          wall_time_seconds: (Date.now() - started) / 1000, exit_code: 0,
+          output: result.content.filter((block) => block.type === 'text').map((block) => block.text).join('\n')
+        } };
+      }
     }
 
     const result = await ctx.services.processes.exec(
@@ -132,6 +150,7 @@ export const execCommandTool = defineTool({
         cmds: args.cmds,
         workdir,
         shell: args.shell,
+        login: args.login,
         tty: args.tty,
         yieldTimeMs: args.yield_time_ms,
         maxOutputTokens: args.max_output_tokens

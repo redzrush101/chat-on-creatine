@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -46,6 +46,11 @@ it('passes a running command ID directly from exec_command to write_stdin over M
       ? await client.callTool({ name: 'write_stdin', arguments: { session_id: sessionId, yield_time_ms: 2000 } })
       : finished;
     expect(exit.structuredContent).toMatchObject({ exit_code: 0 });
+    const patch = `*** Begin Patch\n*** Add File: ${join(root, 'from-shell.txt')}\n+PATCH_OK\n*** End Patch`;
+    const patched = await client.callTool({ name: 'exec_command', arguments: { cmd: `apply_patch <<'EOF'\n${patch}\nEOF` } });
+    expect(patched.isError, JSON.stringify(patched.content)).toBe(false);
+    expect(patched.structuredContent).toMatchObject({ exit_code: 0, output: expect.stringContaining('Success. Updated') });
+    expect(await readFile(join(root, 'from-shell.txt'), 'utf8')).toBe('PATCH_OK\n');
   } finally {
     await client.close();
     await server.stop();

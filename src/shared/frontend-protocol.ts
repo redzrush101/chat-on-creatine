@@ -6,8 +6,6 @@ export const frontendAddressSchema = z.object({
   token: z.string().length(64),
   pid: z.number().int().positive()
 });
-export type FrontendAddress = z.infer<typeof frontendAddressSchema>;
-
 export const frontendRequestSchema = z.object({
   id: z.number().int().nonnegative(),
   channel: z.enum(RENDERER_CHANNELS),

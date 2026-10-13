@@ -106,7 +106,9 @@ export class Live {
       const connected = await this.api.waitFor((value) => ['connected', 'auth-failed', 'error'].includes(value.connection.state), 60_000);
       if (connected.connection.state !== 'connected') throw new Error(`Local tools are offline: ${connected.connection.detail}`);
     }
-    this.log('ready', { model: state.models.defaultModel, connection: this.state.connection.state });
+    const loaded = await this.api.waitFor((value) => value.models.state === 'ready' || value.models.state === 'error', 60_000);
+    if (loaded.models.state !== 'ready') throw new Error(`ChatGPT models are unavailable: ${loaded.models.error}`);
+    this.log('ready', { model: loaded.models.defaultModel, connection: this.state.connection.state });
   }
 
   /** Sends like the composer does and returns the chat's ID. */
@@ -151,7 +153,9 @@ export class Live {
 
   /** Writes the chat's timeline (`kind | surface | name | status | text | outcome`) and returns its rows. */
   async timeline(sessionId: string, name: string): Promise<string[]> {
-    const rows = (await this.events(sessionId)).map((event) => [event.kind, 'surface' in event ? event.surface : '',
+    const events = await this.events(sessionId);
+    writeFileSync(join(this.dir, `${name}.tools.json`), JSON.stringify(tools(events), null, 2));
+    const rows = events.map((event) => [event.kind, 'surface' in event ? event.surface : '',
       'name' in event ? event.name : 'channel' in event ? event.channel : 'phase' in event ? event.phase : 'action' in event ? event.action : '',
       'status' in event ? event.status : '', ('text' in event ? event.text : '').replace(/\s+/g, ' ').slice(0, 160), 'outcome' in event ? event.outcome ?? '' : ''].join(' | '));
     writeFileSync(join(this.dir, `${name}.timeline.txt`), `${rows.join('\n')}\n`);

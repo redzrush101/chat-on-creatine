@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { ChevronDown, ChevronRight, LoaderCircle } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { cx, eventTime, formatDuration } from '../../lib/format';
@@ -14,7 +14,7 @@ type ReasoningEvent = Extract<SessionEvent, { kind: 'reasoning' }>;
  * A run of tool calls as one line, "Ran 5 commands, edited report.md +1 -1", that opens into a list
  * of steps. A single edit opens straight into its diff. Thinking-only runs read "Thought for 12s".
  */
-export function WorkGroup({ block }: { block: Extract<TimelineBlock, { type: 'work' }> }) {
+export const WorkGroup = memo(function WorkGroup({ block }: { block: Extract<TimelineBlock, { type: 'work' }> }) {
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? block.running;
   const now = useNow(block.running);
@@ -61,7 +61,9 @@ export function WorkGroup({ block }: { block: Extract<TimelineBlock, { type: 'wo
         ))}
     </section>
   );
-}
+}, (previous, next) => previous.block.running === next.block.running &&
+  previous.block.events.length === next.block.events.length &&
+  previous.block.events.every((event, index) => event === next.block.events[index]));
 
 function ThoughtRow({ event }: { event: ReasoningEvent }) {
   const [open, setOpen] = useState(false);

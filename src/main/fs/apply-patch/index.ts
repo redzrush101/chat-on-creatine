@@ -46,11 +46,6 @@ export async function runApplyPatch(patch: string, ctx: ToolContext, cwdOverride
   return textResult(lines.join('\n'), { display });
 }
 
-/** The patch text of a shell command that is an explicit apply_patch invocation, or null. */
-export function parseApplyPatchInvocation(command: string): string | null {
-  return parseApplyPatchInvocationWithCwd(command)?.patch ?? null;
-}
-
 const INVOCATION_HEAD = /^(apply_patch|applypatch)[ \t]+/;
 const HEREDOC_HEAD = /^<<(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1$/;
 

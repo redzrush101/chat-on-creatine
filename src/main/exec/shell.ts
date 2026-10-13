@@ -1,4 +1,5 @@
-import { accessSync, constants, statSync } from 'node:fs';
+import { constants } from 'node:fs';
+import { access, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -28,10 +29,10 @@ function shellTypeOf(binary: string): ShellType | null {
   return SHELL_BY_NAME.get(stem) ?? null;
 }
 
-export function isRunnableFile(file: string): boolean {
+export async function isRunnableFile(file: string): Promise<boolean> {
   try {
-    if (!statSync(file).isFile()) return false;
-    if (process.platform !== 'win32') accessSync(file, constants.X_OK);
+    if (!(await stat(file)).isFile()) return false;
+    if (process.platform !== 'win32') await access(file, constants.X_OK);
     return true;
   } catch {
     return false;
@@ -39,14 +40,14 @@ export function isRunnableFile(file: string): boolean {
 }
 
 /** The first runnable `name` on PATH, trying each PATHEXT extension on Windows. */
-export function findOnPath(name: string): string | null {
+export async function findOnPath(name: string): Promise<string | null> {
   const extensions =
     process.platform === 'win32' ? ['', ...(process.env['PATHEXT'] ?? '.COM;.EXE;.BAT;.CMD').split(';')] : [''];
   for (const dir of (process.env['PATH'] ?? '').split(path.delimiter)) {
     if (!dir) continue;
     for (const extension of extensions) {
       const candidate = path.join(dir, `${name}${extension}`);
-      if (isRunnableFile(candidate)) return candidate;
+      if (await isRunnableFile(candidate)) return candidate;
     }
   }
   return null;
@@ -67,9 +68,9 @@ function loginShell(): string | null {
  * account's login shell, as a terminal app would start, then $SHELL. $SHELL alone is not enough:
  * a dev environment such as `nix develop` points it at a bash built without readline.
  */
-export function defaultShell(): ShellSpec {
+export async function defaultShell(): Promise<ShellSpec> {
   if (process.platform === 'win32') {
-    const found = findOnPath('pwsh') ?? findOnPath('powershell');
+    const found = await findOnPath('pwsh') ?? await findOnPath('powershell');
     return found ? { type: shellTypeOf(found) ?? 'powershell', path: found } : { type: 'cmd', path: process.env['ComSpec'] ?? 'cmd.exe' };
   }
   const candidates = [
@@ -80,7 +81,7 @@ export function defaultShell(): ShellSpec {
   for (const candidate of candidates) {
     if (!candidate) continue;
     const type = shellTypeOf(candidate);
-    if (type && POSIX_SHELLS.has(type) && isRunnableFile(candidate)) return { type, path: candidate };
+    if (type && POSIX_SHELLS.has(type) && await isRunnableFile(candidate)) return { type, path: candidate };
   }
   return { type: 'sh', path: '/bin/sh' };
 }
@@ -90,26 +91,26 @@ export function defaultShell(): ShellSpec {
  * executable itself (relative paths resolve against the command's working directory).
  * Returns null when it cannot be found, rather than silently substituting another shell.
  */
-export function resolveShell(requested: string | undefined, cwd: string): ShellSpec | null {
+export async function resolveShell(requested: string | undefined, cwd: string): Promise<ShellSpec | null> {
   if (requested === undefined) return defaultShell();
   const type = shellTypeOf(requested);
   if (!type) return null;
   const pathLike = path.isAbsolute(requested) || /[\\/]/.test(requested);
   if (pathLike) {
     const file = path.resolve(cwd, requested);
-    return isRunnableFile(file) ? { type, path: file } : null;
+    return await isRunnableFile(file) ? { type, path: file } : null;
   }
-  const found = findOnPath(requested);
+  const found = await findOnPath(requested);
   return found ? { type, path: found } : null;
 }
 
 /** argv for running one command string in the shell. */
-export function shellArgv(shell: ShellSpec, script: string): string[] {
+export function shellArgv(shell: ShellSpec, script: string, login = true): string[] {
   switch (shell.type) {
     case 'zsh':
     case 'bash':
     case 'sh':
-      return [shell.path, '-lc', script];
+      return [shell.path, login ? '-lc' : '-c', script];
     case 'powershell':
       return [shell.path, '-NoProfile', '-Command', POWERSHELL_UTF8_PREFIX + script];
     case 'cmd':

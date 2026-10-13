@@ -105,6 +105,7 @@ export function describeTool(event: ToolEvent): ToolLabel {
     const nested = [...new Set([...code.matchAll(/tools\.(\w+)/g)].map((match) => match[1] ?? ''))].filter(Boolean);
     return label('script', 'Ran a script', 'Running a script', nested.length ? `using ${listOf(nested)}` : null);
   }
+  if (name === 'wait') return label('script', args.terminate ? 'Stopped a script' : 'Checked a script', 'Waiting for a script', null);
   if (name === 'read') {
     const names = strings(args.paths).concat(strings(args.path)).map(basename);
     return label('read', 'Read', 'Reading', names.length ? listOf(names) : null, false, [], names);

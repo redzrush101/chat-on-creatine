@@ -3,13 +3,14 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { McpServer, createMcpHandler, fromJsonSchema, type CallToolResult, type JsonSchemaType } from '@modelcontextprotocol/server';
-import { toNodeHandler } from '@modelcontextprotocol/node';
+import { localhostOriginValidation, toNodeHandler } from '@modelcontextprotocol/node';
 import { z } from 'zod';
 import type { Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { createLogger } from '../core/log';
 import { serverInstructions } from './instructions';
-import { canAddCodeMode, codeModeTool } from './code-mode/tool';
+import { canAddCodeMode, codeModeTool, codeModeWaitTool } from './code-mode/tool';
+import { CodeModeSession } from './code-mode/session';
 import { SURFACE_IDS, SURFACES } from './surfaces';
 import { ToolError, type Caller, type ToolContent, type ToolContext, type ToolResult, type ToolServices, type ToolSpec } from './tool';
 
@@ -28,6 +29,7 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 /** Tool text returned to the model in one result; a larger output is cut and marked. */
 const MAX_TEXT_CHARS = 200_000;
 const PRM_PREFIX = '/.well-known/oauth-protected-resource';
+const validateOrigin = localhostOriginValidation();
 
 /** One executed tool call, as reported to hooks. */
 export interface CallRecord {
@@ -88,34 +90,6 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
   res.end(text);
 }
 
-type BodyResult = { ok: true; body: unknown } | { ok: false; reason: 'too_large' | 'invalid' };
-
-function readJsonBody(req: http.IncomingMessage): Promise<BodyResult> {
-  return new Promise((resolve) => {
-    const chunks: Buffer[] = [];
-    let total = 0;
-    let settled = false;
-    const finish = (result: BodyResult) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-    req.on('data', (chunk: Buffer) => {
-      total += chunk.length;
-      if (total > MAX_BODY_BYTES) finish({ ok: false, reason: 'too_large' });
-      else chunks.push(chunk);
-    });
-    req.on('end', () => {
-      try {
-        finish({ ok: true, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
-      } catch {
-        finish({ ok: false, reason: 'invalid' });
-      }
-    });
-    req.on('error', () => finish({ ok: false, reason: 'invalid' }));
-  });
-}
-
 /** Bounds text across all blocks of one result; images pass through untouched. */
 function boundContent(content: ToolContent[]): ToolContent[] {
   let budget = MAX_TEXT_CHARS;
@@ -135,6 +109,8 @@ function boundContent(content: ToolContent[]): ToolContent[] {
 export class McpHttpServer {
   private server: http.Server | null = null;
   private port = 0;
+  private readonly codeMode = new CodeModeSession();
+  private readonly waitTools = Object.fromEntries(SURFACE_IDS.map((surface) => [surface, codeModeWaitTool(surface, this.codeMode)])) as Record<SurfaceId, ToolSpec>;
   /**
    * One SDK handler per surface. It serves both protocol eras: 2026-07-28 (what ChatGPT speaks)
    * and the stateless 2025 fallback. Each request gets a fresh McpServer from live config.
@@ -181,6 +157,7 @@ export class McpHttpServer {
   }
 
   async stop(): Promise<void> {
+    await this.codeMode.dispose();
     const server = this.server;
     if (!server) return;
     this.server = null;
@@ -197,13 +174,15 @@ export class McpHttpServer {
   }
 
   toolCount(surface: SurfaceId): number {
-    return this.toolsFor(surface, this.options.getConfig()).length;
+    const tools = this.toolsFor(surface, this.options.getConfig());
+    return tools.length + (tools.includes(this.waitTools[surface]) ? 1 : 0);
   }
 
   private toolsFor(surface: SurfaceId, config: Config): ToolSpec[] {
     const { tools } = this.options;
     const all = typeof tools === 'function' ? tools() : tools;
-    return all.filter((tool) => tool.surface === surface && tool.exposed(config));
+    const exposed = all.filter((tool) => tool.surface === surface && tool.exposed(config));
+    return canAddCodeMode(exposed) ? [...exposed, this.waitTools[surface]] : exposed;
   }
 
   private surfaceForPath(path: string, prefix = ''): SurfaceId | null {
@@ -219,6 +198,7 @@ export class McpHttpServer {
   }
 
   private async handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    if (!validateOrigin(req, res)) return;
     const path = (req.url ?? '').split('?')[0]!;
     if (path === '/healthz') {
       sendJson(res, 200, { ok: true });
@@ -248,34 +228,21 @@ export class McpHttpServer {
     }
     this.options.hooks?.onRequest?.(surface);
 
-    let body: unknown;
-    if (method === 'POST') {
-      const parsed = await readJsonBody(req);
-      if (!parsed.ok) {
-        res.setHeader('connection', 'close');
-        if (parsed.reason === 'too_large') sendJson(res, 413, { error: 'payload_too_large' });
-        else sendJson(res, 400, { jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null });
-        return;
-      }
-      body = parsed.body;
-    }
-
     res.on('finish', () => {
       // Stateless serving answers the 2025-era GET stream probe with 405; that is expected.
       if (res.statusCode < 400 || (method === 'GET' && res.statusCode === 405)) return;
-      const rpc = body && typeof body === 'object' && 'method' in body ? String((body as { method: unknown }).method) : '-';
       log.warn(
-        `${surface} ${method} ${rpc} → HTTP ${res.statusCode} (protocol ${req.headers['mcp-protocol-version'] ?? '-'}, accept ${req.headers.accept ?? '-'}, content-type ${req.headers['content-type'] ?? '-'})`
+        `${surface} ${method} → HTTP ${res.statusCode} (protocol ${req.headers['mcp-protocol-version'] ?? '-'}, accept ${req.headers.accept ?? '-'}, content-type ${req.headers['content-type'] ?? '-'})`
       );
     });
-    await this.handlers[surface](req, res, body);
+    await this.handlers[surface](req, res);
   }
 
   private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer {
     const config = this.options.getConfig();
     const exposed = this.toolsFor(surface, config);
-    const codeMode = canAddCodeMode(exposed);
-    const tools = codeMode ? [...exposed, codeModeTool(surface, exposed)] : exposed;
+    const codeMode = exposed.includes(this.waitTools[surface]);
+    const tools = codeMode ? [...exposed, codeModeTool(surface, exposed, this.codeMode)] : exposed;
     const server = new McpServer(
       { name: SURFACES[surface].serverName, version: SERVER_VERSION },
       { instructions: serverInstructions(surface, config, codeMode) }
@@ -284,7 +251,7 @@ export class McpHttpServer {
       // Plugin tools advertise their upstream JSON Schema verbatim; our own tools declare zod.
       server.registerTool(
         tool.name,
-        { title: tool.title, description: tool.description, inputSchema: toolInputSchema(tool), annotations: tool.annotations },
+        { title: tool.title, description: tool.description, inputSchema: toolInputSchema(tool), outputSchema: tool.outputSchema, annotations: tool.annotations },
         (args: unknown) => this.dispatch(tool, args, requestId, signal)
       );
     }
@@ -333,7 +300,8 @@ export class McpHttpServer {
         });
         throw new ToolError('INVALID_ARGUMENT', errors.join('\n'));
       }
-      return await this.run(tool, parsed.value, attribution);
+      const result = await this.run(tool, parsed.value, attribution);
+      return { content: result.content, structuredContent: result.structuredContent, isError: result.isError };
     } catch (error) {
       return error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
     }
@@ -363,9 +331,10 @@ export class McpHttpServer {
       nested: {
         list: () => this.toolsFor(tool.surface, options.getConfig()).map(({ name, description }) => ({ name, description })),
         // Nested calls are their own timeline events, never ChatGPT's streamed message for the outer call.
-        call: (name, nestedArgs) =>
+        call: (name, nestedArgs, signal) =>
           this.runNested(tool.surface, name, nestedArgs, {
             ...attribution,
+            signal,
             caller: attribution.caller ? { ...attribution.caller, streamCallId: undefined } : null,
             nested: true
           })
@@ -386,14 +355,20 @@ export class McpHttpServer {
   private toCallResult(result: ToolResult): CallToolResult {
     return {
       content: result.content,
-      ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
+      ...(result.structuredContent === undefined ? {} : { structuredContent: result.structuredContent }),
       isError: result.isError ?? false
     };
   }
 }
 
-function toolInputSchema(tool: ToolSpec) {
-  return tool.jsonSchema ? fromJsonSchema(tool.jsonSchema as JsonSchemaType) : z.object(tool.input);
+const schemas = new WeakMap<ToolSpec, ReturnType<typeof toolInputSchema>>();
+function toolInputSchema(tool: ToolSpec): ReturnType<typeof fromJsonSchema> | z.ZodObject {
+  let schema = schemas.get(tool);
+  if (!schema) {
+    schema = tool.jsonSchema ? fromJsonSchema(tool.jsonSchema as JsonSchemaType) : z.object(tool.input);
+    schemas.set(tool, schema);
+  }
+  return schema;
 }
 
 /** Unattributed calls are refused for every tool unless the user allowed them. */

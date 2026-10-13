@@ -69,37 +69,6 @@ export class HeadTailBuffer {
   }
 }
 
-function approxTokenCount(text: string): number {
-  return Math.ceil(Buffer.byteLength(text, 'utf8') / BYTES_PER_TOKEN);
-}
-
-/** Longest prefix of `text` whose UTF-8 size fits in `budget` bytes, cut on a code point boundary. */
-function prefixWithin(text: string, budget: number): string {
-  let bytes = 0;
-  let end = 0;
-  for (const ch of text) {
-    const size = Buffer.byteLength(ch, 'utf8');
-    if (bytes + size > budget) break;
-    bytes += size;
-    end += ch.length;
-  }
-  return text.slice(0, end);
-}
-
-function suffixWithin(text: string, budget: number): string {
-  let bytes = 0;
-  let start = text.length;
-  const chars = [...text];
-  for (let index = chars.length - 1; index >= 0; index--) {
-    const ch = chars[index]!;
-    const size = Buffer.byteLength(ch, 'utf8');
-    if (bytes + size > budget) break;
-    bytes += size;
-    start -= ch.length;
-  }
-  return text.slice(start);
-}
-
 /** Keeps the start and end of `text` within about `maxTokens`, marking the removed middle in tokens. */
 export function truncateToTokens(
   text: string,
@@ -108,12 +77,15 @@ export function truncateToTokens(
   const maxBytes = maxTokens * BYTES_PER_TOKEN;
   const totalBytes = Buffer.byteLength(text, 'utf8');
   if (totalBytes <= maxBytes) return { text, originalTokenCount: null };
-  const leftBudget = Math.floor(maxBytes / 2);
-  const rightBudget = maxBytes - leftBudget;
+  const bytes = Buffer.from(text, 'utf8');
+  let end = Math.floor(maxBytes / 2);
+  let start = totalBytes - (maxBytes - end);
+  while (end > 0 && (bytes[end]! & 0xc0) === 0x80) end--;
+  while (start < totalBytes && (bytes[start]! & 0xc0) === 0x80) start++;
   const removedTokens = Math.ceil((totalBytes - maxBytes) / BYTES_PER_TOKEN);
   const marker = `…${removedTokens} tokens truncated…`;
   return {
-    text: `${prefixWithin(text, leftBudget)}${marker}${suffixWithin(text, rightBudget)}`,
-    originalTokenCount: approxTokenCount(text)
+    text: `${bytes.subarray(0, end).toString('utf8')}${marker}${bytes.subarray(start).toString('utf8')}`,
+    originalTokenCount: Math.ceil(totalBytes / BYTES_PER_TOKEN)
   };
 }

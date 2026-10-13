@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ArrowDown } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { openExternal } from '../../lib/actions';
@@ -20,7 +20,7 @@ interface TimelineProps {
   actions: EventActions;
 }
 
-export function Timeline({ sessionId, events, busy, followNonce, found, actions }: TimelineProps) {
+export const Timeline = memo(function Timeline({ sessionId, events, busy, followNonce, found, actions }: TimelineProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
@@ -121,4 +121,4 @@ export function Timeline({ sessionId, events, busy, followNonce, found, actions 
       )}
     </div>
   );
-}
+});

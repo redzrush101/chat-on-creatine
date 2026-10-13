@@ -252,6 +252,7 @@ function applyPatch(root: unknown, base: string, ops: unknown): unknown {
  */
 export class ConversationStreamParser {
   private buffer = '';
+  private scanned = 0;
   private dataLines: string[] = [];
   private envelope: unknown = null;
   private lastPath = '';
@@ -264,8 +265,9 @@ export class ConversationStreamParser {
   push(chunk: string): void {
     this.buffer += chunk;
     let start = 0;
+    let scan = this.scanned;
     for (;;) {
-      const at = this.findLineEnd(start);
+      const at = this.findLineEnd(scan);
       if (at < 0) break;
       const ch = this.buffer[at];
       // A lone CR at the very end may be the first half of CRLF; wait for the next chunk.
@@ -273,7 +275,9 @@ export class ConversationStreamParser {
       const skip = ch === '\r' && this.buffer[at + 1] === '\n' ? 2 : 1;
       this.line(this.buffer.slice(start, at));
       start = at + skip;
+      scan = start;
     }
+    this.scanned = this.buffer.endsWith('\r') ? this.buffer.length - start - 1 : this.buffer.length - start;
     this.buffer = this.buffer.slice(start);
   }
 
@@ -281,6 +285,7 @@ export class ConversationStreamParser {
   end(): void {
     if (this.buffer !== '') this.line(this.buffer);
     this.buffer = '';
+    this.scanned = 0;
     this.dispatch();
   }
 

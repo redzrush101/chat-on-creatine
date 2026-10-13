@@ -44,7 +44,7 @@ async function stageAttachments(dir: string, paths: string[]): Promise<Attachmen
 export type ApiHandlers = { [C in RendererChannel]: Handler<C> };
 
 /** Both frontends call these handlers; transport never owns application behavior. */
-export function createApi(getServices: () => Services | null, snapshot: () => ReturnType<RendererApi['app:state']>, lifecycle: { show(): void; quit(): void }): ApiHandlers {
+export function createApi(getServices: () => Services | null, snapshot: () => ReturnType<RendererApi['app:state']> | Promise<ReturnType<RendererApi['app:state']>>, lifecycle: { show(): void; quit(): void }): ApiHandlers {
   const s = (): Services => {
     const services = getServices();
     if (!services) throw new Error('The app is still starting');

@@ -53,7 +53,10 @@ describe('SessionStore', () => {
 
     const reopened = openStore();
     expect(reopened.events(meta.id)).toHaveLength(2);
-    expect(readFileSync(file, 'utf8').trim().split('\n')).toHaveLength(2);
+    reopened.append(meta.id, [note('c', 'after compaction')]);
+    await reopened.flush();
+    expect(openStore().events(meta.id).map((event) => event.id)).toEqual(['a', 'b', 'c']);
+    expect(readFileSync(file, 'utf8').trim().split('\n')).toHaveLength(3);
   });
 
   it('restores assistant and reasoning text without a stale live streaming state', async () => {
