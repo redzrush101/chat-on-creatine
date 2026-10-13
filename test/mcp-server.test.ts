@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import http from 'node:http';
 import { z } from 'zod';
 import { defaultConfig, type Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
@@ -157,8 +158,24 @@ describe('McpHttpServer', () => {
     expect((await fetch(new URL('/healthz', url), { headers: { Origin: 'http://localhost:3000' } })).status).toBe(200);
   });
 
-  it.each([[400, '{'], [413, 'x'.repeat(8 * 1024 * 1024 + 1)]])('refuses malformed or oversized HTTP bodies with status %s', async (status, body) => {
-    const response = await fetch(server.localUrl('core')!, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body });
-    expect(response.status).toBe(status);
+  it('refuses malformed HTTP bodies with status 400', async () => {
+    const response = await fetch(server.localUrl('core')!, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: '{' });
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects an oversized declared body before reading it', async () => {
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      const request = http.request(server.localUrl('core')!, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'content-length': 8 * 1024 * 1024 + 1 }
+      }, (response) => {
+        response.resume();
+        response.on('end', () => resolve(response.statusCode));
+      });
+      request.on('error', reject);
+      // An early 413 closes the connection; uploading the body can race it with a TCP reset.
+      request.end();
+    });
+    expect(status).toBe(413);
   });
 });

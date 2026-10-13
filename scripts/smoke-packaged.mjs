@@ -94,7 +94,7 @@ try {
   const checks = [
     ['read', { paths: [path.join(workspace, 'hello.txt')] }, (text) => text.includes('smoke')],
     ['exec_command', { cmd: 'echo pty-ok', workdir: workspace, yield_time_ms: 5000 }, (text) => text.includes('pty-ok')],
-    ['exec', { code: 'text(String(6 * 7))' }, (text) => text.includes('42')]
+    ['exec', { code: 'store("smoke", 6 * 7); text(load("smoke"))' }, (text) => text.includes('42')]
   ];
   for (const [name, args, ok] of checks) {
     if (!names.includes(name)) throw new Error(`Tool ${name} is missing`);
@@ -103,6 +103,23 @@ try {
     if (result.isError || !ok(text)) throw new Error(`${name} failed: ${text.slice(0, 500)}`);
     console.log(`smoke: ${name} ok`);
   }
+  const yielded = await client.callTool({ name: 'exec', arguments: {
+    code: 'text(load("smoke")); yield_control(); await new Promise(resolve => setTimeout(resolve, 100)); text("resumed-ok")'
+  } });
+  const yieldedText = textOf(yielded);
+  const cellId = /Script running with cell ID (\S+)/.exec(yieldedText)?.[1];
+  if (yielded.isError || !cellId || !yieldedText.includes('42')) throw new Error(`exec yield or stored value failed: ${yieldedText}`);
+  let resumed = '';
+  let completed = false;
+  while (!completed) {
+    const result = await client.callTool({ name: 'wait', arguments: { cell_id: cellId } });
+    const text = textOf(result);
+    if (result.isError) throw new Error(`wait failed: ${text}`);
+    resumed += text;
+    completed = text.startsWith('Script completed');
+  }
+  if (!resumed.includes('resumed-ok')) throw new Error(`wait lost output: ${resumed}`);
+  console.log('smoke: yielded exec, wait and stored values ok');
   await client.close();
   if (/\bERROR \[/.test(log)) throw new Error('The app logged an error');
   console.log('smoke: passed');
