@@ -99,12 +99,6 @@ describe('code mode (exec)', () => {
     expect(listed).not.toContain('exec');
   });
 
-  it('returns the nested result of a tool call', async () => {
-    const { texts, isError } = await run(client, "const r = await tools.echo({value:'x'}); text(r)");
-    expect(isError).toBe(false);
-    expect((JSON.parse(texts[0]!) as { content: Array<{ text: string }> }).content[0]!.text).toBe('echo:x');
-  });
-
   it('validates nested arguments before executing the tool', async () => {
     const { texts, isError } = await run(client, 'text(await tools.echo({value: 42}))');
     const result = JSON.parse(texts[0]!) as { isError: boolean; content: Array<{ text: string }> };
@@ -117,7 +111,8 @@ describe('code mode (exec)', () => {
 
   it('runs Promise.all over nested calls', async () => {
     const code = "const [a, b] = await Promise.all([tools.echo({value:'a'}), tools.echo({value:'b'})]); text(a.content[0].text + ' ' + b.content[0].text)";
-    const { texts } = await run(client, code);
+    const { texts, isError } = await run(client, code);
+    expect(isError).toBe(false);
     expect(texts[0]).toBe('echo:a echo:b');
   });
 

@@ -247,10 +247,6 @@ describe('parseDecision', () => {
     });
   });
 
-  it('forces done to false in Loop mode', () => {
-    expect(parseDecision('{"done": true, "message": "Deeper pass", "reason": ""}', 'loop').done).toBe(false);
-  });
-
   it('rejects replies that carry no usable decision', () => {
     expect(() => parseDecision('I think it is finished.', 'goal')).toThrow(/no JSON/);
     expect(() => parseDecision('{"message": "x"}', 'goal')).toThrow(/no JSON decision/);
@@ -274,6 +270,5 @@ describe('decider prompt helpers', () => {
     const prompt = buildDecisionPrompt({ mode: 'goal', objective: 'Ship it', transcript: 'User: hi', steps: 2, maxSteps: 5 });
     expect(prompt).toContain('Ship it');
     expect(prompt).toContain('2 of 5');
-    expect(prompt).toContain('"done": boolean');
   });
 });

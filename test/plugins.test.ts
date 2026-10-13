@@ -122,26 +122,6 @@ describe('PluginManager', () => {
     }
   });
 
-  it('connects a stdio server, exposes its tools and calls them with the secret env', async () => {
-    const { manager, state } = createManager([stdioServer('alpha')]);
-    manager.start();
-    try {
-      await waitFor(() => manager.status()[0]?.state === 'running', 'alpha to run');
-      const status = manager.status()[0]!;
-      expect(status.tools.map((tool) => tool.name).sort()).toEqual(['crash', 'echo']);
-
-      const tools = manager.tools();
-      const echo = tools.find((tool) => tool.name === 'echo') as ToolSpec;
-      expect(echo.jsonSchema).toMatchObject({ properties: { text: { type: 'string' } } });
-
-      const result = await echo.run({ text: 'hi' }, toolContext(state.config));
-      expect(result.isError).toBeFalsy();
-      expect(result.content).toEqual([{ type: 'text', text: `echo:hi:${SECRET}` }]);
-    } finally {
-      await manager.stop();
-    }
-  });
-
   it('hides disabled tools from the surface and status', async () => {
     const { manager, setPlugins, state } = createManager([stdioServer('alpha')]);
     manager.start();
@@ -205,6 +185,7 @@ describe('PluginManager', () => {
       const listed = (await client.listTools()).tools.find((tool) => tool.name === 'echo');
       expect(listed?.inputSchema).toMatchObject({ properties: { text: { type: 'string' } }, required: ['text'] });
       const result = await client.callTool({ name: 'echo', arguments: { text: 'hi' } });
+      expect(result.isError).toBeFalsy();
       expect(result.content).toEqual([{ type: 'text', text: `echo:hi:${SECRET}` }]);
     } finally {
       await client.close();

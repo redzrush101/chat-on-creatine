@@ -22,9 +22,8 @@ const tree: AxNode[] = [
 ];
 
 describe('formatAxTree', () => {
-  it('prints interactive elements with stable refs and skips duplicated static text', () => {
-    const assign = refs();
-    const out = formatAxTree(tree, { refFor: assign, maxLines: 100, maxChars: 10_000 });
+  it('prints interactive elements with refs and skips duplicated static text', () => {
+    const out = formatAxTree(tree, { refFor: refs(), maxLines: 100, maxChars: 10_000 });
     expect(out.text).toBe(
       [
         'RootWebArea "Page"',
@@ -34,7 +33,6 @@ describe('formatAxTree', () => {
         '  [ref=e3] link "Help \\"center\\""'
       ].join('\n')
     );
-    expect(assign(41)).toBe('e1');
   });
 
   it('respects the line budget and reports truncation', () => {

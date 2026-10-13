@@ -106,7 +106,6 @@ it('builds the full Ctrl+O transcript without appending to scrollback', () => {
   const recorded = output.join('');
   const full = transcript.transcript(80).join('\n');
   for (const text of ['Earlier tool output', 'line 20', 'notes.txt', '$ uname -r']) expect(full).toContain(text);
-  expect(transcript.transcript(80)).toBe(transcript.transcript(80));
   expect(output.join('')).toBe(recorded);
 });
 

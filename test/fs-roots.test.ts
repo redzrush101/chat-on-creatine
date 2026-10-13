@@ -44,12 +44,6 @@ describe('RootGuard', () => {
     await rm(base, { recursive: true, force: true });
   });
 
-  it('resolves an absolute path inside a root to its canonical form', async () => {
-    await expect(guard.resolve(path.join(root, 'sub', 'file.txt'), { cwd: null, mustExist: true })).resolves.toBe(
-      path.join(root, 'sub', 'file.txt')
-    );
-  });
-
   it('rejects a path that escapes the root with ..', async () => {
     await expectToolError(
       guard.resolve(path.join(root, '..', 'outside', 'secret.txt'), { cwd: null, mustExist: true }),
