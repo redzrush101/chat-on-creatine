@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { relative, isAbsolute, join } from 'node:path';
-import type { AppState, InputDelivery, ModelOption, ModelSelection, SessionMeta } from '@shared/types';
+import type { AppState, CodingTask, InputDelivery, ModelOption, ModelSelection, SessionMeta } from '@shared/types';
 import type { ReasoningEffort } from '@shared/config';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
 import { BackendClient, defaultProfile } from './connection';
@@ -57,17 +57,27 @@ export class CliSession {
       await this.client.invoke('config:update', { yolo: true, readOnly: false });
       await this.client.refresh();
     }
+    const roots = [...this.state.config.roots];
+    for (const folder of this.options.additionalRoots) {
+      const path = await realpath(folder);
+      if (!(await stat(path)).isDirectory()) throw new Error('--add-dir needs a folder, not a file.');
+      if (!roots.some((root) => contains(root.path, path))) roots.push({ id: randomUUID(), path, label: '' });
+    }
+    if (roots.length !== this.state.config.roots.length) {
+      await this.client.invoke('config:update', { roots });
+      await this.client.refresh();
+    }
     const config = this.state.config;
     this.selection = { model: this.options.model ?? config.ui.defaultModel, reasoning: this.options.effort ?? config.ui.defaultReasoning };
     if (this.options.resume) {
       if (this.options.resume === 'picker') {
         if (!this.terminal) throw new Error('Noninteractive --resume needs a session ID.');
-        const picked = await this.pickSession();
+        const picked = await this.pickSession('', !this.options.allSessions);
         if (picked) await this.resume(picked);
       } else {
         const sessions = this.chats();
         const matches = this.options.resume === 'latest'
-          ? sessions.filter((session) => this.sessionCwd(session) === this.cwd).slice(0, 1)
+          ? sessions.filter((session) => this.options.allSessions || this.sessionCwd(session) === this.cwd).slice(0, 1)
           : sessions.filter((session) => session.id.startsWith(this.options.resume!));
         if (matches.length !== 1) throw new Error(matches.length ? 'That session prefix is ambiguous. Use a longer ID from creatine sessions.' : 'No matching chat. Use creatine sessions to list shared history.');
         await this.resume(matches[0]!);
@@ -82,8 +92,8 @@ export class CliSession {
     return this.state.sessions.filter((session) => session.kind === 'chat' && `${session.id} ${session.title}`.toLowerCase().includes(needle)).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
-  async pickSession(query = ''): Promise<SessionMeta | null> {
-    const chats = this.chats(query);
+  async pickSession(query = '', currentFolderOnly = false): Promise<SessionMeta | null> {
+    const chats = this.chats(query).filter((chat) => !currentFolderOnly || this.sessionCwd(chat) === this.cwd);
     const exact = chats.filter((chat) => chat.id.startsWith(query));
     if (query && exact.length === 1) return exact[0]!;
     if (!chats.length) throw new Error('No matching chats. Use /sessions to list shared history.');
@@ -127,7 +137,7 @@ export class CliSession {
     await this.client.refresh();
   }
 
-  async send(text: string, delivery: InputDelivery = 'now', automation = this.mode): Promise<{ sessionId: string; inputId: string }> {
+  async send(text: string, delivery: InputDelivery = 'now', automation = this.mode, task?: CodingTask): Promise<{ sessionId: string; inputId: string }> {
     if (this.state.browser.signedIn === false) throw new Error('Sign in first with /login or creatine login. The GUI and CLI share the account.');
     await this.approve();
     const invocation = COMMAND_PATTERN.exec(text);
@@ -147,9 +157,10 @@ export class CliSession {
     const result = await this.client.invoke('chat:send', {
       sessionId: this.id, text: prompt, attachments, delivery, title: this.name ?? undefined,
       cwd: this.cwd, projectId: project.id, ...this.selection,
-      automation: wasBusy ? undefined : automation
+      automation: wasBusy ? undefined : automation, task
     });
     this.id = result.sessionId;
+    if (task) this.mode = 'off';
     this.attachments = [];
     this.shellContext = '';
     this.transcript.echo(result.input);

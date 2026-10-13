@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { clipboard } from 'electron';
 import type { Attachment } from '@shared/types';
-import { readWaylandClipboard } from './wayland-clipboard';
+import { readWaylandClipboard, writeWaylandClipboard } from './wayland-clipboard';
 
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
@@ -11,6 +11,11 @@ const MIME: Record<string, string> = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
   '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json', '.csv': 'text/csv', '.zip': 'application/zip'
 };
+
+/** Clipboard writes stay in main, where Electron and the native Wayland selection are available. */
+export async function copyText(text: string): Promise<void> {
+  if (!await writeWaylandClipboard(text)) await clipboard.writeText(text);
+}
 
 /** Queued files live in app storage, including images captured from the clipboard. */
 export async function stageAttachments(dir: string, paths: string[]): Promise<Attachment[]> {

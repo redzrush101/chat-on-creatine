@@ -24,7 +24,7 @@ export function PluginsSection({ state }: { state: AppState }): JSX.Element {
 
   return (
     <div className="st-stack">
-      <Group title="Plugin servers" description="External MCP servers whose tools ChatGPT can call through the Plugins connector.">
+      <Group title="Plugin servers" description="External MCP servers share the Plugins connector. Configure its tunnel in Connection and add it once in ChatGPT as Chat on Creatine Plugins. Use full paths for local server arguments.">
         {config.plugins.length === 0 && <div className="st-row"><span className="st-muted">No plugin servers yet.</span></div>}
       </Group>
 

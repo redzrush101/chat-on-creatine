@@ -1,3 +1,4 @@
+import { writeFile } from 'node:fs/promises';
 import type { SessionEvent } from '@shared/types';
 import { safeText, screenColumns } from './format';
 import { formatEvent } from './render';
@@ -43,7 +44,8 @@ export async function execute(session: CliSession): Promise<void> {
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
   try {
-    const result = await session.send(session.options.prompt);
+    const result = await session.send(session.options.prompt, 'now', session.mode,
+      session.options.command === 'review' ? { kind: 'review', target: session.options.review } : undefined);
     inputId = result.inputId;
     if (session.options.json) json({ type: 'session', sessionId: result.sessionId, inputId });
     consume(await client.invoke('sessions:events', result.sessionId));
@@ -57,6 +59,7 @@ export async function execute(session: CliSession): Promise<void> {
     if (session.mode === 'goal' && session.meta?.goal.status !== 'done') throw new Error(`Goal ${session.meta?.goal.status}.`);
     if (!final || final.kind !== 'assistant') throw new Error('ChatGPT completed the turn without a final answer. Resume the session to inspect its history.');
     const text = safeText(final.text).replace(/\ue200[^\ue201]*\ue201/g, '');
+    if (session.options.output) await writeFile(session.options.output, `${text}\n`);
     if (session.options.json) json({ type: 'result', sessionId: session.id, outcome: 'done', text });
     else process.stdout.write(`${text}\n`);
   } catch (error) {

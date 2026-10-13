@@ -277,6 +277,10 @@ export interface GitFileChange {
   status: string;
 }
 
+export type ReviewTarget = { kind: 'uncommitted' } | { kind: 'base' | 'commit'; revision: string };
+
+export type CodingTask = { kind: 'review'; target: ReviewTarget } | { kind: 'init' };
+
 export interface GitStatus {
   isRepo: boolean;
   branch: string | null;

@@ -7,6 +7,9 @@ import { CliSession } from './session';
 import { DIM, color, safeText, screenColumns } from './format';
 import { nested } from './render';
 import { COMMANDS, COMMAND_PATTERN } from './catalog';
+import { parseArguments } from './arguments';
+import { parseOptions } from './options';
+import { mcpCommand } from './mcp';
 
 export { COMMANDS, COMMAND_PATTERN } from './catalog';
 
@@ -44,6 +47,24 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       print(Object.entries(COMMANDS).map(([command, hint]) => `/${command.padEnd(13)} ${color(DIM, hint, terminal.colored)}`).join('\n') +
         '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript · ctrl+v or alt+v paste\nctrl+g external editor · ctrl+p next model · shift+tab cycle reasoning\n@file includes text; @file:10-30 selects lines; @"file with spaces" quotes a path.\n!<command> runs a shell command and includes its output with the next message.\n!!<command> runs locally; /context clear removes pending shell output.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
     case 'new': hooks.newChat(); print('New chat.'); break;
+    case 'review': {
+      const args = parseArguments(argument);
+      if (args.some((arg) => arg.startsWith('-') && !['--base', '--commit', '--uncommitted'].includes(arg))) throw new Error('Usage: /review [--uncommitted | --base <ref> | --commit <ref>] [focus]');
+      const options = parseOptions(['review', ...args], session.cwd);
+      await session.send(options.prompt, 'now', 'off', { kind: 'review', target: options.review }); break;
+    }
+    case 'init':
+      if (argument) throw new Error('Usage: /init');
+      if (session.busy) throw new Error('Stop the current turn with /stop before initializing project instructions.');
+      await session.send('', 'now', 'off', { kind: 'init' }); break;
+    case 'copy': {
+      if (argument) throw new Error('Usage: /copy');
+      const events = await client.invoke('sessions:events', id());
+      const final = events.filter((event) => event.kind === 'assistant' && event.channel === 'final' && !event.streaming).at(-1);
+      if (!final || final.kind !== 'assistant') throw new Error('There is no completed final answer to copy yet.');
+      await client.invoke('app:copyText', safeText(final.text).replace(/\ue200[^\ue201]*\ue201/g, ''));
+      print('Copied the latest final answer.'); break;
+    }
     case 'resume': {
       if (session.busy) throw new Error('Stop the current turn with /stop before switching chats.');
       const picked = await session.pickSession(argument);
@@ -181,9 +202,7 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       if (argument.startsWith('import ')) await client.invoke('skills:import', resolve(session.cwd, pathArgument(argument.slice(7))));
       else if (argument.startsWith('remove ')) await client.invoke('skills:remove', argument.slice(7));
       else print(session.state.skills.map((skill) => `/${skill.id} · ${skill.name}\n  ${skill.description}`).join('\n') || 'No skills. Import a folder containing SKILL.md with /skills import <folder>.'); break;
-    case 'plugins':
-      if (argument.startsWith('restart ')) await client.invoke('plugins:restart', argument.slice(8));
-      else print(session.state.plugins.map((plugin) => `${plugin.id} · ${plugin.name} · ${plugin.state}\n  ${plugin.detail}`).join('\n') || 'No plugins configured. Add MCP servers in GUI Settings → Plugins.'); break;
+    case 'plugins': case 'mcp': print(await mcpCommand(client, parseArguments(argument))); break;
     case 'permissions': {
       const mode = await terminal.pick('Tool permissions · shared with the GUI', [
         { label: 'Approved folders', detail: 'Read, edit and run commands under configured rules', value: 'normal' },

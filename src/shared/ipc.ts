@@ -2,6 +2,7 @@ import type { Config, DeepPartial, ReasoningEffort, SecretKey } from './config';
 import type { ExecResult } from './exec';
 import type {
   AppState,
+  CodingTask,
   AutomationMode,
   FileEntry,
   GitStatus,
@@ -29,6 +30,8 @@ interface SendRequest {
   automation?: AutomationMode;
   /** Optional user-provided title for a new chat. */
   title?: string;
+  /** A built-in coding workflow; text supplies optional review focus. */
+  task?: CodingTask;
 }
 
 interface SendResult {
@@ -56,6 +59,7 @@ export interface RendererApi {
   'app:pickFolder': () => string | null;
   'app:pickFiles': () => string[];
   'app:clipboard': () => { imagePath: string | null; text: string };
+  'app:copyText': (text: string) => void;
 
   'config:update': (patch: DeepPartial<Config>) => Config;
   'secrets:set': (key: SecretKey, value: string | null) => void;
@@ -145,6 +149,7 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'app:pickFolder',
   'app:pickFiles',
   'app:clipboard',
+  'app:copyText',
   'config:update',
   'secrets:set',
   'connection:connect',

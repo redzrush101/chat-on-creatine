@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { childEnv } from '../exec/env';
-import type { GitStatus } from '@shared/types';
+import type { GitStatus, ReviewTarget } from '@shared/types';
 
 const TIMEOUT_MS = 15_000;
 const MAX_STATUS_BYTES = 4 * 1024 * 1024;
@@ -168,4 +168,17 @@ export async function gitDiff(dir: string, file: string): Promise<string> {
 
 function withTruncationNote(run: GitRun): string {
   return run.truncated ? `${run.stdout}\n[diff truncated at 1 MB]\n` : run.stdout;
+}
+
+/** Freeze review revisions so branch names and Git options cannot change the selected scope. */
+export async function resolveReviewTarget(dir: string, target: ReviewTarget): Promise<ReviewTarget> {
+  const repo = await runGit(dir, ['rev-parse', '--is-inside-work-tree'], 4096);
+  if (repo.code !== 0 || repo.stdout.trim() !== 'true') throw new Error('Code review needs a Git working tree. Choose one with -C or /cd.');
+  if (target.kind === 'uncommitted') return target;
+  const revision = await runGit(dir, ['rev-parse', '--verify', '--end-of-options', `${target.revision}^{commit}`], 4096);
+  if (revision.code !== 0) throw new Error('That review revision is not a commit. Choose an existing branch, tag or commit.');
+  if (target.kind === 'commit') return { kind: 'commit', revision: revision.stdout.trim() };
+  const base = await runGit(dir, ['merge-base', 'HEAD', revision.stdout.trim()], 4096);
+  if (base.code !== 0) throw new Error('The base revision and HEAD have no common ancestor. Choose another base.');
+  return { kind: 'base', revision: base.stdout.trim() };
 }

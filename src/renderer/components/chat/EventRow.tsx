@@ -1,5 +1,5 @@
 import { memo, useContext, useMemo } from 'react';
-import { Check, CircleAlert, CircleDot, Copy, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
+import { Check, CircleAlert, CircleDot, Copy, Download, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
 import type { Citation, SessionEvent, WorkerState } from '@shared/types';
 import { resolveMarkers, stripMarkers } from '../../lib/citations';
 import { renderMarkdown } from '../../lib/markdown';
@@ -8,6 +8,7 @@ import { basename, cx, formatAgo } from '../../lib/format';
 import { useCopy } from '../../lib/hooks';
 import { ToolRow } from './ToolCard';
 import { SourcesContext } from './sources';
+import { downloadText } from '../../lib/download';
 
 export interface EventActions {
   onOpenSession(sessionId: string): void;
@@ -162,6 +163,9 @@ function AssistantText({ id, text, citations, streaming, final }: { id: string; 
       {final && !streaming && text.trim() && (
         <div className="msg-actions is-start">
           <CopyButton text={stripMarkers(text)} label="Copy answer" />
+          <button type="button" className="icon-btn msg-action" aria-label="Save answer" title="Save answer as Markdown" onClick={() => downloadText(`answer-${id}.md`, `${stripMarkers(text)}\n`)}>
+            <Download size={13} aria-hidden="true" />
+          </button>
         </div>
       )}
     </div>

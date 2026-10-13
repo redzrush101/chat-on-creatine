@@ -9,6 +9,7 @@ npm run test:live                                  # every scenario, windows on 
 xvfb-run -a -s "-screen 0 1920x1080x24" npm run test:live                      # Linux without windows on your desktop
 npm run test:live -- test/live/interface.live.ts   # one file
 npm run test:live -- test/live/cli-agent.live.ts   # CLI workflows and native Wayland image paste
+npm run test:live -- test/live/coding-workflows.live.ts # review/init, output, resume and MCP in CLI + GUI
 LIVE_DOCS=1 npm run test:live -- test/live/interface.live.ts   # also refresh docs/screenshots
 ```
 

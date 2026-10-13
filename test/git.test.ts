@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { gitDiff, gitStatus } from '../src/main/projects/git';
+import { gitDiff, gitStatus, resolveReviewTarget } from '../src/main/projects/git';
 
 const git = (cwd: string, ...args: string[]): void => {
   execFileSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', ...args], { cwd, stdio: 'ignore' });
@@ -96,5 +96,28 @@ describe('project git', () => {
   it('refuses paths that leave the repository folder', async () => {
     await expect(gitDiff(repo, '../placeholder')).rejects.toThrow('inside the repository');
     await expect(gitDiff(repo, path.join(root, 'placeholder'))).rejects.toThrow('inside the repository');
+  });
+
+  it('resolves review commits and merge bases, including initial commits, without accepting Git options', async () => {
+    const reviewRepo = path.join(root, 'review');
+    await mkdir(reviewRepo);
+    git(reviewRepo, 'init', '-q', '-b', 'main');
+    expect(await resolveReviewTarget(reviewRepo, { kind: 'uncommitted' })).toEqual({ kind: 'uncommitted' });
+    await writeFile(path.join(reviewRepo, 'file.txt'), 'initial\n');
+    git(reviewRepo, 'add', '.'); git(reviewRepo, 'commit', '-qm', 'initial');
+    const initial = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: reviewRepo, encoding: 'utf8' }).trim();
+    git(reviewRepo, 'checkout', '-qb', 'feature');
+    await writeFile(path.join(reviewRepo, 'file.txt'), 'feature\n');
+    git(reviewRepo, 'commit', '-qam', 'feature');
+    const feature = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: reviewRepo, encoding: 'utf8' }).trim();
+    git(reviewRepo, 'checkout', '-q', 'main');
+    await writeFile(path.join(reviewRepo, 'other.txt'), 'main\n');
+    git(reviewRepo, 'add', '.'); git(reviewRepo, 'commit', '-qm', 'main advances');
+    git(reviewRepo, 'checkout', '-q', 'feature');
+    expect(await resolveReviewTarget(reviewRepo, { kind: 'base', revision: 'main' })).toEqual({ kind: 'base', revision: initial });
+    expect(await resolveReviewTarget(reviewRepo, { kind: 'commit', revision: 'HEAD' })).toEqual({ kind: 'commit', revision: feature });
+    expect(await resolveReviewTarget(reviewRepo, { kind: 'commit', revision: initial })).toEqual({ kind: 'commit', revision: initial });
+    for (const revision of ['missing', '--help']) await expect(resolveReviewTarget(reviewRepo, { kind: 'base', revision })).rejects.toThrow('not a commit');
+    await expect(resolveReviewTarget(root, { kind: 'uncommitted' })).rejects.toThrow('Git working tree');
   });
 });

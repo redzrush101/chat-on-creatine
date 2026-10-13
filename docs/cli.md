@@ -37,7 +37,7 @@ interrupts a running shell command. Commands follow the same folder and tool pol
 
 ## Reusable prompt commands
 
-Create `.creatine/prompts/review.md` in your project:
+Create `.creatine/prompts/audit.md` in your project:
 
 ```markdown
 ---
@@ -48,9 +48,9 @@ Review the current git diff. Focus on ${1:-correctness}.
 Read the relevant files, run appropriate checks and report concrete findings.
 ```
 
-Run `/reload`, then `/review` or `/review "API compatibility"`. `/templates` lists each
+Run `/reload`, then `/audit` or `/audit "API compatibility"`. `/templates` lists each
 command, its description and its file. Commands appear in completion. Templates also work
-as the initial prompt and with `creatine exec '/review correctness'`.
+as the initial prompt and with `creatine exec '/audit correctness'`.
 
 Personal templates live in the app profile's `prompts/` folder. On Linux the default is
 `~/.config/Chat on Creatine/prompts/`; `--user-data` selects another profile. Project templates
@@ -87,7 +87,7 @@ Terminal shortcuts such as Ctrl+Shift+V may only paste text and cannot send imag
 
 ## Sessions and recovery
 
-- `creatine -r` opens a searchable picker with chats from the current folder first.
+- `creatine -r` opens a searchable picker for the current folder; add `--all` for all folders.
 - `creatine -r <id>` resumes an unambiguous session ID prefix; `-c` resumes the latest chat
   in the current folder.
 - `--name <title>` names a new or resumed chat. `/name <title>` renames it while working.
@@ -101,3 +101,92 @@ Terminal shortcuts such as Ctrl+Shift+V may only paste text and cannot send imag
 Ctrl+P cycles through the account's models. Shift+Tab cycles the selected model's reasoning
 levels. Stop the active turn before changing models with these shortcuts. `/model` and `/effort`
 remain available for explicit selections.
+
+## Code review and project instructions
+
+```sh
+creatine review                            # staged, unstaged and untracked changes
+creatine review --base main                # committed changes since the merge base
+creatine exec review --commit HEAD         # one commit, including an initial commit
+creatine review --base main 'Check migrations and error handling'
+```
+
+Interactive equivalents are `/review`, `/review --base main` and `/review --commit HEAD`.
+Review validates revisions before creating a chat, asks for prioritized bugs with file and line
+references, and instructs the model to leave files alone. This instruction is not an OS sandbox;
+the shared tool permissions still apply. Reviews run once and stop existing Goal/Loop automation
+in the selected chat. Stop an active turn before starting a review.
+
+`/init` inspects the repository and asks the agent to create a concise `AGENTS.md` with verified
+build commands and conventions. If it exists, the agent is instructed to suggest improvements
+without overwriting it. Root `AGENTS.md` loading was already supported by the shared backend.
+`review` and `init` are now reserved command names; rename existing templates that use those names.
+
+In the GUI, use **Coding workflows** beside the attachment control, in either a new chat or an
+existing chat. Choose **Review changes** and its scope, or **Create project instructions**.
+Workflow submissions preserve the composer draft and pending attachments.
+
+## Automation output and resume
+
+```sh
+creatine exec -o answer.md 'Explain the failing test'
+git diff | creatine exec --json -o findings.md -
+creatine resume                            # interactive picker for this folder
+creatine resume --all                      # picker across folders
+creatine resume --last                     # latest chat in this folder
+creatine exec resume <id> 'Continue the fix'
+creatine exec resume --last --all 'Continue the latest task'
+```
+
+`-o` / `--output-last-message` saves the successful final answer and implies noninteractive
+mode. It also works with `review` and JSON mode; stdout keeps its usual final text or JSONL
+records. Output paths resolve from the directory where you launched the CLI, independently of
+`-C`. The parent folder must exist. An unsuccessful task leaves an existing output file intact;
+a successful task replaces it. `-` reads the prompt from piped stdin.
+
+The GUI offers **Save answer** beside every completed final reply. Its existing sidebar,
+project groups and message search resume the same chats used by CLI IDs.
+
+`/copy` copies the latest completed final answer. GUI answer and code copy controls use the
+same native clipboard handler. Copying on Wayland uses `wl-copy`, with Electron as the fallback
+when that optional program is unavailable.
+
+## Additional working folders
+
+```sh
+creatine -C ./app --add-dir ../library --add-dir ../tests
+```
+
+Additional folders are approved in the shared settings and remain approved after this command
+exits. They do not replace the working folder. The GUI equivalent is **Settings → Setup → Add
+folder**. `-i` and `--image` are aliases for `--attach`.
+
+## MCP servers
+
+```sh
+creatine mcp add local -- node /path/to/server.mjs
+creatine mcp add remote --url https://example.com/mcp
+creatine mcp list
+creatine mcp get local --json
+creatine mcp disable local
+creatine mcp enable local
+creatine mcp restart local
+creatine mcp remove local
+```
+
+Inside a chat, `/mcp` accepts the same arguments. `/plugins` also accepts them. Both display
+connection status and discovered tools, including disabled tools. `list --json` and `get <name>
+--json` produce machine-readable inspection records. Environment variable values are omitted.
+Use a server's full ID when names are ambiguous. Put global flags before the MCP command:
+`creatine --user-data /path/to/profile mcp list`.
+
+These commands update the same configuration as **GUI Settings → Plugins**. Local programs run
+in the shared backend, so use absolute paths for script names and filesystem arguments.
+Environment settings remain in the GUI; this CLI does not configure OAuth or secret values.
+
+Adding a server connects Creatine to it, discovers its tools and proxies them through the
+Plugins MCP surface. To let ChatGPT call those tools, configure the separate Plugins tunnel
+under **Connection**, then add it once in ChatGPT as **Chat on Creatine Plugins** (with your
+configured connector suffix, if any). The Core connection alone does not expose external tools.
+Adding a server locally does not install an app into ChatGPT. ChatGPT may need its connector
+tool catalog refreshed before newly added tools appear.

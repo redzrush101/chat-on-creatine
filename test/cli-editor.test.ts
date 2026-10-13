@@ -65,6 +65,23 @@ it('parses execution arguments without losing literal prompts or changing attach
   expect(() => parseOptions(['exec', '-r'])).toThrow('session ID');
 });
 
+it('parses Codex-style review, resume, output and workspace options without losing prompt words', () => {
+  const cwd = process.cwd();
+  expect(parseOptions(['exec', 'review', '--base', 'main', 'Check migrations'])).toMatchObject({ command: 'review', print: true, review: { kind: 'base', revision: 'main' }, prompt: 'Check migrations' });
+  expect(parseOptions(['resume', 'abc', 'Continue work'])).toMatchObject({ command: 'chat', resume: 'abc', prompt: 'Continue work' });
+  expect(parseOptions(['exec', 'resume', '--last', '--all', 'Continue work'])).toMatchObject({ command: 'exec', resume: 'latest', allSessions: true, prompt: 'Continue work' });
+  expect(parseOptions(['exec', '--add-dir', 'lib', '--add-dir', 'test', '-i', 'image.png', '-o', 'answer.txt', '-'], cwd)).toMatchObject({
+    additionalRoots: [join(cwd, 'lib'), join(cwd, 'test')], attachments: [join(cwd, 'image.png')], output: join(cwd, 'answer.txt'), prompt: '-'
+  });
+  expect(parseOptions(['mcp', 'add', 'tools', '--', 'node', '--flag'])).toMatchObject({ command: 'mcp', mcpArgs: ['add', 'tools', '--', 'node', '--flag'] });
+  expect(() => parseOptions(['review', '--base', 'main', '--commit', 'HEAD'])).toThrow('only one');
+  expect(() => parseOptions(['--base', 'main'])).toThrow('require');
+  expect(() => parseOptions(['review', '--goal'])).toThrow('runs once');
+  expect(() => parseOptions(['exec', 'resume'])).toThrow('session ID');
+  expect(() => parseOptions(['--all'])).toThrow('requires');
+  expect(() => parseOptions(['-m', '-p'])).toThrow('needs a value');
+});
+
 it('recalls resumed messages without losing the draft and exposes editor, model and effort shortcuts', () => {
   const editor = new Editor();
   editor.set('new draft');

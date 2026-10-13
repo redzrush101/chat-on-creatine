@@ -8,6 +8,7 @@ import { CliSession } from './session';
 import { interactive } from './interactive';
 import { execute } from './execute';
 import { statusText } from './commands';
+import { mcpCommand } from './mcp';
 import { ACCENT, DIM, color, ellipsis, safeText, screenColumns, tilde, width } from './format';
 
 export async function runCli(args: string[], root: string): Promise<void> {
@@ -22,17 +23,23 @@ export async function runCli(args: string[], root: string): Promise<void> {
       const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')) as { version: string };
       process.stdout.write(`${pkg.version}\n`); return;
     }
-    if (!process.stdin.isTTY && (options.command === 'chat' || options.command === 'exec')) {
+    if (!process.stdin.isTTY && ['chat', 'exec', 'review'].includes(options.command)) {
+      if (options.prompt === '-') options.prompt = '';
       let input = '';
       for await (const chunk of process.stdin) input += String(chunk);
       options.prompt = [options.prompt, input.trim()].filter(Boolean).join('\n\n');
       options.print = true;
     }
+    if (options.prompt === '-') throw new Error('The - prompt needs piped input.');
     const isInteractive = options.command === 'chat' && !options.print;
     if (!isInteractive && options.mode === 'loop') throw new Error('Loop needs interactive mode so you can stop it.');
     if (isInteractive && !process.stdout.isTTY) throw new Error('Interactive mode needs a terminal. Use creatine exec <prompt>.');
     if (options.print && ['chat', 'exec'].includes(options.command) && !options.prompt && !options.attachments.length) throw new Error('Provide a prompt, an attachment, or piped input. See creatine --help.');
     client = await connectBackend(root, options.profile ?? defaultProfile());
+    if (options.command === 'mcp') {
+      process.stdout.write(`${await mcpCommand(client, options.mcpArgs)}\n`);
+      return;
+    }
     if (isInteractive) terminal = new Terminal();
     const transcript = new Transcript((text) => terminal?.print(text), terminal?.colored ?? false);
     const session = new CliSession(client, options, terminal, transcript);
@@ -51,7 +58,7 @@ export async function runCli(args: string[], root: string): Promise<void> {
         if (session.state.browser.signedIn) process.stdout.write('Already signed in to ChatGPT. The GUI and CLI share this login.\n');
         else { process.stdout.write('Opening the ChatGPT login page. Complete sign-in in the browser window.\n'); await session.login(); process.stdout.write('Signed in. Login is shared with the GUI.\n'); }
         break;
-      case 'chat': case 'exec':
+      case 'chat': case 'exec': case 'review':
         if (isInteractive) await interactive(session);
         else await execute(session);
     }

@@ -10,6 +10,7 @@ import { SessionStore } from '../src/main/sessions/store';
 import { Outbox } from '../src/main/sessions/outbox';
 import { flushWrites } from '../src/main/core/durable';
 import { ProcessManager } from '../src/main/exec/process-manager';
+import { execFileSync } from 'node:child_process';
 
 vi.mock('electron', () => ({ clipboard: { read: vi.fn(), readText: vi.fn() } }));
 
@@ -48,6 +49,48 @@ it('does not create a replacement session when an explicit session ID is stale',
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   await expect(api['chat:send']({ sessionId: 'deleted', text: 'Continue', attachments: [], delivery: 'now' })).rejects.toThrow('Unknown chat');
   expect(store.list()).toHaveLength(0);
+});
+
+it('an explicit one-shot submission turns off existing automation without replacing its objective', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-automation-'));
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const session = store.create({ kind: 'chat' });
+  store.update(session.id, { goal: { ...session.goal, mode: 'loop', objective: 'Original objective' } });
+  const setMode = vi.fn();
+  const services = { store, outbox, config: { get: defaultConfig }, automation: { setMode }, skills: { list: () => [] }, paths: { attachments: join(dir, 'attachments') } } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  await api['chat:send']({ sessionId: session.id, text: 'Review once', attachments: [], delivery: 'now', automation: 'off' });
+  expect(setMode).toHaveBeenCalledWith(session.id, 'off', undefined);
+});
+
+it('both frontends submit validated coding tasks through the shared API and invalid reviews leave no session behind', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-workflows-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const config = defaultConfig();
+  config.roots = [{ id: 'test', path: dir, label: '' }];
+  const services = {
+    store, outbox, config: { get: () => config }, skills: { list: () => [] }, projects: { list: () => [] },
+    paths: { attachments: join(dir, 'attachments') }, router: { turnOf: () => 'idle' }, compacting: new Set<string>(), sessionCwd: () => dir
+  } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  const request = { sessionId: null, cwd: dir, text: 'Focus on error handling', attachments: [], delivery: 'now' as const };
+  await expect(api['chat:send']({ ...request, task: { kind: 'review', target: { kind: 'commit', revision: 'missing' } } })).rejects.toThrow('not a commit');
+  expect(store.list()).toHaveLength(0);
+  const reviewed = await api['chat:send']({ ...request, task: { kind: 'review', target: { kind: 'uncommitted' } } });
+  expect(reviewed.input.text).toContain('staged, unstaged and untracked');
+  expect(reviewed.input.text).toContain('Additional review focus: Focus on error handling');
+  expect(reviewed.input.text).toContain('Do not edit files');
+  await writeFile(join(dir, 'AGENTS.md'), 'Existing project instructions');
+  const initialized = await api['chat:send']({ ...request, task: { kind: 'init' } });
+  expect(initialized.input.text).toContain('without overwriting it');
+  expect(await readFile(join(dir, 'AGENTS.md'), 'utf8')).toBe('Existing project instructions');
+  await expect(api['chat:send']({ ...request, sessionId: reviewed.sessionId, task: { kind: 'init' } })).rejects.toThrow('Stop the current turn');
+  expect(outbox.list(reviewed.sessionId)).toHaveLength(1);
 });
 
 it('stages native clipboard images once, sends them, and keeps text paste and size limits intact', async () => {

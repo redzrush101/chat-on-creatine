@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { clipboard } from 'electron';
-import { readClipboard } from '../src/main/app/attachments';
+import { copyText, readClipboard } from '../src/main/app/attachments';
 
-vi.mock('electron', () => ({ clipboard: { read: vi.fn(async () => []), readText: vi.fn(async () => 'Electron text') } }));
+vi.mock('electron', () => ({ clipboard: { read: vi.fn(async () => []), readText: vi.fn(async () => 'Electron text'), writeText: vi.fn(async () => {}) } }));
 
 let dir = '';
 beforeEach(async () => {
@@ -26,6 +26,27 @@ else process.stdout.write(fs.readFileSync(process.env.TASK_CLIPBOARD_SOURCE));
 afterEach(async () => { vi.unstubAllEnvs(); vi.clearAllMocks(); await rm(dir, { recursive: true, force: true }); });
 
 if (process.platform === 'linux') {
+  it('copies exact response text to the native Wayland selection and surfaces write failures', async () => {
+    vi.stubEnv('TASK_CLIPBOARD_TARGET', join(dir, 'copied.txt'));
+    await writeFile(join(dir, 'wl-copy'), `#!${process.execPath}
+const fs = require('node:fs');
+if (process.env.TASK_CLIPBOARD_MODE === 'error') { process.stderr.write('Clipboard unavailable'); process.exit(2); }
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => fs.writeFileSync(process.env.TASK_CLIPBOARD_TARGET, input));
+`, { mode: 0o700 });
+    await copyText('Response\nwith Unicode: ✓\n');
+    expect(await readFile(join(dir, 'copied.txt'), 'utf8')).toBe('Response\nwith Unicode: ✓\n');
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+    vi.stubEnv('TASK_CLIPBOARD_MODE', 'error');
+    await expect(copyText('text')).rejects.toThrow('Clipboard unavailable');
+    await rm(join(dir, 'wl-copy'));
+    vi.stubEnv('PATH', dir);
+    await copyText('Electron fallback');
+    expect(clipboard.writeText).toHaveBeenCalledWith('Electron fallback');
+  });
+
   it('reads exact Wayland image bytes through a real child process and stages a private attachment', async () => {
     const result = await readClipboard(join(dir, 'attachments'));
     expect(result.text).toBe('');

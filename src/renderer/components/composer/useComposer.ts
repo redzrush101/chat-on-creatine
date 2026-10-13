@@ -1,5 +1,5 @@
 import { useState, type ClipboardEvent, type KeyboardEvent } from 'react';
-import type { AutomationMode, InputDelivery } from '@shared/types';
+import type { AutomationMode, CodingTask, InputDelivery } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { reportError, notify } from '../common/Toasts';
 import type { ModelSelection } from '@shared/types';
@@ -21,7 +21,8 @@ export function useComposer({
   onCreated,
   onSubmitted,
   focusNonce,
-  prefill
+  prefill,
+  rootDir
 }: ComposerProps) {
   const sessionId = session?.id ?? null;
   const { text, setText, field } = useComposerDraft(sessionId, focusNonce, prefill);
@@ -37,6 +38,8 @@ export function useComposer({
   const toolsOffline = app.connection.state !== 'connected';
   const inputs = sessionId ? app.inputs.filter((item) => item.sessionId === sessionId && (item.state === 'queued' || item.state === 'sending' || item.state === 'failed')) : [];
   const canSend = (text.trim().length > 0 || attachments.length > 0 || clipboardPaste !== null) && !sending;
+  const workflowDisabled = canStop || sending || browserBlocked || toolsOffline || inputs.some((input) => input.state === 'queued' || input.state === 'sending');
+  const taskCwd = rootDir ?? (session ? session.cwd : app.projects.find((project) => project.id === newChat.projectId)?.path) ?? app.config.roots[0]?.path ?? null;
 
   const attach = () => {
     invoke('app:pickFiles')
@@ -101,6 +104,25 @@ export function useComposer({
     if (sessionId) invoke('chat:stop', sessionId).catch(reportError);
   };
 
+  const runTask = async (task: CodingTask, focus: string): Promise<boolean> => {
+    if (workflowDisabled || !taskCwd) return false;
+    setSending(true);
+    try {
+      const result = await invoke('chat:send', {
+        sessionId, cwd: taskCwd, text: focus, task, attachments: [], delivery: 'now',
+        ...(!session ? { projectId: newChat.projectId, model: newChat.model.model, reasoning: newChat.model.reasoning } : {})
+      });
+      if (session) onSubmitted();
+      else { onNewChatChange({ mode: 'off' }); onCreated(result.sessionId); }
+      return true;
+    } catch (error) {
+      reportError(error);
+      return false;
+    } finally {
+      setSending(false);
+    }
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -129,5 +151,5 @@ export function useComposer({
           ? 'Reply to ChatGPT…'
           : 'How can I help you today?';
 
-  return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, onPaste, modelValue, modelChange, placeholder };
+  return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, runTask, workflowDisabled, taskCwd, onKeyDown, onPaste, modelValue, modelChange, placeholder };
 }

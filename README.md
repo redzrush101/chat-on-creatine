@@ -81,6 +81,12 @@ and `/search <text>` to search past messages. `creatine -r` opens the session pi
 `creatine -c` continues the latest chat in the current folder. See [CLI workflows](docs/cli.md)
 for templates, session controls and recovery.
 
+Use `creatine review --base main` or `/review` for a code review, `/init` to create project
+instructions, and `creatine exec -o answer.md "..."` to save a final answer. The GUI offers the
+same review scopes and instruction task under **Coding workflows** beside attachments, plus
+**Save answer** on completed replies. Manage shared external servers with `creatine mcp` or
+**Settings → Plugins**.
+
 ## Development
 
 ```sh

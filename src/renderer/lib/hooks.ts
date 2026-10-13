@@ -1,4 +1,6 @@
 import { useEffect, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { invoke } from './bridge';
+import { reportError } from '../components/common/Toasts';
 
 /** Per-viewer convenience state (a collapsed section, a panel width); never authoritative. */
 export function useStoredState<T>(key: string, fallback: T): [T, (value: T) => void] {
@@ -25,10 +27,10 @@ export function useStoredState<T>(key: string, fallback: T): [T, (value: T) => v
 export function useCopy(): [boolean, (text: string) => void] {
   const [copied, setCopied] = useState(false);
   const copy = (text: string) => {
-    void navigator.clipboard.writeText(text).then(() => {
+    void invoke('app:copyText', text).then(() => {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
-    });
+    }).catch(reportError);
   };
   return [copied, copy];
 }

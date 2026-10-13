@@ -2,6 +2,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type Mouse
 import { ArrowDown } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { openExternal } from '../../lib/actions';
+import { invoke } from '../../lib/bridge';
+import { reportError } from '../common/Toasts';
 import { EventRow, type EventActions } from './EventRow';
 import { WorkGroup } from './WorkGroup';
 import { SourcesContext, sourcesByRef } from './sources';
@@ -88,10 +90,10 @@ export const Timeline = memo(function Timeline({ sessionId, events, busy, follow
     const copy = target.closest<HTMLButtonElement>('[data-copy]');
     if (copy) {
       const code = copy.closest('.md-code')?.querySelector('code')?.textContent ?? '';
-      void navigator.clipboard.writeText(code).then(() => {
+      void invoke('app:copyText', code).then(() => {
         copy.textContent = 'Copied';
         window.setTimeout(() => (copy.textContent = 'Copy'), 1200);
-      });
+      }).catch(reportError);
       return;
     }
     const link = target.closest<HTMLAnchorElement>('a[data-external]');

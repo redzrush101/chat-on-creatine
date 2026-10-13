@@ -12,7 +12,8 @@ import { effectiveCapabilities } from '@shared/config';
 import { checkCommandPolicy } from '../exec/command-policy';
 import { RootGuard } from '../fs/roots';
 import type { Services } from './services';
-import { readClipboard, stageAttachments } from './attachments';
+import { copyText, readClipboard, stageAttachments } from './attachments';
+import { codingTaskPrompt } from './coding-tasks';
 
 type Handler<C extends RendererChannel> = (...args: Parameters<RendererApi[C]>) => ReturnType<RendererApi[C]> | Promise<Awaited<ReturnType<RendererApi[C]>>>;
 
@@ -59,6 +60,7 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
       return result.canceled ? [] : result.filePaths;
     },
     'app:clipboard': () => readClipboard(s().paths.attachments),
+    'app:copyText': (text) => copyText(text),
 
     'config:update': (patch) => s().config.update(patch),
     'secrets:set': (key, value) => s().secrets.set(key, value),
@@ -100,6 +102,15 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
       const config = services.config.get();
       let session = request.sessionId ? services.store.get(request.sessionId) : undefined;
       if (request.sessionId && !session) throw new Error('Unknown chat. Start a new chat or resume an existing one.');
+      let text = request.text;
+      if (request.task) {
+        if (session && (services.router.turnOf(session.id) !== 'idle' || services.compacting.has(session.id) ||
+          services.outbox.list(session.id).some((input) => input.state === 'queued' || input.state === 'sending') ||
+          ['deciding', 'waiting-workers'].includes(session.goal.status))) throw new Error('Stop the current turn before starting a coding workflow.');
+        const cwd = session ? services.sessionCwd(session) : request.cwd;
+        if (!cwd) throw new Error('Choose a working folder before starting a coding workflow.');
+        text = await codingTaskPrompt(request.task, requireUiPath(cwd), text);
+      }
       if (!session) {
         session = services.store.create({
           kind: 'chat',
@@ -112,14 +123,16 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
       }
       const attachments = await stageAttachments(services.paths.attachments, request.attachments);
       const skills = services.skills.list();
-      let text = request.text;
       if (text.startsWith('/')) {
         text = expandSkillInvocation(text, skills, (id) => services.skills.read(id)).text;
-      } else if (config.ui.autoSelectSkills) {
+      } else if (config.ui.autoSelectSkills && !request.task) {
         const id = autoSelectSkill(text, skills);
         if (id) text = expandSkillInvocation(`/${id} ${text}`, skills, (skillId) => services.skills.read(skillId)).text;
       }
-      if (request.automation && request.automation !== 'off') services.automation.setMode(session.id, request.automation, request.text);
+      const automation = request.task ? 'off' : request.automation;
+      if (automation !== undefined && (automation !== 'off' || session.goal.mode !== 'off')) {
+        services.automation.setMode(session.id, automation, automation === 'off' ? undefined : request.text);
+      }
       const input = services.outbox.enqueue({ sessionId: session.id, text, attachments, delivery: request.delivery, source: 'app' });
       return { sessionId: session.id, input };
     },

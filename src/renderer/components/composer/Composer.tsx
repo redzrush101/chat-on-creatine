@@ -8,6 +8,7 @@ import { ContextMeter } from './ContextMeter';
 import { DropdownLabel, ModelPicker } from './ModelPicker';
 import { PendingInputs } from './PendingInputs';
 import { RepoBar } from './RepoBar';
+import { CodingActions } from './CodingActions';
 import { MODES, useComposer } from './useComposer';
 import type { ComposerProps } from './types';
 
@@ -15,7 +16,7 @@ export function Composer(props: ComposerProps) {
   const { app, session, activity, hero, onOpenSettings, rootDir, onReviewChanges } = props;
   const {
     sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked,
-    toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, onPaste, modelValue, modelChange, placeholder
+    toolsOffline, inputs, canSend, attach, setMode, submit, stop, runTask, workflowDisabled, taskCwd, onKeyDown, onPaste, modelValue, modelChange, placeholder
   } = useComposer(props);
   const modeLabel = MODES.find((item) => item.value === mode)?.label ?? 'Normal';
 
@@ -72,6 +73,7 @@ export function Composer(props: ComposerProps) {
         <button type="button" className="icon-btn" aria-label="Attach files" title="Attach files" onClick={attach}>
           <Plus size={16} />
         </button>
+        <CodingActions disabled={workflowDisabled || !taskCwd} onRun={runTask} />
         <Menu
           label="Mode"
           entries={MODES.map((item) => ({ label: `${item.label} — ${item.hint}`, checked: item.value === mode, onSelect: () => setMode(item.value) }))}
