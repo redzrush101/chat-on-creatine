@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1] - 2026-10-13
+
+- Paste clipboard images into the GUI composer or the CLI with Ctrl+V. Keep pasted images
+  and text in order when pressing Enter immediately after paste.
+- Attach local image paths in the CLI, including quoted paths, file URLs and filenames with
+  spaces. Absolute paths no longer trigger an "Unknown command" error.
+
 ## [0.5.0] - 2026-10-13
 
 - Align local command, image and plan tools with Codex's descriptions and structured outputs.
