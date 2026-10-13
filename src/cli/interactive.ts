@@ -1,6 +1,6 @@
 import { readdir } from 'node:fs/promises';
 import { dirname, resolve, basename } from 'node:path';
-import { COMMANDS, runCommand } from './commands';
+import { COMMANDS, COMMAND_PATTERN, runCommand } from './commands';
 import { ACCENT, DIM, color, safeText, screenColumns, tilde } from './format';
 import { nested, toolHeadline, userRows } from './render';
 import type { CliSession } from './session';
@@ -10,7 +10,7 @@ export async function interactive(session: CliSession): Promise<void> {
   const terminal = session.terminal!;
   const client = session.client;
   let lastInterrupt = 0;
-  let handling = false;
+  let pendingInput = Promise.resolve();
   let shellId: string | null = null;
   let shellStopped = false;
   let done: () => void = () => {};
@@ -104,11 +104,15 @@ export async function interactive(session: CliSession): Promise<void> {
   };
   terminal.onSubmit = (text) => {
     if (text === '/exit' || text === '/quit') { done(); return; }
-    if (handling) { terminal.editor.set(text); return; }
-    handling = true;
-    if (text.startsWith('/') && text !== '/clear') echo(text);
-    void (text.startsWith('!') ? shell(text.slice(1)) : runCommand(text, session, { newChat: reset, exit: done }))
-      .catch(error).finally(() => { handling = false; update(); });
+    pendingInput = pendingInput.then(async () => {
+      if (!text && !session.attachments.length) return;
+      if (COMMAND_PATTERN.test(text) && text !== '/clear') echo(text);
+      await (text.startsWith('!') ? shell(text.slice(1)) : runCommand(text, session, { newChat: reset, exit: done }));
+    }).catch(error).finally(update);
+  };
+  terminal.onPaste = () => {
+    pendingInput = pendingInput.then(() => session.paste()).catch(error).finally(update);
+    return pendingInput;
   };
   terminal.onStop = () => { void stop().catch(error); };
   terminal.onInterrupt = (exit) => {

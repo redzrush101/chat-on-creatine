@@ -1,9 +1,17 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { copyFile, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
+import { expect, it, vi } from 'vitest';
 import { Editor } from '../src/cli/editor';
 import { parseOptions } from '../src/cli/options';
 import { clip, safeText, width } from '../src/cli/format';
+import { runCommand } from '../src/cli/commands';
+import { CliSession } from '../src/cli/session';
+import { Transcript } from '../src/cli/transcript';
+import type { BackendClient } from '../src/cli/connection';
+import type { Terminal } from '../src/cli/terminal';
+import type { AppState } from '../src/shared/types';
 
 it('edits Unicode graphemes without splitting emoji, accents or their cursor positions', () => {
   const editor = new Editor();
@@ -51,4 +59,32 @@ it('parses execution arguments without losing literal prompts or changing attach
   expect(() => parseOptions(['--loop', '--print'])).toThrow('interactive');
   expect(() => parseOptions(['--model'])).toThrow('needs a value');
   expect(parseOptions(['--yolo', 'status'])).toMatchObject({ command: 'status', yolo: true, prompt: '' });
+});
+
+it('attaches pasted image paths with a prompt instead of interpreting absolute paths as commands', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'creatine-cli-image-'));
+  try {
+    const file = join(dir, 'screen shot.png');
+    await copyFile(join(process.cwd(), 'resources', 'icon.png'), file);
+    const canonical = await realpath(file);
+    const client = { state: { skills: [] } as unknown as AppState, refresh: async () => {} } as unknown as BackendClient;
+    const terminal = { editor: new Editor(), print: () => {}, colored: false } as unknown as Terminal;
+    const session = new CliSession(client, parseOptions([], dir), terminal, new Transcript(() => {}, false));
+    const send = vi.spyOn(session, 'send').mockResolvedValue({ sessionId: 'test', inputId: 'input' });
+    const hooks = { newChat: () => {}, exit: () => {} };
+    const spellings = [file, JSON.stringify(file), `'${file}'`, pathToFileURL(file).href, '@screen shot.png', '"screen shot.png"'];
+    if (process.platform !== 'win32') spellings.push(file.replaceAll(' ', '\\ '));
+    for (const spelling of spellings) {
+      session.attachments = [];
+      await runCommand(`${spelling}\nDescribe the red thing`, session, hooks);
+      expect(session.attachments).toEqual([canonical]);
+      expect(send).toHaveBeenLastCalledWith('Describe the red thing');
+    }
+    session.attachments = [];
+    const literal = `${join(dir, 'folder')}\nExplain this path`;
+    await runCommand(literal, session, hooks);
+    expect(send).toHaveBeenLastCalledWith(literal);
+    expect(session.attachments).toEqual([]);
+    await expect(runCommand('/unknown', session, hooks)).rejects.toThrow('Unknown command /unknown');
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });

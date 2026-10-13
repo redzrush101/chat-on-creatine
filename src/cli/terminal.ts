@@ -19,7 +19,8 @@ const SPINNER = ['·', '✢', '✳', '✶', '✻', '✽', '✽', '✻', '✶', '
 const SHORTCUTS = [
   ['/ for commands', '! for shell commands', '@ for file paths'],
   ['esc to interrupt', 'ctrl+o for transcript', 'tab to complete'],
-  ['ctrl+j for newline', '↑↓ for history', 'ctrl+c to clear or exit']
+  ['ctrl+j for newline', '↑↓ for history', 'ctrl+v to paste image or text'],
+  ['ctrl+c to clear or exit']
 ];
 
 /** Character-wraps the draft so the cursor maps onto the same rows; continuation rows are indented. */
@@ -67,6 +68,7 @@ export class Terminal {
   private question: { title: string; secret: boolean; resolve(value: string | null): void } | null = null;
   private savedDraft = '';
   private paste: string | null = null;
+  private pasteKeys: { sequence: string; key: Key }[] | null = null;
   private buffer = '';
   private closed = false;
   private readonly decoder = new StringDecoder('utf8');
@@ -82,6 +84,7 @@ export class Terminal {
   onInterrupt: (exit: boolean) => void = () => {};
   onStop: () => void = () => {};
   onComplete: () => void = () => {};
+  onPaste: () => Promise<void> = async () => {};
 
   constructor() {
     emitKeypressEvents(this.input);
@@ -330,6 +333,10 @@ export class Terminal {
   }
 
   private key(sequence: string, key: Key): void {
+    if (this.pasteKeys && !this.question && !this.picker && key.name !== 'escape' && !(key.ctrl && key.name === 'c')) {
+      this.pasteKeys.push({ sequence, key });
+      return;
+    }
     if (this.viewer) {
       if (!this.viewer.key(sequence, key, process.stdout.rows || 24)) this.closeViewer();
       else this.draw();
@@ -352,6 +359,18 @@ export class Terminal {
       }
       this.draw(); return;
     }
+    if (!this.question && key.ctrl && key.name === 'v') {
+      this.pasteKeys = [];
+      const resume = () => {
+        const keys = this.pasteKeys ?? [];
+        this.pasteKeys = null;
+        if (this.closed) return;
+        for (const { sequence, key } of keys) this.key(sequence, key);
+        this.draw();
+      };
+      void this.onPaste().then(resume, resume);
+      return;
+    }
     if (sequence === '?' && !this.editor.text && !this.question) { this.shortcuts = !this.shortcuts; this.draw(); return; }
     this.shortcuts = false;
     const commands = this.commandMatches();
@@ -373,7 +392,7 @@ export class Terminal {
       this.editor.set(this.savedDraft);
       question.resolve(answer);
     } else if (!this.question) {
-      if (action === 'submit') { const text = this.editor.submit(); if (text) this.onSubmit(text); }
+      if (action === 'submit') this.onSubmit(this.editor.submit());
       if (action === 'interrupt' || action === 'exit') this.onInterrupt(action === 'exit');
       if (action === 'stop') this.onStop();
       if (action === 'expand') { this.openViewer(); return; }

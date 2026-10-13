@@ -9,6 +9,7 @@ import type { CliOptions } from './options';
 import { Terminal } from './terminal';
 import { Transcript } from './transcript';
 import { safeText } from './format';
+import { extractImagePaths } from './attachments';
 
 export function contains(base: string, path: string): boolean {
   const part = relative(base, path);
@@ -112,6 +113,21 @@ export class CliSession {
     this.transcript.echo(result.input);
     await this.client.refresh();
     return { sessionId: result.sessionId, inputId: result.input.id };
+  }
+
+  async attachImages(text: string): Promise<string> {
+    const parsed = await extractImagePaths(text, this.cwd);
+    this.attachments = [...new Set([...this.attachments, ...parsed.paths])];
+    return parsed.text;
+  }
+
+  async paste(): Promise<void> {
+    const clipboard = await this.client.invoke('app:clipboard');
+    if (clipboard.imagePath) {
+      this.attachments.push(clipboard.imagePath);
+      return;
+    }
+    this.terminal?.editor.insert(await this.attachImages(clipboard.text));
   }
 
   async models(): Promise<AppState['models']['models']> {

@@ -53,6 +53,7 @@ export interface RendererApi {
   'app:revealPath': (path: string) => void;
   'app:pickFolder': () => string | null;
   'app:pickFiles': () => string[];
+  'app:clipboard': () => { imagePath: string | null; text: string };
 
   'config:update': (patch: DeepPartial<Config>) => Config;
   'secrets:set': (key: SecretKey, value: string | null) => void;
@@ -140,6 +141,7 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'app:revealPath',
   'app:pickFolder',
   'app:pickFiles',
+  'app:clipboard',
   'config:update',
   'secrets:set',
   'connection:connect',

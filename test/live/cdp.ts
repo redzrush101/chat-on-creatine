@@ -47,7 +47,11 @@ export class Cdp {
 const KEYS: Record<string, { keyCode: string; modifiers: string[] }> = {
   Enter: { keyCode: 'Enter', modifiers: [] },
   Escape: { keyCode: 'Escape', modifiers: [] },
-  'Control+o': { keyCode: 'O', modifiers: ['control'] }
+  'Control+o': { keyCode: 'O', modifiers: ['control'] },
+  'Control+v': { keyCode: 'V', modifiers: ['control'] },
+  'Control+j': { keyCode: 'J', modifiers: ['control'] },
+  'Control+a': { keyCode: 'A', modifiers: ['control'] },
+  Backspace: { keyCode: 'Backspace', modifiers: [] }
 };
 
 /**
@@ -93,7 +97,7 @@ export class Ui {
     }
   }
 
-  /** Presses `Enter`, `Escape` or `Control+o`. */
+  /** Presses a key or chord listed in KEYS. */
   async press(chord: string): Promise<void> {
     const key = JSON.stringify(KEYS[chord]!);
     await this.web(`(contents.sendInputEvent({ type: 'keyDown', ...${key} }), contents.sendInputEvent({ type: 'keyUp', ...${key} }))`);

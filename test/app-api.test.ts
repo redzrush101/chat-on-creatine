@@ -1,7 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { clipboard, type ClipboardItem } from 'electron';
 import { createApi } from '../src/main/app/api';
 import type { Services } from '../src/main/app/services';
 import { defaultConfig } from '../src/shared/config';
@@ -9,6 +10,8 @@ import { SessionStore } from '../src/main/sessions/store';
 import { Outbox } from '../src/main/sessions/outbox';
 import { flushWrites } from '../src/main/core/durable';
 import { ProcessManager } from '../src/main/exec/process-manager';
+
+vi.mock('electron', () => ({ clipboard: { read: vi.fn(), readText: vi.fn() } }));
 
 let dir = '';
 afterEach(async () => { await flushWrites(); if (dir) await rm(dir, { recursive: true, force: true }); });
@@ -43,6 +46,32 @@ it('does not create a replacement session when an explicit session ID is stale',
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   await expect(api['chat:send']({ sessionId: 'deleted', text: 'Continue', attachments: [], delivery: 'now' })).rejects.toThrow('Unknown chat');
   expect(store.list()).toHaveLength(0);
+});
+
+it('stages native clipboard images once, sends them, and keeps text paste and size limits intact', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-clipboard-'));
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const attachments = join(dir, 'attachments');
+  const services = { store, outbox, config: { get: defaultConfig }, skills: { list: () => [] }, paths: { attachments } } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  const image = await readFile(join(process.cwd(), 'resources', 'icon.png'));
+  const item = (blob: Blob) => ({ types: ['image/png'], getType: async () => blob }) as unknown as ClipboardItem;
+  vi.mocked(clipboard.read).mockResolvedValue([item(new Blob([new Uint8Array(image)], { type: 'image/png' }))]);
+  const pasted = await api['app:clipboard']();
+  expect(pasted.imagePath).not.toBeNull();
+  expect(await readFile(pasted.imagePath!)).toEqual(image);
+  const sent = await api['chat:send']({ sessionId: null, text: 'Describe this image', attachments: [pasted.imagePath!], delivery: 'now' });
+  expect(sent.input.attachments[0]).toMatchObject({ path: pasted.imagePath, mime: 'image/png', size: image.length });
+  expect(await readdir(attachments)).toHaveLength(1);
+
+  vi.mocked(clipboard.read).mockResolvedValue([]);
+  vi.mocked(clipboard.readText).mockResolvedValue('literal clipboard text');
+  expect(await api['app:clipboard']()).toEqual({ imagePath: null, text: 'literal clipboard text' });
+  vi.mocked(clipboard.read).mockResolvedValue([item(new Blob([new Uint8Array(50 * 1024 * 1024 + 1)]))]);
+  await expect(api['app:clipboard']()).rejects.toThrow('larger than 50 MB');
+  expect(await readdir(attachments)).toHaveLength(1);
 });
 
 it('shell commands use the backend cwd and policy, while YOLO bypasses the root and command restrictions', async () => {

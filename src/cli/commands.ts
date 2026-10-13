@@ -25,6 +25,8 @@ export const COMMANDS: Record<string, string> = {
 
 function pathArgument(text: string): string { return text.replace(/^(['"])(.*)\1$/, '$2'); }
 
+export const COMMAND_PATTERN = /^\/([a-z0-9][a-z0-9._-]*)(?:\s+([\s\S]*))?$/i;
+
 export function statusText(session: CliSession): string {
   const state = session.state;
   return `Chat on Creatine ${state.version}\nChatGPT: ${state.browser.signedIn ? 'signed in' : 'sign in with /login'}\n` +
@@ -40,8 +42,12 @@ export interface CommandHooks { newChat(): void; exit(): void }
 export async function runCommand(text: string, session: CliSession, hooks: CommandHooks): Promise<void> {
   const terminal = session.terminal;
   if (!terminal) return;
-  const match = /^\/(\S+)(?:\s+([\s\S]*))?$/.exec(text);
-  if (!match) { await session.send(text); return; }
+  const body = await session.attachImages(text);
+  const match = body === text ? COMMAND_PATTERN.exec(text) : null;
+  if (!match) {
+    if (body.trim() || session.attachments.length) await session.send(body);
+    return;
+  }
   const name = match[1]!;
   const argument = match[2]?.trim() ?? '';
   const print = (body: string) => terminal.print(nested(safeText(body).split('\n'), { colored: terminal.colored, columns: screenColumns() }).join('\n'));
@@ -51,7 +57,7 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
   switch (name) {
     case 'help':
       print(Object.entries(COMMANDS).map(([command, hint]) => `/${command.padEnd(13)} ${color(DIM, hint, terminal.colored)}`).join('\n') +
-        '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript\n!<command> runs a shell command in the working folder.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
+        '\n\nenter send · ctrl+j or alt+enter newline · tab complete · ↑↓ history · ? shortcuts\nesc interrupt · ctrl+c clear or exit · ctrl+o full transcript · ctrl+v paste image or text\n!<command> runs a shell command in the working folder.\nSending while busy steers the current turn; /queue holds a message for later.'); break;
     case 'new': hooks.newChat(); print('New chat.'); break;
     case 'resume': {
       const chats = session.chats();

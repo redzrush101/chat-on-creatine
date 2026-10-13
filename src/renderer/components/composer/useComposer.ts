@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react';
+import { useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import type { AutomationMode, InputDelivery } from '@shared/types';
 import { invoke } from '../../lib/bridge';
 import { reportError, notify } from '../common/Toasts';
@@ -27,6 +27,7 @@ export function useComposer({
   const { text, setText, field } = useComposerDraft(sessionId, focusNonce, prefill);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
+  const [clipboardPaste, setClipboardPaste] = useState<Promise<string[]> | null>(null);
 
   const live = sessionId ? app.live[sessionId] : undefined;
   const busy = live !== undefined && live.turn !== 'idle';
@@ -35,12 +36,25 @@ export function useComposer({
   const browserBlocked = app.browser.signedIn === false || !app.browser.ready;
   const toolsOffline = app.connection.state !== 'connected';
   const inputs = sessionId ? app.inputs.filter((item) => item.sessionId === sessionId && (item.state === 'queued' || item.state === 'sending' || item.state === 'failed')) : [];
-  const canSend = (text.trim().length > 0 || attachments.length > 0) && !sending;
+  const canSend = (text.trim().length > 0 || attachments.length > 0 || clipboardPaste !== null) && !sending;
 
   const attach = () => {
     invoke('app:pickFiles')
       .then((paths) => setAttachments((current) => [...new Set([...current, ...paths])]))
       .catch(reportError);
+  };
+
+  const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (![...event.clipboardData.items].some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
+    event.preventDefault();
+    const pending = Promise.all([clipboardPaste, invoke('app:clipboard')]).then(([earlier, { imagePath }]) => {
+      if (!imagePath) throw new Error('The clipboard no longer contains an image. Copy it again and paste.');
+      setAttachments((current) => [...new Set([...current, imagePath])]);
+      return [...(earlier ?? []), imagePath];
+    });
+    setClipboardPaste(pending);
+    const clear = () => setClipboardPaste((current) => current === pending ? null : current);
+    void pending.then(clear, (error: unknown) => { reportError(error); clear(); });
   };
 
   const setMode = (next: AutomationMode) => {
@@ -60,18 +74,20 @@ export function useComposer({
     }
     setSending(true);
     try {
+      const pasted = await clipboardPaste;
+      const files = [...new Set([...attachments, ...(pasted ?? [])])];
       // Goal and Loop start with the message as objective; while a turn runs, sends are plain steers or queued messages.
       const automation = mode !== 'off' && !busy ? mode : undefined;
       const result = await invoke('chat:send', {
         sessionId: session?.id ?? null,
         text: body,
-        attachments,
+        attachments: files,
         delivery: session && busy ? delivery : 'now',
         automation,
         ...(!session ? { projectId: newChat.projectId, model: newChat.model.model, reasoning: newChat.model.reasoning } : {})
       });
-      setText('');
-      setAttachments([]);
+      setText((current) => current === text ? '' : current);
+      setAttachments((current) => current.filter((path) => !files.includes(path)));
       if (session) onSubmitted();
       else onCreated(result.sessionId);
     } catch (error) {
@@ -113,5 +129,5 @@ export function useComposer({
           ? 'Reply to ChatGPT…'
           : 'How can I help you today?';
 
-  return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, modelValue, modelChange, placeholder };
+  return { sessionId, text, setText, field, attachments, setAttachments, busy, canStop, mode, browserBlocked, toolsOffline, inputs, canSend, attach, setMode, submit, stop, onKeyDown, onPaste, modelValue, modelChange, placeholder };
 }

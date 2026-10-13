@@ -1,9 +1,5 @@
-import { copyFile, mkdir, stat } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import { basename, extname, join } from 'node:path';
 import { BrowserWindow, dialog, shell } from 'electron';
 import type { RendererApi, RendererChannel } from '@shared/ipc';
-import type { Attachment } from '@shared/types';
 import { recentLogs } from '../core/log';
 import { isInside } from '../fs/roots';
 import { listDir, readFileForView } from '../projects/files';
@@ -16,30 +12,9 @@ import { effectiveCapabilities } from '@shared/config';
 import { checkCommandPolicy } from '../exec/command-policy';
 import { RootGuard } from '../fs/roots';
 import type { Services } from './services';
-
-const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
-const MIME: Record<string, string> = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
-  '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown', '.json': 'application/json', '.csv': 'text/csv', '.zip': 'application/zip'
-};
+import { readClipboard, stageAttachments } from './attachments';
 
 type Handler<C extends RendererChannel> = (...args: Parameters<RendererApi[C]>) => ReturnType<RendererApi[C]> | Promise<Awaited<ReturnType<RendererApi[C]>>>;
-
-/** Copies picked files into app storage so a queued message survives the original being moved. */
-async function stageAttachments(dir: string, paths: string[]): Promise<Attachment[]> {
-  await mkdir(dir, { recursive: true });
-  return Promise.all(
-    paths.map(async (source) => {
-      const info = await stat(source);
-      if (!info.isFile()) throw new Error(`${basename(source)} is not a file`);
-      if (info.size > MAX_ATTACHMENT_BYTES) throw new Error(`${basename(source)} is larger than 50 MB`);
-      const id = randomUUID();
-      const target = join(dir, `${id}-${basename(source)}`);
-      await copyFile(source, target);
-      return { id, name: basename(source), mime: MIME[extname(source).toLowerCase()] ?? 'application/octet-stream', size: info.size, path: target };
-    })
-  );
-}
 
 export type ApiHandlers = { [C in RendererChannel]: Handler<C> };
 
@@ -83,6 +58,7 @@ export function createApi(getServices: () => Services | null, snapshot: () => Re
       const result = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return result.canceled ? [] : result.filePaths;
     },
+    'app:clipboard': () => readClipboard(s().paths.attachments),
 
     'config:update': (patch) => s().config.update(patch),
     'secrets:set': (key, value) => s().secrets.set(key, value),
