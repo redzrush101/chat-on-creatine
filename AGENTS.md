@@ -19,6 +19,10 @@ place, and often removes more than it adds.
   files. Never leave commented-out code or `TODO`/`FIXME` markers; open an issue instead.
 - **Stay in scope.** Do not reformat, rename or "tidy" code your change does not need. A
   focused rewrite of the area you are fixing is fine; an unrelated redesign is a separate change.
+- **Keep documentation minimal.** Do not add standalone testing guides, audit reports or
+  implementation reports. Put essential instructions in the existing README or CONTRIBUTING.
+  Generated test logs, captures and measurements belong in the ignored `live-results/` folder;
+  publish only screenshots and recordings the README actually uses.
 
 ## Code style
 
@@ -41,11 +45,12 @@ Write code that reads like the code around it: its naming, idioms and comment de
 
 ### Renderer
 
-- Colors, spacing, radii and shadows come from `src/renderer/styles/tokens.css`. No raw colors
-  in any other stylesheet: add a token (for both themes) instead.
+- Colors, spacing, radii and shadows come from `src/renderer/styles/tokens.css`. Palette values
+  are owned by `src/shared/palette.json`, which the CLI also reads. Run `node scripts/theme.mjs`
+  after changing them; checks reject stale generated CSS. No raw colors in other stylesheets.
 - Reuse the shared primitives (`Popover`, `Menu`, `MenuButton`, `InlineEdit`, `ConfirmDialog`,
   `Banner`, toasts) and lucide icons before writing new ones.
-- Keep the Claude-desktop look: quiet controls, one accent, prose-first timeline, no decoration
+- Keep quiet controls, one accent and a prose-first timeline, with no decoration
   that carries no information.
 - Every action needs an accessible name; keyboard and screen-reader use must keep working.
 
@@ -66,7 +71,7 @@ is noise, and noise is not free: it slows every run and hides the tests that cou
 - No `.only`, `.skip` or `.todo` in committed tests.
 - Changes to the page driver, router or stream parser need a check against a signed-in ChatGPT
   session as well; unit tests cannot see what chatgpt.com actually sends. `npm run test:live`
-  runs those checks and keeps screenshots and logs (see `test/live/README.md`).
+  runs those checks and keeps screenshots and logs (see `CONTRIBUTING.md`).
 
 ## Privacy
 

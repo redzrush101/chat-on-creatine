@@ -10,16 +10,25 @@ login, projects, conversations and tools.
 ## Desktop
 
 Follow the conversation, inspect file changes and manage background tasks in one workspace.
+This real workflow fixes a cart subtotal bug, adds regression tests and runs the test suite.
 
 | Dark | Light |
 | --- | --- |
-| ![Chat with an expanded edit and the background tasks panel](docs/screenshots/chat-dark.png) | ![The finished answer, plan and agent with the Changes panel](docs/screenshots/chat-light.png) |
+| ![A cart subtotal fix and its diff in the dark desktop workspace](docs/screenshots/chat-dark.png) | ![The same tested fix in the light desktop workspace](docs/screenshots/chat-light.png) |
+
+![Fixing cart subtotals in the dark desktop workspace](docs/screenshots/gui.gif)
 
 ## Terminal
 
 Work from your project directory with streaming replies, file diffs and command output.
 
-![A task in the Chat on Creatine CLI](docs/screenshots/cli.gif)
+Continue the same chat from the terminal: add a fractional-price regression and verify it.
+
+| Dark | Light |
+| --- | --- |
+| ![The coding CLI adds and verifies a regression test in dark mode](docs/screenshots/cli-dark.png) | ![The same coding workflow in the light CLI](docs/screenshots/cli-light.png) |
+
+![Adding a cart regression test in the dark coding CLI](docs/screenshots/cli.gif)
 
 ## Download
 
@@ -71,15 +80,18 @@ includes its output with your next message; `!!npm test` keeps it local. `/conte
 pending shell output and `/context clear` discards it.
 
 Ctrl+G opens your draft in `$VISUAL` or `$EDITOR`. Ctrl+P cycles account models and Shift+Tab
-cycles reasoning levels. Paste clipboard images with Ctrl+V, Alt+V or `/paste`; on Linux
+cycles reasoning levels. Paste clipboard images with Ctrl+V or Alt+V; on Linux
 Wayland the CLI reads the native clipboard through `wl-paste` when available (included in
 `nix develop`). Terminal paste shortcuts such as Ctrl+Shift+V generally send only text.
 
-Add reusable prompt commands as Markdown files in `.creatine/prompts/`, then `/reload`.
-Use `/templates` to inspect them, `/name` to label a chat, `/sessions <query>` to find it,
-and `/search <text>` to search past messages. `creatine -r` opens the session picker;
+Add reusable prompt commands as Markdown files in `.creatine/prompts/`, then `/context reload`.
+Use `/context templates` to inspect them, `/name` to label a chat, `/resume --list <query>` to find it,
+and `/resume --search <text>` to search past messages. `creatine -r` opens the session picker;
 `creatine -c` continues the latest chat in the current folder. See [CLI workflows](docs/cli.md)
 for templates, session controls and recovery.
+
+The GUI accepts the same `@file` syntax and prompt commands through **Prompts and skills**.
+Both interfaces use the shared Current palette and the same model defaults, queue and Stop behavior.
 
 Use `creatine review --base main` or `/review` for a code review, `/init` to create project
 instructions, and `creatine exec -o answer.md "..."` to save a final answer. The GUI offers the
@@ -92,7 +104,7 @@ same review scopes and instruction task under **Coding workflows** beside attach
 ```sh
 npm run dev         # electron-vite with HMR
 npm run verify      # repository rules, typecheck, tests, build
-npm run test:live   # the real app against your signed-in ChatGPT account (test/live/README.md)
+npm run test:live   # the real app against your signed-in ChatGPT account
 npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
 ```
 

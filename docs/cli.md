@@ -18,7 +18,7 @@ Excerpts are bounded to 16,000 characters per file and 48,000 total. Truncated e
 the agent can read the rest with its tools. A missing path or invalid range leaves your draft
 available to edit. Write `@@name` to send a literal `@name` without reading a file.
 
-The same syntax works in `exec`, JSON mode and prompt templates:
+The same syntax works in the GUI composer, `exec`, JSON mode and prompt templates:
 
 ```sh
 ./scripts/creatine exec -C ./project 'Review @src/main.ts:10-40'
@@ -48,9 +48,12 @@ Review the current git diff. Focus on ${1:-correctness}.
 Read the relevant files, run appropriate checks and report concrete findings.
 ```
 
-Run `/reload`, then `/audit` or `/audit "API compatibility"`. `/templates` lists each
+Run `/context reload`, then `/audit` or `/audit "API compatibility"`. `/context templates` lists each
 command, its description and its file. Commands appear in completion. Templates also work
 as the initial prompt and with `creatine exec '/audit correctness'`.
+
+The GUI's **Prompts and skills** control lists the same project and personal templates.
+Template expansion, file excerpts and attachments are prepared once by the shared backend.
 
 Personal templates live in the app profile's `prompts/` folder. On Linux the default is
 `~/.config/Chat on Creatine/prompts/`; `--user-data` selects another profile. Project templates
@@ -74,9 +77,9 @@ shell commands:
 Ctrl+G opens the current draft in `$VISUAL`, then `$EDITOR`, defaulting to `vi` on Unix or
 Notepad on Windows. For a graphical editor, include its wait flag, such as `EDITOR='code --wait'`.
 Saving and closing returns the edited draft to the CLI without sending it. A failed editor
-keeps the original draft. `/editor` opens an empty draft if invoked as a command.
+keeps the original draft.
 
-Ctrl+V, Alt+V and `/paste` read the system clipboard. Images appear as pending attachments in
+Ctrl+V and Alt+V read the system clipboard. Images appear as pending attachments in
 the footer and can be sent alone or with text. Text enters the draft without sending it.
 `/attach clear` removes pending files.
 
@@ -91,16 +94,17 @@ Terminal shortcuts such as Ctrl+Shift+V may only paste text and cannot send imag
 - `creatine -r <id>` resumes an unambiguous session ID prefix; `-c` resumes the latest chat
   in the current folder.
 - `--name <title>` names a new or resumed chat. `/name <title>` renames it while working.
-- `/sessions <query>` filters chat titles and IDs; `/resume <query>` opens matching chats.
-- `/search <text>` searches past user and assistant messages and lets you resume a match.
+- `/resume --list <query>` filters chat titles and IDs; `/resume <query>` opens matching chats.
+- `/resume --search <text>` searches past user and assistant messages and lets you resume a match.
 - Up/Down recalls the current chat's recorded prompts after resuming.
 - Failed submissions return to the draft; pending attachments and shell context stay available.
 - `/queue edit <id>` edits a queued message. `/queue retry <id>` requeues a failed message
   with its original attachments and ID. It cannot resend an already sent message.
 
 Ctrl+P cycles through the account's models. Shift+Tab cycles the selected model's reasoning
-levels. Stop the active turn before changing models with these shortcuts. `/model` and `/effort`
-remain available for explicit selections.
+levels. These shortcuts work in both composers. Stop the active turn before changing models.
+Use `/model` for the picker or `/model <id> <effort>` for an explicit selection. Selections and
+defaults are validated and saved by the same backend action in both interfaces.
 
 ## Code review and project instructions
 
@@ -174,7 +178,7 @@ creatine mcp restart local
 creatine mcp remove local
 ```
 
-Inside a chat, `/mcp` accepts the same arguments. `/plugins` also accepts them. Both display
+Inside a chat, `/mcp` accepts the same arguments. It displays
 connection status and discovered tools, including disabled tools. `list --json` and `get <name>
 --json` produce machine-readable inspection records. Environment variable values are omitted.
 Use a server's full ID when names are ambiguous. Put global flags before the MCP command:
@@ -190,3 +194,31 @@ under **Connection**, then add it once in ChatGPT as **Chat on Creatine Plugins*
 configured connector suffix, if any). The Core connection alone does not expose external tools.
 Adding a server locally does not install an app into ChatGPT. ChatGPT may need its connector
 tool catalog refreshed before newly added tools appear.
+
+## A shorter command menu
+
+The CLI keeps 27 built-in slash commands. Related operations share an entry point:
+
+| Previous command | Current control |
+| --- | --- |
+| `/sessions`, `/search` | `/resume --list`, `/resume --search` |
+| `/templates`, `/reload` | `/context templates`, `/context reload` |
+| `/agents`, `/agents stop <id>` | `/tasks <worker-id>`, `/tasks stop <id>` |
+| `/effort` | `/model <id> <effort>` or Shift+Tab |
+| `/plugins` | `/mcp` |
+| `/connect`, `/disconnect`, `/logs`, `/browser` | `/status connect`, `/status disconnect`, `/status logs`, `/status browser` |
+| `/approve` | `/permissions approve [folder]` |
+| `/editor`, `/paste`, `/clear` | Ctrl+G, Ctrl+V/Alt+V, Ctrl+L |
+| `/quit` | `/exit` or Ctrl+D |
+| `/steer` | Send a message while a turn is running |
+| `/export` | Export from the GUI chat menu; save final answers with `creatine exec -o` |
+
+Removed names are available for your own prompt templates; they no longer appear in completion.
+
+## Shared appearance
+
+The Current palette uses teal controls, slate dark surfaces and cool light surfaces. It is
+shared by the CLI, desktop, embedded terminal and code viewer. Set the theme in GUI Appearance;
+the CLI follows that setting, and system mode uses the terminal's `COLORFGBG` when available.
+Existing terminal scrollback keeps the colors it was printed with; newly rendered rows follow
+the current theme. `NO_COLOR` disables CLI colors.

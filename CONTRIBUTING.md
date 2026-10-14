@@ -19,12 +19,18 @@ On NixOS run everything inside `nix develop`.
 - One logical change per pull request, rebased on `main`.
 - `npm run verify` passes locally; CI runs it on Linux, macOS and Windows.
 - The description says what changed, why, and how you checked it. When the page driver, router,
-  stream parser or an interface changed, include `npm run test:live` (see
-  [test/live/README.md](test/live/README.md)).
+  stream parser or an interface changed, include `npm run test:live`.
+
+Quit the app before live tests; they use your signed-in account and configured tunnel. The
+harness copies the profile into a private temporary folder and uses a fresh project. Local
+settings and history stay unchanged; real ChatGPT conversations count against account usage.
+Results stay in the ignored `live-results/` folder. On Linux, use `xvfb-run -a npm run test:live`
+for a headless run. Pass a file to run one scenario, for example
+`npm run test:live -- test/live/performance.live.ts`.
 
 ## Releases
 
-1. Refresh the README images with `LIVE_DOCS=1 npm run test:live -- test/live/interface.live.ts`
+1. Refresh the README images with `LIVE_DOCS=1 npm run test:live -- test/live/documentation.live.ts`
    when either interface changed visibly.
 2. Move the `Unreleased` notes in [CHANGELOG.md](CHANGELOG.md) under a new version heading and
    set the version in `package.json`.
