@@ -252,8 +252,9 @@ export class ProcessManager implements ProcessRunner {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     child.stdin?.on('error', () => undefined);
-    child.stdout?.on('data', (chunk: Buffer) => session.push(chunk));
-    child.stderr?.on('data', (chunk: Buffer) => session.push(chunk));
+    // Each pipe owns its decoder so polling or interleaved stderr cannot split a character.
+    child.stdout?.setEncoding('utf8').on('data', (chunk: string) => session.push(Buffer.from(chunk, 'utf8')));
+    child.stderr?.setEncoding('utf8').on('data', (chunk: string) => session.push(Buffer.from(chunk, 'utf8')));
     child.once('error', (error) => {
       session.push(Buffer.from(`${error.message}\n`, 'utf8'));
       session.finish(null);

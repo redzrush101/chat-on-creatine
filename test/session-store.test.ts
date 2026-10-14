@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -75,6 +75,23 @@ describe('SessionStore', () => {
     ]);
   });
 
+  it('coalesces streaming records while retaining live updates and persists the final text before shutdown', async () => {
+    const store = openStore();
+    const meta = store.create({ kind: 'chat' });
+    const message: SessionEvent = { id: 'answer', at: 1, kind: 'assistant', messageId: 'a1', text: 'First', channel: 'final', model: null, streaming: true };
+    const updates: string[] = [];
+    store.onEvents((id, events) => { if (id === meta.id) for (const event of events) if (event.kind === 'assistant') updates.push(event.text); });
+    store.append(meta.id, [message]);
+    store.append(meta.id, [{ ...message, text: 'Second' }]);
+    store.append(meta.id, [{ ...message, text: 'Final', streaming: false }]);
+    await flushWrites();
+    const lines = readFileSync(join(dir, meta.id, 'events.jsonl'), 'utf8').trim().split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0]!)).toMatchObject({ text: 'Final', streaming: false });
+    expect(updates).toEqual(['First', 'Second', 'Final']);
+    await store.flush();
+  });
+
   it('skips a corrupt event line instead of failing the session', async () => {
     const store = openStore();
     const meta = store.create({ kind: 'chat' });
@@ -121,5 +138,13 @@ describe('SessionStore', () => {
 
     expect(store.events(meta.id)).toHaveLength(1);
     expect(existsSync(join(dir, meta.id, 'events.jsonl'))).toBe(false);
+  });
+
+  it('writes session metadata and messages with owner-only permissions on POSIX', async () => {
+    const store = openStore();
+    const meta = store.create({ kind: 'chat' });
+    store.append(meta.id, [note('a', 'private conversation')]);
+    await store.flush();
+    if (process.platform !== 'win32') for (const name of ['meta.json', 'events.jsonl']) expect(statSync(join(dir, meta.id, name)).mode & 0o777).toBe(0o600);
   });
 });

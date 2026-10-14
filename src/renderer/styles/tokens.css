@@ -1,5 +1,4 @@
-/* Design tokens. Components use only these variables, never raw colors.
-   The palette follows the Claude desktop app: neutral warm greys, a clay accent, blue links. */
+/* Design tokens. The shared Current palette pairs slate surfaces with a teal accent. */
 :root {
   --font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -26,78 +25,81 @@
   --dur-med: 200ms;
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 
-  /* dark (default) */
-  --bg: #161615;
-  --bg-sidebar: #111111;
-  --bg-elevated: #1f1f1e;
-  --bg-input: #1d1d1c;
-  --bg-hover: #262625;
-  --bg-active: #2e2e2d;
-  --bg-code: #1b1b1a;
-  --bg-card: #232322;
-  --border: #2a2a29;
-  --border-strong: #3a3a38;
-  --text: #f0efec;
-  --text-muted: #c3c2b7;
-  --text-faint: #898781;
-  --accent: #d97757;
-  --accent-strong: #e8906f;
-  --accent-soft: rgba(217, 119, 87, 0.16);
-  --on-accent: #ffffff;
-  --link: #6da7ec;
-  --code-inline: #ec7e7e;
-  --success: #3fbf5a;
-  --success-soft: rgba(63, 191, 90, 0.14);
-  --warning: #e5a54b;
-  --warning-soft: rgba(229, 165, 75, 0.14);
-  --danger: #ef6464;
-  --danger-soft: rgba(239, 100, 100, 0.14);
-  --diff-add: #20331f;
-  --diff-add-strong: #285a2b;
-  --diff-del: #3a2121;
-  --diff-del-strong: #5c2a2a;
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
-  --shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Palette generated from src/shared/palette.json by scripts/theme.mjs. */
+:root {
+  --bg: #151c20;
+  --bg-sidebar: #10171b;
+  --bg-elevated: #1c262b;
+  --bg-input: #1b252a;
+  --bg-hover: #26343a;
+  --bg-active: #2d3e44;
+  --bg-code: #121b20;
+  --bg-card: #202c32;
+  --border: #2b3b42;
+  --border-strong: #42565f;
+  --text: #edf4f4;
+  --text-muted: #b6c8ce;
+  --text-faint: #8aabb4;
+  --accent: #62d5c4;
+  --accent-strong: #92e5d7;
+  --accent-soft: rgba(98, 213, 196, 0.14);
+  --on-accent: #102823;
+  --link: #8dbcf0;
+  --code-inline: #c7b0ed;
+  --success: #97d49e;
+  --success-soft: rgba(151, 212, 158, 0.13);
+  --warning: #edc17b;
+  --warning-soft: rgba(237, 193, 123, 0.14);
+  --danger: #f39498;
+  --danger-soft: rgba(243, 148, 152, 0.13);
+  --diff-add: #203c30;
+  --diff-add-strong: #2d5940;
+  --diff-del: #432a32;
+  --diff-del-strong: #673b46;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--border);
+  --shadow-raised: 0 4px 16px rgba(0, 0, 0, 0.28);
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.12);
-  --scrim: rgba(0, 0, 0, 0.4);
-  --focus-ring: 0 0 0 1px #4d8ce8;
+  --scrim: rgba(6, 14, 18, 0.5);
+  --focus-ring: 0 0 0 2px var(--accent);
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --bg: #faf9f5;
-  --bg-sidebar: #f3f2ec;
+  --bg: #f5f8f8;
+  --bg-sidebar: #eaf0f1;
   --bg-elevated: #ffffff;
   --bg-input: #ffffff;
-  --bg-hover: #ebe9e1;
-  --bg-active: #e3e1d8;
-  --bg-code: #f3f2ec;
-  --bg-card: #f0efe8;
-  --border: #e3e1d9;
-  --border-strong: #cfccc1;
-  --text: #1f1e1b;
-  --text-muted: #4d4c47;
-  --text-faint: #87867f;
-  --accent: #c96442;
-  --accent-strong: #ae5030;
-  --accent-soft: rgba(201, 100, 66, 0.12);
+  --bg-hover: #e5eeee;
+  --bg-active: #d6e6e5;
+  --bg-code: #eef4f4;
+  --bg-card: #edf3f3;
+  --border: #d4e0e2;
+  --border-strong: #b1c6cc;
+  --text: #1b3038;
+  --text-muted: #48636d;
+  --text-faint: #617b84;
+  --accent: #146b60;
+  --accent-strong: #0b554b;
+  --accent-soft: rgba(20, 107, 96, 0.1);
   --on-accent: #ffffff;
-  --link: #2c6bc0;
-  --code-inline: #c4413f;
-  --success: #198a3a;
-  --success-soft: rgba(25, 138, 58, 0.1);
-  --warning: #a86c12;
-  --warning-soft: rgba(168, 108, 18, 0.12);
-  --danger: #c9372c;
-  --danger-soft: rgba(201, 55, 44, 0.1);
-  --diff-add: #e3f3e1;
-  --diff-add-strong: #bfe5bb;
-  --diff-del: #f8e3e1;
-  --diff-del-strong: #efc0bb;
-  --shadow-pop: 0 12px 32px rgba(40, 36, 28, 0.14), 0 0 0 1px var(--border);
-  --shadow-raised: 0 4px 16px rgba(40, 36, 28, 0.12);
-  --shadow-soft: 0 1px 2px rgba(40, 36, 28, 0.1);
-  --scrim: rgba(30, 26, 18, 0.28);
-  --focus-ring: 0 0 0 1px #2c6bc0;
+  --link: #285c99;
+  --code-inline: #735597;
+  --success: #357346;
+  --success-soft: rgba(53, 115, 70, 0.1);
+  --warning: #88600f;
+  --warning-soft: rgba(136, 96, 15, 0.1);
+  --danger: #b43d52;
+  --danger-soft: rgba(180, 61, 82, 0.1);
+  --diff-add: #e0eee3;
+  --diff-add-strong: #b9d9c0;
+  --diff-del: #f6e4e8;
+  --diff-del-strong: #eabec8;
+  --shadow-pop: 0 12px 32px rgba(18, 45, 55, 0.13), 0 0 0 1px var(--border);
+  --shadow-raised: 0 4px 16px rgba(18, 45, 55, 0.1);
+  --shadow-soft: 0 1px 2px rgba(18, 45, 55, 0.08);
+  --scrim: rgba(18, 45, 55, 0.28);
+  --focus-ring: 0 0 0 2px var(--accent);
   color-scheme: light;
 }

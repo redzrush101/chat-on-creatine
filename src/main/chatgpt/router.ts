@@ -66,7 +66,8 @@ export class ChatRouter {
    * wait the seconds chatgpt.com takes to load before its first message.
    */
   private spareTab: string | null = null;
-  private warming = false;
+  private warming: Promise<void> | null = null;
+  private stopped = false;
 
   /** The ChatGPT turn (`turn_exchange_id`) each session is in, for end-of-turn reconciliation. */
   private readonly currentTurnIds = new Map<string, string>();
@@ -91,6 +92,7 @@ export class ChatRouter {
   }
 
   start(): void {
+    this.stopped = false;
     this.gcTimer = setInterval(() => void this.collectIdleTabs(), 60_000);
     this.gcTimer.unref?.();
     this.pumpAll();
@@ -98,6 +100,7 @@ export class ChatRouter {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.gcTimer) clearInterval(this.gcTimer);
     for (const timer of this.settleTimers.values()) clearTimeout(timer);
   }
@@ -163,6 +166,7 @@ export class ChatRouter {
       return existing;
     }
     if (fresh || !session.conversationId) {
+      await this.warming;
       const spare = this.takeSpare();
       if (spare) {
         this.bind(spare, session.id);
@@ -182,16 +186,23 @@ export class ChatRouter {
     return spare && this.deps.host.tabs().some((tab) => tab.tabId === spare && !tab.conversationId) ? spare : null;
   }
 
-  private async warmSpare(): Promise<void> {
+  private warmSpare(): Promise<void> {
+    if (this.spareTab || this.stopped || this.deps.host.status().signedIn !== true) return Promise.resolve();
+    return this.warming ??= this.preloadSpare().finally(() => { this.warming = null; });
+  }
+
+  private async preloadSpare(): Promise<void> {
     const { host } = this.deps;
-    if (this.spareTab || this.warming || host.status().signedIn !== true) return;
-    this.warming = true;
+    let tab: string | null = null;
     try {
-      this.spareTab = await host.openTab(newChatUrl(null));
+      tab = await host.openTab(newChatUrl(null));
+      const ready = await host.command(tab, { type: 'ready' }, 20_000);
+      if (!ready.ok) throw new Error(ready.error);
+      if (this.stopped) await host.closeTab(tab);
+      else this.spareTab = tab;
     } catch (error) {
+      if (tab) await host.closeTab(tab);
       log.warn(`could not preload a ChatGPT tab: ${errorMessage(error)}`);
-    } finally {
-      this.warming = false;
     }
   }
 

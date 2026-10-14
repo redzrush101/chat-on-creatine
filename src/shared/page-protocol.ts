@@ -77,6 +77,8 @@ export interface PageFile {
 
 /** Commands the app sends to the page driver. Each resolves with `PageResult`. */
 export type PageCommand =
+  /** Confirms the composer and model control mounted before adopting a preloaded tab. */
+  | { type: 'ready' }
   /** Type the text into the composer, attach files, press send. Resolves once the stream started. */
   | { type: 'send'; text: string; files: PageFile[] }
   | { type: 'stop' }

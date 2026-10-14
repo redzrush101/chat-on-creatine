@@ -78,6 +78,9 @@ export class PageCommands {
   async run(command: PageCommand): Promise<PageResult> {
     try {
       switch (command.type) {
+        case 'ready':
+          return await waitFor(() => dom.findComposer() !== null && dom.findModelTrigger() !== null, 15_000)
+            ? DONE : fail('not-ready', 'The ChatGPT composer and model control did not finish loading. Open ChatGPT and reload the page.');
         case 'send':
           return await this.send(command.text, command.files);
         case 'stop':

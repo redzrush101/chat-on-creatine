@@ -66,6 +66,16 @@ describe('ProcessManager', () => {
     expect(echoed.sessionId).toBe(started.sessionId);
   });
 
+  it('preserves a UTF-8 character split across polls while stderr emits separately', async () => {
+    const cmd = `node -e "process.stdout.write(Buffer.from([0xe2])); process.stderr.write('stderr'); process.stdin.once('data', () => { process.stdout.write(Buffer.from([0x82, 0xac])); process.exit(); });"`;
+    const started = await manager.exec({ cmd, workdir: os.homedir(), yieldTimeMs: 2000 }, 'chat-a');
+    expect(started.output).toBe('stderr');
+    expect(started.sessionId).not.toBeNull();
+    const finished = await manager.writeStdin({ sessionId: started.sessionId!, chars: 'finish\n', yieldTimeMs: 10_000 }, 'chat-a');
+    expect(finished.output).toBe('€');
+    expect(finished.exitCode).toBe(0);
+  });
+
   it('runs a batch in one shell, continues past a failing item and exits with its code', async () => {
     const result = await manager.exec(
       { cmds: ['echo one', 'node -e "process.exit(1)"', 'echo three'], workdir: os.homedir(), yieldTimeMs: 10_000 },
@@ -120,6 +130,14 @@ describe('ProcessManager', () => {
 });
 
 describe('output buffers', () => {
+  it('preserves Unicode crossing the head/tail boundary and drops cut character fragments at truncation', () => {
+    const buffer = new HeadTailBuffer(8);
+    buffer.push(Buffer.from('abc€'));
+    expect(buffer.text()).toBe('abc€');
+    buffer.push(Buffer.from('123456€'));
+    expect(buffer.text()).not.toContain('\ufffd');
+    expect(buffer.text()).toContain('bytes omitted');
+  });
   it('keeps head and tail of a bounded stream and counts the omitted middle', () => {
     const buffer = new HeadTailBuffer(10);
     buffer.push(Buffer.from('abcdefghijklmnop'));

@@ -27,8 +27,8 @@ export const Timeline = memo(function Timeline({ sessionId, events, busy, follow
   const stuck = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const blocks = useMemo(() => (events ? buildBlocks(events, busy) : []), [events, busy]);
-  // Keyed by the tool events that carry sources, so streaming text does not re-render every answer.
-  const sourcesKey = (events ?? []).filter((event) => event.kind === 'tool' && event.output.some((part) => part.type === 'sources')).map((event) => event.id).join();
+  // Source titles can change after their tool event first appeared.
+  const sourcesKey = JSON.stringify((events ?? []).flatMap((event) => event.kind === 'tool' ? event.output.filter((part) => part.type === 'sources') : []));
   const sources = useMemo(() => sourcesByRef(events ?? []), [sourcesKey]);
 
   useLayoutEffect(() => {

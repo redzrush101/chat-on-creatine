@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { JSX } from 'react';
 import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { oneDark } from '@codemirror/theme-one-dark';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { languages } from '@codemirror/language-data';
 import { basicSetup } from 'codemirror';
 
@@ -14,10 +15,14 @@ function languageFor(name: string): LanguageEntry | null {
   return languages.find((entry) => entry.filename?.test(name)) ?? languages.find((entry) => entry.extensions.includes(extension)) ?? null;
 }
 
-// Tokens default to dark; the app marks light mode with data-theme="light" on the root.
-function isDarkTheme(): boolean {
-  return document.documentElement.dataset.theme !== 'light';
-}
+const syntax = syntaxHighlighting(HighlightStyle.define([
+  { tag: tags.keyword, color: 'var(--code-inline)' },
+  { tag: [tags.typeName, tags.className, tags.propertyName], color: 'var(--accent)' },
+  { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: 'var(--link)' },
+  { tag: [tags.string, tags.regexp], color: 'var(--success)' },
+  { tag: [tags.number, tags.bool, tags.null], color: 'var(--warning)' },
+  { tag: tags.comment, color: 'var(--text-faint)', fontStyle: 'italic' }
+]));
 
 /** Read-only view of one file. Highlighting follows the app theme; the surface uses the design tokens. */
 export function CodeViewer({ name, text }: { name: string; text: string }): JSX.Element {
@@ -27,7 +32,6 @@ export function CodeViewer({ name, text }: { name: string; text: string }): JSX.
     const host = hostRef.current;
     if (!host) return;
     const language = new Compartment();
-    const theme = new Compartment();
     const view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -36,12 +40,14 @@ export function CodeViewer({ name, text }: { name: string; text: string }): JSX.
           basicSetup,
           EditorState.readOnly.of(true),
           EditorView.editable.of(false),
-          theme.of(isDarkTheme() ? oneDark : []),
+          syntax,
           language.of([]),
           EditorView.theme({
             '&': { height: '100%', backgroundColor: 'var(--bg-code)', color: 'var(--text)', fontSize: 'var(--text-xs)' },
             '.cm-scroller': { fontFamily: 'var(--font-mono)' },
-            '.cm-gutters': { backgroundColor: 'var(--bg-code)', color: 'var(--text-faint)', border: 'none' }
+            '.cm-gutters': { backgroundColor: 'var(--bg-code)', color: 'var(--text-faint)', border: 'none' },
+            '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--bg-hover)' },
+            '.cm-selectionBackground, .cm-searchMatch': { backgroundColor: 'var(--accent-soft)' }
           })
         ]
       })

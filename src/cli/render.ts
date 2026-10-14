@@ -42,7 +42,7 @@ export function assistantText(event: Extract<SessionEvent, { kind: 'assistant' }
 /** A prompt on its own shaded band, as Claude Code shows what you typed. */
 export function userRows(text: string, options: RenderOptions): string[] {
   const rows = indent(safeText(text).split('\n').map((line) => ({ text: line, hang: 0 })), options.columns, '❯ ');
-  return options.colored ? rows.map((row) => `\x1b[48;5;237m${row}${' '.repeat(Math.max(0, options.columns - width(row)))}\x1b[0m`) : rows;
+  return options.colored ? rows.map((row) => color('bg-input', `${row}${' '.repeat(Math.max(0, options.columns - width(row)))}`, true)) : rows;
 }
 
 /** Result rows under a `⎿` elbow, the way Claude Code nests output below its call. */

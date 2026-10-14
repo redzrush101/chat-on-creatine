@@ -9,7 +9,8 @@ import { interactive } from './interactive';
 import { execute } from './execute';
 import { statusText } from './commands';
 import { mcpCommand } from './mcp';
-import { ACCENT, DIM, color, ellipsis, safeText, screenColumns, tilde, width } from './format';
+import { ACCENT, DIM, color, ellipsis, safeText, screenColumns, setTerminalTheme, tilde, width } from './format';
+import { effortLabel, findModel } from '@shared/model-selection';
 
 export async function runCli(args: string[], root: string): Promise<void> {
   let client: BackendClient | null = null;
@@ -40,11 +41,12 @@ export async function runCli(args: string[], root: string): Promise<void> {
       process.stdout.write(`${await mcpCommand(client, options.mcpArgs)}\n`);
       return;
     }
+    setTerminalTheme(client.state!.config.ui.theme);
     if (isInteractive) terminal = new Terminal();
     const transcript = new Transcript((text) => terminal?.print(text), terminal?.colored ?? false);
     const session = new CliSession(client, options, terminal, transcript);
     await session.initialize();
-    if (terminal) terminal.print(welcome(session.state.version, session.cwd, terminal.colored));
+    if (terminal) terminal.print(welcome(session, terminal.colored));
     switch (options.command) {
       case 'status': process.stdout.write(statusText(session)); break;
       case 'models': {
@@ -74,20 +76,24 @@ export async function runCli(args: string[], root: string): Promise<void> {
   }
 }
 
-/** Claude Code's welcome box: product, version and where the tools work. */
-function welcome(version: string, cwd: string, colored: boolean): string {
+/** Compact account and project identity beside the same quiet controls used during a turn. */
+function welcome(session: CliSession, colored: boolean): string {
+  const model = findModel(session.state.models.models, session.selection.model ?? session.state.models.defaultModel);
+  const reasoning = session.selection.reasoning ? ` · ${effortLabel(model, session.selection.reasoning)}` : '';
   const rows = [
-    `${color(ACCENT, '✻', colored)} Welcome to ${color(1, 'Chat on Creatine', colored)} ${color(DIM, version, colored)}`,
+    `${color(ACCENT, '◈', colored)} Welcome to ${color(1, 'Chat on Creatine', colored)} ${color(DIM, `v${session.state.version}`, colored)}`,
     '',
-    color(DIM, '  ChatGPT with your account and your local tools', colored),
-    color(DIM, '  /help for commands · ? for shortcuts', colored),
+    `${color(DIM, '  Model   ', colored)}${safeText(model?.label ?? session.selection.model ?? 'Account default')}${reasoning}`,
+    `${color(DIM, '  Account ', colored)}ChatGPT · ${session.state.browser.signedIn ? 'signed in' : 'sign in with /login'}`,
+    `${color(DIM, '  Tools   ', colored)}${safeText(session.state.connection.state)}`,
+    `${color(DIM, '  Path    ', colored)}${safeText(tilde(session.cwd))}`,
     '',
-    `  ${color(DIM, 'cwd:', colored)} ${safeText(tilde(cwd))}`
+    color(DIM, '  /help commands · /resume history · ? shortcuts', colored)
   ];
   const inner = Math.min(screenColumns() - 4, Math.max(...rows.map(width)) + 2);
   const line = (row: string) => {
     const text = width(row) > inner ? ellipsis(row, inner) : row;
-    return `${color(ACCENT, '│', colored)} ${text}${' '.repeat(Math.max(0, inner - width(text)))} ${color(ACCENT, '│', colored)}`;
+    return `${color(DIM, '│', colored)} ${text}${' '.repeat(Math.max(0, inner - width(text)))} ${color(DIM, '│', colored)}`;
   };
-  return `\n${color(ACCENT, `╭${'─'.repeat(inner + 2)}╮`, colored)}\n${rows.map(line).join('\n')}\n${color(ACCENT, `╰${'─'.repeat(inner + 2)}╯`, colored)}\n`;
+  return `\n${color(DIM, `╭${'─'.repeat(inner + 2)}╮`, colored)}\n${rows.map(line).join('\n')}\n${color(DIM, `╰${'─'.repeat(inner + 2)}╯`, colored)}\n`;
 }

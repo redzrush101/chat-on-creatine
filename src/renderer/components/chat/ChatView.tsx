@@ -7,7 +7,7 @@ import type { PanelTab } from '../../workpanel/WorkPanel';
 import type { EventActions } from './EventRow';
 import { TopBar } from './TopBar';
 import { Timeline } from './Timeline';
-import { turnActivity } from './turn-activity';
+import { turnActivity } from '@shared/turn-activity';
 
 interface ChatViewProps {
   app: AppState;

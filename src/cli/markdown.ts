@@ -1,6 +1,6 @@
 import hljs from 'highlight.js/lib/common';
 import { Lexer, type Token, type Tokens } from 'marked';
-import { DIM, safeText, screenColumns, width, wrap } from './format';
+import { DIM, safeText, screenColumns, sgr, width, wrap } from './format';
 
 /** One logical row; `hang` indents its wrapped continuation rows. */
 export interface Line { text: string; hang: number }
@@ -11,7 +11,7 @@ export const CITE = ['', ''] as const;
 const OPTIONS = { gfm: true, breaks: true };
 
 /** Highlight.js scopes in the terminal's own palette, so every theme keeps its contrast. */
-const SCOPES: Record<string, number> = {
+const SCOPES: Record<string, number | string> = {
   keyword: 35, 'selector-tag': 35, symbol: 35, bullet: 35,
   built_in: 36, type: 36, attr: 36, attribute: 36, property: 36, 'selector-class': 36,
   title: 34, section: 34, function: 34,
@@ -28,7 +28,7 @@ function decode(text: string): string {
 
 /** Styles with their own off codes, so a nested span never cancels the one around it. */
 function style(on: number | string, off: number, text: string, colored: boolean): string {
-  return colored && text ? `\x1b[${on}m${text}\x1b[${off}m` : text;
+  return colored && text ? `\x1b[${sgr(on)}m${text}\x1b[${off}m` : text;
 }
 
 /** Highlighted code lines; colors that span lines are reopened on each one. */
@@ -38,7 +38,7 @@ function code(text: string, lang: string | undefined, colored: boolean): string[
   const language = lang && hljs.getLanguage(lang) ? lang : null;
   const html = language ? hljs.highlight(source, { language, ignoreIllegals: true }).value
     : source.length < 4000 ? hljs.highlightAuto(source).value : source.replace(/[&<>]/g, (char) => `&${{ '&': 'amp', '<': 'lt', '>': 'gt' }[char]};`);
-  const stack: (number | null)[] = [];
+  const stack: (number | string | null)[] = [];
   return html.split('\n').map((line) => {
     const open = stack.findLast((value) => value !== null);
     const body = line.replace(/<span class="([^"]+)">|<\/span>|&(amp|lt|gt|quot|#x27|#39);/g, (_match, scope: string | undefined, entity: string | undefined) => {
@@ -46,12 +46,12 @@ function code(text: string, lang: string | undefined, colored: boolean): string[
       if (scope) {
         const value = SCOPES[scope.split(' ')[0]!.replace(/^hljs-/, '')] ?? null;
         stack.push(value);
-        return value === null ? '' : `\x1b[${value}m`;
+        return value === null ? '' : `\x1b[${sgr(value)}m`;
       }
       const closed = stack.pop();
-      return closed === null || closed === undefined ? '' : `\x1b[${stack.findLast((value) => value !== null) ?? 39}m`;
+      return closed === null || closed === undefined ? '' : `\x1b[${sgr(stack.findLast((value) => value !== null) ?? 39)}m`;
     });
-    return `${open ? `\x1b[${open}m` : ''}${body}\x1b[39m`;
+    return `${open ? `\x1b[${sgr(open)}m` : ''}${body}\x1b[39m`;
   });
 }
 
@@ -159,22 +159,4 @@ function blocks(tokens: Token[], colored: boolean, columns: number, tight: boole
 /** GitHub-flavored Markdown as terminal rows for a block `columns` wide. */
 export function markdown(source: string, colored: boolean, columns = screenColumns() - 2): Line[] {
   return blocks(Lexer.lex(safeText(source), OPTIONS), colored, columns, false);
-}
-
-/**
- * How much of a streamed reply is final: every block but the last, which may still grow. A list
- * stays open until another block follows it, since its next item may come after a blank line.
- */
-export function settled(source: string): number {
-  const tokens = Lexer.lex(source, OPTIONS);
-  let end = tokens.reduce((sum, token) => sum + token.raw.length, 0);
-  for (let index = tokens.length - 1; index >= 0; index--) {
-    const token = tokens[index]!;
-    end -= token.raw.length;
-    if (token.type !== 'space') {
-      const closed = tokens[index + 1]?.type === 'space' && token.type !== 'list';
-      return closed ? end + token.raw.length : end;
-    }
-  }
-  return 0;
 }

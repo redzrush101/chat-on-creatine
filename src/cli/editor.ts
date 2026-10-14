@@ -32,12 +32,13 @@ export class Editor {
     return text;
   }
 
-  key(sequence: string, key: Key): 'submit' | 'interrupt' | 'stop' | 'complete' | 'expand' | 'exit' | 'edit' | 'external' | 'model' | 'effort' {
+  key(sequence: string, key: Key): 'submit' | 'interrupt' | 'stop' | 'complete' | 'expand' | 'exit' | 'edit' | 'external' | 'model' | 'effort' | 'clear' {
     if (key.ctrl && key.name === 'c') return 'interrupt';
     if (key.ctrl && key.name === 'd' && !this.text) return 'exit';
     if (key.name === 'escape') return 'stop';
     if (key.name === 'tab') return key.shift ? 'effort' : 'complete';
     if (key.ctrl && key.name === 'o') return 'expand';
+    if (key.ctrl && key.name === 'l') return 'clear';
     if (key.ctrl && key.name === 'g') return 'external';
     if (key.ctrl && key.name === 'p') return 'model';
     if (key.name === 'return' && !key.meta && !key.shift) {

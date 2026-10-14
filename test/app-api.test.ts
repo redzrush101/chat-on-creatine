@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ it('the shared send boundary preserves cwd, stages attachments, and resumes the 
   store.load();
   const outbox = new Outbox(join(dir, 'outbox.json'));
   const config = defaultConfig();
-  const services = { store, outbox, config: { get: () => config }, skills: { list: () => [] }, paths: { attachments: join(dir, 'attachments') } } as unknown as Services;
+  const services = { store, outbox, config: { get: () => config }, skills: { list: () => [] }, sessionCwd: () => dir, paths: { userData: dir, attachments: join(dir, 'attachments') } } as unknown as Services;
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   const source = join(dir, 'reference.txt');
   await writeFile(source, 'attached context');
@@ -51,6 +51,71 @@ it('does not create a replacement session when an explicit session ID is stale',
   expect(store.list()).toHaveLength(0);
 });
 
+it('prepares templates, file ranges and literal shell output for both frontends before creating a chat', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-prompts-'));
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const config = defaultConfig();
+  config.roots = [{ id: 'test', path: dir, label: '' }];
+  const services = { store, outbox, config: { get: () => config }, skills: { list: () => [] }, sessionCwd: () => dir,
+    paths: { userData: dir, attachments: join(dir, 'attachments') } } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  await mkdir(join(dir, '.creatine', 'prompts'), { recursive: true });
+  await writeFile(join(dir, '.creatine', 'prompts', 'audit.md'), 'Review @source.ts:2. Focus on ${1:-correctness}');
+  await writeFile(join(dir, 'source.ts'), 'ignore\nshared context\nignore');
+  expect(await api['chat:templates'](dir)).toMatchObject([{ name: 'audit' }]);
+  const request = { sessionId: null, text: '/audit streaming', attachments: [], delivery: 'now' as const };
+  const gui = await api['chat:send'](request);
+  const cli = await api['chat:send']({ ...request, cwd: dir, shellContext: '$ test\n@missing.ts is literal command output' });
+  expect(gui.input.text).toContain('Focus on streaming');
+  expect(gui.input.text).toContain('2: shared context');
+  expect(gui.input.text).not.toContain('1: ignore');
+  expect(cli.input.text).toContain(gui.input.text);
+  expect(cli.input.text).toContain('@missing.ts is literal command output');
+  const count = store.list().length;
+  await expect(api['chat:send']({ ...request, text: '@missing.ts' })).rejects.toThrow('Cannot include');
+  await expect(api['chat:send']({ ...request, text: 'x'.repeat(80_001) })).rejects.toThrow('too large');
+  await expect(api['chat:send']({ ...request, attachments: [join(dir, 'missing.png')] })).rejects.toThrow();
+  expect(store.list()).toHaveLength(count);
+});
+
+it('stopping from either frontend cancels queued inputs before interrupting the turn', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-stop-'));
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const session = store.create({ kind: 'chat' });
+  const queued = outbox.enqueue({ sessionId: session.id, text: 'Follow up', attachments: [], delivery: 'after-turn', source: 'app' });
+  const stopTurn = vi.fn(async () => { expect(outbox.list(session.id).find((input) => input.id === queued.id)?.state).toBe('cancelled'); });
+  const services = { store, outbox, router: { stopTurn } } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  await api['chat:stop'](session.id);
+  expect(stopTurn).toHaveBeenCalledWith(session.id);
+});
+
+it('selects account models and shared defaults atomically, rejecting unavailable efforts and active turns', async () => {
+  dir = await mkdtemp(join(tmpdir(), 'creatine-api-model-'));
+  const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
+  store.load();
+  const outbox = new Outbox(join(dir, 'outbox.json'));
+  const session = store.create({ kind: 'chat' });
+  const update = vi.fn();
+  let busy = false;
+  const services = { store, outbox, config: { update }, compacting: new Set<string>(), router: { turnOf: () => busy ? 'generating' : 'idle' },
+    models: { forSelection: async () => ({ defaultModel: 'test-model', models: [{ id: 'test-model', label: 'Test model', efforts: ['low', 'high'] }] }) } } as unknown as Services;
+  const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
+  const selected = { model: 'test-model', reasoning: 'high' as const };
+  expect(await api['chat:selectModel'](session.id, selected)).toEqual(selected);
+  expect(store.get(session.id)).toMatchObject(selected);
+  expect(update).toHaveBeenCalledWith({ ui: { defaultModel: 'test-model', defaultReasoning: 'high' } });
+  await expect(api['chat:selectModel'](session.id, { model: 'test-model', reasoning: 'max' })).rejects.toThrow('does not offer');
+  await expect(api['chat:selectModel'](session.id, { model: 'missing', reasoning: null })).rejects.toThrow('unavailable');
+  busy = true;
+  await expect(api['chat:selectModel'](session.id, { model: null, reasoning: null })).rejects.toThrow('Stop');
+  expect(update).toHaveBeenCalledTimes(1);
+});
+
 it('an explicit one-shot submission turns off existing automation without replacing its objective', async () => {
   dir = await mkdtemp(join(tmpdir(), 'creatine-api-automation-'));
   const store = new SessionStore(join(dir, 'sessions'), { recording: () => true });
@@ -59,7 +124,7 @@ it('an explicit one-shot submission turns off existing automation without replac
   const session = store.create({ kind: 'chat' });
   store.update(session.id, { goal: { ...session.goal, mode: 'loop', objective: 'Original objective' } });
   const setMode = vi.fn();
-  const services = { store, outbox, config: { get: defaultConfig }, automation: { setMode }, skills: { list: () => [] }, paths: { attachments: join(dir, 'attachments') } } as unknown as Services;
+  const services = { store, outbox, config: { get: defaultConfig }, automation: { setMode }, skills: { list: () => [] }, sessionCwd: () => null, paths: { attachments: join(dir, 'attachments') } } as unknown as Services;
   const api = createApi(() => services, () => { throw new Error('Unused'); }, { show: () => {}, quit: () => {} });
   await api['chat:send']({ sessionId: session.id, text: 'Review once', attachments: [], delivery: 'now', automation: 'off' });
   expect(setMode).toHaveBeenCalledWith(session.id, 'off', undefined);

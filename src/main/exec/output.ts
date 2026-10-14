@@ -62,9 +62,12 @@ export class HeadTailBuffer {
 
   /** Retained text; when bytes were dropped, a marker sits between head and tail. */
   text(): string {
-    const head = Buffer.concat(this.head).toString('utf8');
-    const tail = Buffer.concat(this.tail).toString('utf8');
-    if (this.omitted === 0) return head + tail;
+    if (this.omitted === 0) return Buffer.concat([...this.head, ...this.tail]).toString('utf8');
+    const head = new TextDecoder().decode(Buffer.concat(this.head), { stream: true });
+    const bytes = Buffer.concat(this.tail);
+    let start = 0;
+    while (start < bytes.length && (bytes[start]! & 0xc0) === 0x80) start++;
+    const tail = bytes.subarray(start).toString('utf8');
     return `${head}\n... ${this.omitted} bytes omitted ...\n${tail}`;
   }
 }

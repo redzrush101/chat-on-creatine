@@ -17,11 +17,10 @@ export function installFetchTap(channel: string): void {
   };
 
   const pump = async (
-    body: ReadableStream<Uint8Array>,
+    reader: ReadableStreamDefaultReader<Uint8Array>,
     streamId: string,
     requestId: string | null
   ): Promise<void> => {
-    const reader = body.getReader();
     const decoder = new TextDecoder();
     try {
       for (;;) {
@@ -58,16 +57,28 @@ export function installFetchTap(channel: string): void {
       const pathname = new URL(rawUrl, location.href).pathname;
       if (method !== 'POST' || !endsWithConversation(pathname) || !response.body) return response;
 
-      const [forPage, forTap] = response.body.tee();
+      const forTap = response.clone().body!.getReader();
+      const body = response.body;
+      // A clone's tee waits for both branches; observing must not hold up native cancellation.
+      const cancelTap = (reason?: unknown): void => {
+        void forTap.cancel(reason).catch(() => {
+          // Observer errors must not change the page's own cancellation result.
+        });
+      };
+      const cancelBody = body.cancel.bind(body);
+      body.cancel = (reason?: unknown) => { cancelTap(reason); return cancelBody(reason); };
+      const getReader = body.getReader.bind(body);
+      Object.defineProperty(body, 'getReader', { configurable: true, writable: true, value: (options?: ReadableStreamGetReaderOptions) => {
+        const reader = getReader(options);
+        const cancelReader = reader.cancel.bind(reader);
+        reader.cancel = (reason?: unknown) => { cancelTap(reason); return cancelReader(reason); };
+        return reader;
+      } });
       const streamId = crypto.randomUUID();
       const requestId = response.headers.get('x-oai-request-id');
       post({ kind: 'start', streamId, requestId, status: response.status });
       void pump(forTap, streamId, requestId);
-      return new Response(forPage, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: new Headers(response.headers)
-      });
+      return response;
     } catch {
       return response;
     }

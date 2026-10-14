@@ -82,7 +82,15 @@ function terminalTheme() {
     background: tokenValue('--bg-code'),
     foreground: tokenValue('--text'),
     cursor: tokenValue('--accent'),
-    selectionBackground: tokenValue('--accent-soft')
+    selectionBackground: tokenValue('--accent-soft'),
+    black: tokenValue('--bg-code'), brightBlack: tokenValue('--text-faint'),
+    red: tokenValue('--danger'), brightRed: tokenValue('--danger'),
+    green: tokenValue('--success'), brightGreen: tokenValue('--success'),
+    yellow: tokenValue('--warning'), brightYellow: tokenValue('--warning'),
+    blue: tokenValue('--link'), brightBlue: tokenValue('--link'),
+    magenta: tokenValue('--code-inline'), brightMagenta: tokenValue('--code-inline'),
+    cyan: tokenValue('--accent'), brightCyan: tokenValue('--accent-strong'),
+    white: tokenValue('--text-muted'), brightWhite: tokenValue('--text')
   };
 }
 
@@ -105,6 +113,8 @@ function TerminalPane({ cwd, active, onError }: { cwd: string | null; active: bo
     term.loadAddon(fit);
     term.open(host);
     fit.fit();
+    const appearance = new MutationObserver(() => { term.options.theme = terminalTheme(); });
+    appearance.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     let terminalId: string | null = null;
     let disposed = false;
@@ -143,6 +153,7 @@ function TerminalPane({ cwd, active, onError }: { cwd: string | null; active: bo
     return () => {
       disposed = true;
       observer.disconnect();
+      appearance.disconnect();
       input.dispose();
       if (terminalId) {
         dataListeners.delete(terminalId);

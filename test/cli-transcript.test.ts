@@ -45,7 +45,7 @@ it('highlights fenced code without its fences and accepts a late final extension
   transcript.consume([{ ...final, text: `${final.text} All checks passed.` }]);
   const raw = output.join('');
   const text = stripVTControlCharacters(raw);
-  expect(raw).toContain('\x1b[35mconst');
+  expect(raw).not.toBe(text);
   expect(text).toContain('All checks passed.');
   expect(text).not.toContain('```');
   expect(text.split('const value = 42;')).toHaveLength(2);

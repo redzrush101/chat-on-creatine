@@ -5,12 +5,13 @@ import type { Services } from './services';
 import { createLogger } from '../core/log';
 
 const STATE_COALESCE_MS = 50;
-const EVENTS_COALESCE_MS = 80;
+const EVENTS_COALESCE_MS = 16;
 
 /** Assembles AppState from the services and pushes it (and history upserts) to the renderer. */
 export class StateHub {
   private stateTimer: NodeJS.Timeout | null = null;
   private eventsTimer: NodeJS.Timeout | null = null;
+  private stateChanged = false;
   private readonly pendingEvents = new Map<string, Map<string, SessionEvent>>();
 
   constructor(
@@ -56,12 +57,14 @@ export class StateHub {
 
   /** Coalesces bursts (streaming deltas) into one push. */
   changed(): void {
+    this.stateChanged = true;
     if (this.stateTimer) return;
     this.stateTimer = setTimeout(() => {
       if (!this.services()) { this.stateTimer = null; return; }
+      this.stateChanged = false;
       void this.snapshot().then((state) => this.send('state', state))
         .catch((error: unknown) => createLogger('state').error('could not assemble app state', error))
-        .finally(() => { this.stateTimer = null; });
+        .finally(() => { this.stateTimer = null; if (this.stateChanged) this.changed(); });
     }, STATE_COALESCE_MS);
   }
 
@@ -72,8 +75,9 @@ export class StateHub {
     if (this.eventsTimer) return;
     this.eventsTimer = setTimeout(() => {
       this.eventsTimer = null;
-      for (const [id, batch] of this.pendingEvents) this.send('session:events', { sessionId: id, events: [...batch.values()] });
+      const batches = [...this.pendingEvents];
       this.pendingEvents.clear();
+      for (const [id, batch] of batches) this.send('session:events', { sessionId: id, events: [...batch.values()] });
     }, EVENTS_COALESCE_MS);
   }
 }

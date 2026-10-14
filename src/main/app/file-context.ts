@@ -1,7 +1,7 @@
 import { open, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join, resolve } from 'node:path';
-import { decodeText } from '../main/fs/files';
+import { decodeText } from '../fs/files';
 
 const ATTACHMENTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.pdf']);
 const FILE_CHARS = 16_000;
@@ -17,18 +17,20 @@ export async function expandFileReferences(text: string, cwd: string): Promise<{
   let cursor = 0;
   let prompt = '';
   for (const match of text.matchAll(pattern)) {
-    const token = match[2]?.replace(/\\(["\\])/g, '$1') ?? match[3] ?? match[4]!;
+    const raw = match[2]?.replace(/\\(["\\])/g, '$1') ?? match[3] ?? match[4]!;
+    const punctuation = match[4] ? /[.,;!?)\]}]+$/.exec(raw)?.[0] ?? '' : '';
+    const token = punctuation ? raw.slice(0, -punctuation.length) : raw;
     const range = /^(.*?):(\d+)(?:-(\d+))?$/.exec(token + (match[5] ?? ''));
     const name = range?.[1] ?? token;
     if (name.startsWith('@')) {
-      prompt += text.slice(cursor, match.index) + match[1] + name;
+      prompt += text.slice(cursor, match.index) + match[1] + name + punctuation;
       cursor = match.index + match[0].length;
       continue;
     }
     const path = await realpath(resolve(cwd, name.startsWith('~/') ? join(homedir(), name.slice(2)) : name)).catch((error: unknown) => {
       throw new Error(`Cannot include @${name}: ${error instanceof Error ? error.message : String(error)}`);
     });
-    prompt += text.slice(cursor, match.index) + match[1] + name + (range ? `:${range[2]}${range[3] ? `-${range[3]}` : ''}` : '');
+    prompt += text.slice(cursor, match.index) + match[1] + name + (range ? `:${range[2]}${range[3] ? `-${range[3]}` : ''}` : '') + punctuation;
     cursor = match.index + match[0].length;
     const key = `${path}:${range?.[2] ?? ''}:${range?.[3] ?? ''}`;
     if (seen.has(key)) continue;

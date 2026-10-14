@@ -9,7 +9,9 @@ import type {
   InputDelivery,
   InputItem,
   LogEntry,
+  ModelSelection,
   Project,
+  PromptTemplate,
   SessionEvent,
   SessionMeta
 } from './types';
@@ -21,6 +23,8 @@ interface SendRequest {
   /** Local file paths to attach (picked by the user). */
   attachments: string[];
   delivery: InputDelivery;
+  /** Explicit local shell output supplied by the terminal frontend. */
+  shellContext?: string;
   /** Only used when starting a new chat. */
   projectId?: string | null;
   cwd?: string;
@@ -83,6 +87,8 @@ export interface RendererApi {
   'sessions:export': (sessionId: string) => string;
 
   'chat:send': (request: SendRequest) => SendResult;
+  'chat:templates': (cwd: string | null) => PromptTemplate[];
+  'chat:selectModel': (sessionId: string | null, selection: ModelSelection) => ModelSelection;
   'chat:stop': (sessionId: string) => void;
   'chat:compact': (sessionId: string) => void;
   'chat:setAutomation': (sessionId: string, mode: AutomationMode, objective?: string) => SessionMeta;
@@ -165,6 +171,8 @@ export const RENDERER_CHANNELS: readonly RendererChannel[] = [
   'sessions:search',
   'sessions:export',
   'chat:send',
+  'chat:templates',
+  'chat:selectModel',
   'chat:stop',
   'chat:compact',
   'chat:setAutomation',

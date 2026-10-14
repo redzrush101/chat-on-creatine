@@ -116,10 +116,7 @@ export const execCommandTool = defineTool({
     const commands = args.cmd !== undefined ? [args.cmd] : args.cmds!;
 
     const chatFolder = ctx.caller?.cwd ?? (await ctx.services.paths.roots())[0] ?? os.homedir();
-    const workdir =
-      args.workdir === undefined
-        ? chatFolder
-        : await ctx.services.paths.resolve(args.workdir, { cwd: chatFolder, mustExist: true });
+    const workdir = await ctx.services.paths.resolve(args.workdir ?? chatFolder, { cwd: chatFolder, mustExist: true });
 
     // YOLO mode runs every command; otherwise the user's policy decides.
     const policy = ctx.config.yolo ? { ...ctx.config.commandPolicy, enabled: false } : ctx.config.commandPolicy;

@@ -4,22 +4,9 @@ import nodePath from 'node:path';
 
 import type { Config } from '@shared/config';
 import { ToolError, type PathGuard } from '../mcp/tool';
+import { isInside } from '@shared/paths';
 
 export const NO_ROOTS_MESSAGE = 'No folders are approved. Approve a folder in Settings → Workspace, then try again.';
-
-const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
-
-function fold(p: string): string {
-  return CASE_INSENSITIVE ? p.toLowerCase() : p;
-}
-
-/** True when `child` is `parent` or lies below it. Both paths must be absolute and canonical. */
-export function isInside(parent: string, child: string): boolean {
-  const rel = nodePath.relative(fold(parent), fold(child));
-  if (rel === '') return true;
-  if (nodePath.isAbsolute(rel)) return false;
-  return rel !== '..' && !rel.startsWith(`..${nodePath.sep}`);
-}
 
 function expandHome(p: string): string {
   if (p === '~') return os.homedir();

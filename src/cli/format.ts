@@ -1,5 +1,7 @@
 import { stripVTControlCharacters } from 'node:util';
 import os from 'node:os';
+import palette from '@shared/palette.json';
+import type { Config } from '@shared/config';
 
 /** External text cannot issue terminal commands, alter the title or write to the clipboard. */
 export function safeText(text: string): string {
@@ -34,11 +36,24 @@ export function ellipsis(text: string, columns: number): string {
   return width(text) <= columns ? text : `${clip(text, Math.max(0, columns - 1))}…`;
 }
 
-/** The clay accent of the desktop app. */
-export const ACCENT = '38;5;173';
-export const DIM = 90;
+export const ACCENT = 'accent';
+export const DIM = 'text-faint';
+let colors = palette.dark;
+const ANSI_COLORS: Partial<Record<number, keyof typeof palette.dark>> = { 31: 'danger', 32: 'success', 33: 'warning', 34: 'link', 35: 'code-inline', 36: 'accent', 90: 'text-faint' };
 
-export const color = (code: number | string, text: string, enabled = true): string => enabled && text ? `\x1b[${code}m${text}\x1b[0m` : text;
+/** Explicit appearance settings match the GUI; system mode follows the terminal background. */
+export function setTerminalTheme(theme: Config['ui']['theme']): void {
+  const background = Number(process.env.COLORFGBG?.split(';').at(-1));
+  colors = theme === 'light' || theme === 'system' && Number.isFinite(background) && background >= 7 ? palette.light : palette.dark;
+}
+
+export function sgr(code: number | string): number | string {
+  const token = typeof code === 'number' ? ANSI_COLORS[code] : code;
+  const value = token && token in colors ? colors[token as keyof typeof colors] : null;
+  return value?.startsWith('#') ? `${token === 'bg-input' ? 48 : 38};2;${[1, 3, 5].map((at) => parseInt(value.slice(at, at + 2), 16)).join(';')}` : code;
+}
+
+export const color = (code: number | string, text: string, enabled = true): string => enabled && text ? `\x1b[${sgr(code)}m${text}\x1b[0m` : text;
 
 /** Usable columns; one short of the edge so a full row never triggers the terminal's own wrap. */
 export function screenColumns(): number { return Math.max(20, (process.stdout.columns || 80) - 1); }

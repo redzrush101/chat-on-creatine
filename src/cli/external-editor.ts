@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseArguments } from './arguments';
+import { parseArguments } from '@shared/arguments';
 
 /** The temporary draft is private and removed even when the editor fails. */
 export async function editExternal(text: string, command = process.env.VISUAL || process.env.EDITOR || (process.platform === 'win32' ? 'notepad' : 'vi')): Promise<string> {

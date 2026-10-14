@@ -17,15 +17,15 @@ const PROFILE_FILES = ['config.json', 'secrets.json', 'Local State', 'Preference
 const SKIP = /[/\\](Cache|Code Cache|GPUCache|DawnGraphiteCache|DawnWebGPUCache|blob_storage|Shared Dictionary)$/;
 /** Set LIVE_DOCS=1 to also refresh the README images from this run. */
 const DOCS = process.env.LIVE_DOCS === '1';
-const README_IMAGES = ['chat-dark.png', 'chat-light.png', 'cli.gif'];
+const README_IMAGES = ['chat-dark.png', 'chat-light.png', 'cli-dark.png', 'cli-light.png', 'gui.gif', 'cli.gif'];
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 type Frame = { width: number; height: number; data: string; at: number };
 
 /**
  * One live run of the real app against the signed-in ChatGPT account. It works on a copy of the
- * real profile and a fresh workspace, so a run never changes your settings or history, and it
- * keeps screenshots, GIFs, timelines and logs in `live-results/<run>`.
+ * real profile and a fresh workspace, preserving local settings and recorded history while
+ * creating real account conversations. Captures and logs stay in `live-results/<run>`.
  */
 export class Live {
   private readonly logFile;
@@ -138,6 +138,11 @@ export class Live {
     for (;;) {
       const events = await this.events(sessionId);
       if (test(events, this.state)) return events;
+      const latest = this.state.inputs.filter((item) => item.sessionId === sessionId).sort((a, b) => a.createdAt - b.createdAt).at(-1);
+      if (latest?.state === 'failed') {
+        await this.timeline(sessionId, `failed-${label}`);
+        throw new Error(`Could not send ${label}: ${latest.error}`);
+      }
       if (Date.now() > deadline) { await this.timeline(sessionId, `timeout-${label}`); throw new Error(`Timed out waiting for ${label}`); }
       await sleep(1500);
     }
@@ -225,7 +230,7 @@ export class Live {
   }
 
   private publish(file: string, name: string): void {
-    if (DOCS && README_IMAGES.includes(name)) cpSync(file, join(ROOT, 'docs', 'screenshots', name));
+    if (DOCS && this.dir.endsWith('-documentation') && README_IMAGES.includes(name)) cpSync(file, join(ROOT, 'docs', 'screenshots', name));
   }
 
   async close(): Promise<void> {

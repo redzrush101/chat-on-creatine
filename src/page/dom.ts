@@ -212,6 +212,15 @@ export function readErrorNotice(): ErrorNotice | null {
   return null;
 }
 
+/** The composer mounts before this control; preloaded pages need both to be usable. */
+export function findModelTrigger(): HTMLElement | null {
+  return first(
+    [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')),
+      ...composerForm()?.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]') ?? []],
+    (node) => visible(node) && !node.hasAttribute('disabled') && node.getAttribute('aria-disabled') !== 'true'
+  );
+}
+
 /** Calls `listener` whenever the user (not a script) operates ChatGPT's model picker or a menu. */
 export function onUserModelPick(listener: () => void): void {
   const picker = `${SELECTORS.modelTrigger.join(', ')}, [role="menu"]`;
@@ -224,16 +233,14 @@ export function onUserModelPick(listener: () => void): void {
 
 /** Confirms the native family and effort before dismissing the picker. */
 export async function selectModel(model: string, effort: ReasoningEffort | null, presetIndex?: number): Promise<boolean> {
-  const findTrigger = () => first(
-    [...document.querySelectorAll<HTMLElement>(SELECTORS.modelTrigger.join(', ')),
-      ...composerForm()?.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]') ?? []],
-    visible
-  );
+  const waitForPicker = async (predicate: () => boolean, action: string) => {
+    if (!await waitFor(predicate, 10_000)) throw new Error(`ChatGPT's model picker did not ${action}. Open ChatGPT and try again.`);
+  };
   // ChatGPT mounts the editor before its native model control on a fresh chat.
-  if (!(await waitFor(() => findTrigger() !== null))) return false;
-  const trigger = findTrigger()!;
+  await waitForPicker(() => findModelTrigger() !== null, 'load');
+  const trigger = () => findModelTrigger();
   const menu = () => first(document.querySelectorAll<HTMLElement>('[role="menu"]'), (node) =>
-    visible(node) && node.getAttribute('aria-labelledby') === trigger.id);
+    visible(node) && node.getAttribute('aria-labelledby') === trigger()?.id);
   const item = (pattern: (text: string) => boolean, includeHidden = false) => first(
     menu()?.querySelectorAll<HTMLElement>(SELECTORS.menuItem) ?? [], (node) => {
       if (!includeHidden && !visible(node)) return false;
@@ -243,23 +250,29 @@ export async function selectModel(model: string, effort: ReasoningEffort | null,
   const wanted = normalize(model);
   const modelItem = (includeHidden = false) => item((label) => label === wanted, includeHidden);
   try {
-    if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
-    if (!(await waitFor(() => menu() !== null))) return false;
-    // Native v2 keeps the model list inert until the effort/view toggle is opened.
-    if (presetIndex !== undefined && !modelItem()) menu()?.querySelector<HTMLElement>('[data-model-picker-view-toggle]')?.click();
-    if (!(await waitFor(() => modelItem() !== null))) return false;
-    modelItem()!.click();
-    await wait(200);
+    if (trigger()?.getAttribute('aria-expanded') !== 'true') trigger()?.click();
+    await waitForPicker(() => menu() !== null, 'open');
+    // The inactive model pane still confirms the family; leave the active effort pane alone.
+    if (presetIndex === undefined || modelItem(true)?.getAttribute('aria-checked') !== 'true') {
+      if (presetIndex !== undefined && !modelItem()) menu()?.querySelector<HTMLElement>('[data-model-picker-view-toggle]')?.click();
+      await waitForPicker(() => modelItem() !== null, `show ${model}`);
+      if (modelItem()!.getAttribute('aria-checked') !== 'true') {
+        modelItem()!.click();
+        await wait(200);
+      }
+    }
 
     if (presetIndex !== undefined) {
-      if (!menu()) trigger.click();
-      if (!(await waitFor(() => modelItem(true)?.getAttribute('aria-checked') === 'true'))) return false;
+      // Selecting a visible family returns to effort; its view toggle is inert in this pane.
+      if (modelItem()) { modelItem()!.click(); await wait(200); }
+      if (!menu()) trigger()?.click();
+      await waitForPicker(() => modelItem(true)?.getAttribute('aria-checked') === 'true', `select ${model}`);
       const control = () => menu()?.querySelector<HTMLElement>('[data-reasoning-slider]');
       const slider = () => menu()?.querySelector<HTMLElement>('[role="slider"]');
-      if (!(await waitFor(() => {
+      await waitForPicker(() => {
         const node = control();
         return !!node && visible(node) && node.getAttribute('aria-disabled') !== 'true' && !!slider();
-      }))) return false;
+      }, 'enable its reasoning control');
       const current = () => Number(slider()?.getAttribute('aria-valuenow'));
       const min = Number(slider()!.getAttribute('aria-valuemin'));
       const max = Number(slider()!.getAttribute('aria-valuemax'));
@@ -269,16 +282,18 @@ export async function selectModel(model: string, effort: ReasoningEffort | null,
         const next = current() + (current() < presetIndex ? 1 : -1);
         const key = next > current() ? 'ArrowRight' : 'ArrowLeft';
         control()!.dispatchEvent(new KeyboardEvent('keydown', { key, code: key, bubbles: true, cancelable: true }));
-        if (!(await waitFor(() => current() === next))) return false;
+        await waitForPicker(() => current() === next, 'confirm the next reasoning level');
       }
-      return await waitFor(() => current() === presetIndex && modelItem(true)?.getAttribute('aria-checked') === 'true'
-        && trigger.getAttribute('data-selected-reasoning-effort') === effort);
+      await waitForPicker(() => current() === presetIndex && modelItem(true)?.getAttribute('aria-checked') === 'true'
+        && trigger()?.getAttribute('data-selected-reasoning-effort') === effort, `confirm ${effort} reasoning`);
+      return true;
     }
 
     if (!effort) return true;
-    if (!menu()) trigger.click();
+    if (!menu()) trigger()?.click();
     const pattern = EFFORT_LABELS[effort];
-    if (!pattern || !(await waitFor(() => item((label) => pattern.test(label)) !== null))) return false;
+    if (!pattern) return false;
+    await waitForPicker(() => item((label) => pattern.test(label)) !== null, `show ${effort} reasoning`);
     item((label) => pattern.test(label))!.click();
     return true;
   } finally {

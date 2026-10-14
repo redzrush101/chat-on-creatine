@@ -5,7 +5,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { defaultConfig, type Config } from '@shared/config';
-import { RootGuard, isInside } from '../src/main/fs/roots';
+import { RootGuard } from '../src/main/fs/roots';
+import { isInside } from '../src/shared/paths';
 import { ToolError } from '../src/main/mcp/tool';
 
 async function expectToolError(promise: Promise<unknown>, code: string): Promise<string> {

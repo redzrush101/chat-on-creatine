@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 
-// Live tests drive the real app against a signed-in ChatGPT account; see test/live/README.md.
+// Live tests drive the real app against a signed-in ChatGPT account.
 export default defineConfig({
   resolve: { alias: { '@shared': resolve(__dirname, 'src/shared') } },
   test: {

@@ -256,6 +256,14 @@ export interface Skill {
   path: string;
 }
 
+export interface PromptTemplate {
+  name: string;
+  description: string;
+  argumentHint: string;
+  body: string;
+  path: string;
+}
+
 export interface PluginStatus {
   id: string;
   name: string;

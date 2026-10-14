@@ -3,10 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageCommands } from '../src/page/commands';
 import { StreamRelay } from '../src/page/streams';
 
-const state = vi.hoisted(() => ({ editor: true, mounted: false, draft: '', click: (): boolean => true }));
+const state = vi.hoisted(() => ({ editor: true, picker: true, mounted: false, draft: '', click: (): boolean => true }));
 const selectModel = vi.hoisted(() => vi.fn(async () => true));
 vi.mock('../src/page/dom', () => ({
   findComposer: () => state.editor ? {} : null,
+  findModelTrigger: () => state.picker ? {} : null,
   composerForm: () => null,
   isGenerating: () => false,
   setComposerText: (text: string) => { if (!state.editor) return false; state.draft = text; return true; },
@@ -17,7 +18,7 @@ vi.mock('../src/page/dom', () => ({
 
 beforeEach(() => {
   vi.useFakeTimers();
-  Object.assign(state, { editor: true, mounted: false, draft: '' });
+  Object.assign(state, { editor: true, picker: true, mounted: false, draft: '' });
   selectModel.mockReset().mockResolvedValue(true);
 });
 
@@ -86,6 +87,19 @@ function setup() {
 }
 
 describe('page send readiness', () => {
+  it('withholds prefetch readiness until the native model control also mounts', async () => {
+    const { commands } = setup();
+    state.picker = false;
+    const ready = commands.run({ type: 'ready' });
+    const published = vi.fn();
+    void ready.then(published);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(published).not.toHaveBeenCalled();
+    state.picker = true;
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(ready).resolves.toEqual({ ok: true });
+  });
+
   it('restores a draft lost during hydration and sends once the controls mount', async () => {
     const { commands, click } = setup();
     const sending = commands.run({ type: 'send', text: 'message', files: [] });

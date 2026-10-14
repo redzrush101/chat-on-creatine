@@ -1,23 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
-import { relative, isAbsolute, join } from 'node:path';
-import type { AppState, CodingTask, InputDelivery, ModelOption, ModelSelection, SessionMeta } from '@shared/types';
+import type { AppState, CodingTask, InputDelivery, ModelOption, ModelSelection, PromptTemplate, SessionMeta } from '@shared/types';
 import type { ReasoningEffort } from '@shared/config';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
-import { BackendClient, defaultProfile } from './connection';
+import { BackendClient } from './connection';
 import type { CliOptions } from './options';
 import { Terminal } from './terminal';
 import { Transcript } from './transcript';
 import { safeText } from './format';
-import { extractImagePaths } from './attachments';
-import { COMMANDS, COMMAND_PATTERN } from './catalog';
-import { expandTemplate, loadTemplates, type PromptTemplate } from './prompts';
-import { expandFileReferences } from './file-context';
-
-export function contains(base: string, path: string): boolean {
-  const part = relative(base, path);
-  return !isAbsolute(part) && part !== '..' && !part.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`);
-}
+import { extractImagePaths } from '../main/app/image-paths';
+import { sessionBusy } from '@shared/session-state';
+import { isInside } from '@shared/paths';
 
 export class CliSession {
   id: string | null = null;
@@ -45,9 +38,7 @@ export class CliSession {
   get meta(): SessionMeta | undefined { return this.state.sessions.find((session) => session.id === this.id); }
 
   get busy(): boolean {
-    return !!this.id && (this.state.live[this.id]?.turn !== undefined && this.state.live[this.id]?.turn !== 'idle' ||
-      this.state.inputs.some((input) => input.sessionId === this.id && ['queued', 'sending'].includes(input.state)) ||
-      ['deciding', 'waiting-workers'].includes(this.meta?.goal.status ?? ''));
+    return sessionBusy(this.state, this.id);
   }
 
   async initialize(): Promise<void> {
@@ -61,7 +52,7 @@ export class CliSession {
     for (const folder of this.options.additionalRoots) {
       const path = await realpath(folder);
       if (!(await stat(path)).isDirectory()) throw new Error('--add-dir needs a folder, not a file.');
-      if (!roots.some((root) => contains(root.path, path))) roots.push({ id: randomUUID(), path, label: '' });
+      if (!roots.some((root) => isInside(root.path, path))) roots.push({ id: randomUUID(), path, label: '' });
     }
     if (roots.length !== this.state.config.roots.length) {
       await this.client.invoke('config:update', { roots });
@@ -96,13 +87,13 @@ export class CliSession {
     const chats = this.chats(query).filter((chat) => !currentFolderOnly || this.sessionCwd(chat) === this.cwd);
     const exact = chats.filter((chat) => chat.id.startsWith(query));
     if (query && exact.length === 1) return exact[0]!;
-    if (!chats.length) throw new Error('No matching chats. Use /sessions to list shared history.');
+    if (!chats.length) throw new Error('No matching chats. Use /resume --list to list shared history.');
     return await this.terminal!.pick('Resume a shared chat · current folder first', chats.sort((a, b) => Number(this.sessionCwd(b) === this.cwd) - Number(this.sessionCwd(a) === this.cwd))
       .map((chat) => ({ label: chat.title, detail: `${chat.id.slice(0, 8)} · ${this.sessionCwd(chat) ?? 'no folder'}`, value: chat })));
   }
 
   async reloadTemplates(): Promise<void> {
-    this.templates = await loadTemplates([join(this.options.profile ?? defaultProfile(), 'prompts'), join(this.cwd, '.creatine', 'prompts')], [...Object.keys(COMMANDS), ...this.state.skills.map((skill) => skill.id)]);
+    this.templates = await this.client.invoke('chat:templates', this.cwd);
   }
 
   sessionCwd(session: SessionMeta): string | null {
@@ -124,7 +115,7 @@ export class CliSession {
 
   async approve(): Promise<void> {
     await this.client.refresh();
-    if (this.state.config.yolo || this.state.config.roots.some((root) => contains(root.path, this.cwd))) return;
+    if (this.state.config.yolo || this.state.config.roots.some((root) => isInside(root.path, this.cwd))) return;
     let trust = this.options.trust;
     if (!trust && this.terminal) {
       trust = await this.terminal.pick(`Approve local tool access to ${safeText(this.cwd)}?`, [
@@ -140,12 +131,7 @@ export class CliSession {
   async send(text: string, delivery: InputDelivery = 'now', automation = this.mode, task?: CodingTask): Promise<{ sessionId: string; inputId: string }> {
     if (this.state.browser.signedIn === false) throw new Error('Sign in first with /login or creatine login. The GUI and CLI share the account.');
     await this.approve();
-    const invocation = COMMAND_PATTERN.exec(text);
-    const template = invocation && this.templates.find((template) => template.name === invocation[1] && !this.state.skills.some((skill) => skill.id === template.name));
-    const parsed = await expandFileReferences(await this.attachImages(template ? expandTemplate(template, invocation[2] ?? '') : text), this.cwd);
-    const prompt = [parsed.text, this.shellContext ? `Shell command output (reference data):\n${this.shellContext}` : ''].filter(Boolean).join('\n\n');
-    if (prompt.length > 80_000) throw new Error('This prompt and its file or shell context are too large. Select smaller @file line ranges or use /context clear.');
-    const attachments = [...new Set([...this.attachments, ...parsed.paths])];
+    if (text.length + this.shellContext.length > 80_000) throw new Error('This prompt and its file or shell context are too large. Select smaller @file line ranges or use /context clear.');
     if (this.state.connection.state !== 'connected') {
       await this.client.invoke('connection:connect');
       const connected = await this.client.waitFor((state) => ['connected', 'auth-failed', 'error'].includes(state.connection.state), 45_000);
@@ -155,7 +141,7 @@ export class CliSession {
     const project = await this.client.invoke('projects:add', this.cwd);
     const wasBusy = this.busy;
     const result = await this.client.invoke('chat:send', {
-      sessionId: this.id, text: prompt, attachments, delivery, title: this.name ?? undefined,
+      sessionId: this.id, text, shellContext: this.shellContext, attachments: this.attachments, delivery, title: this.name ?? undefined,
       cwd: this.cwd, projectId: project.id, ...this.selection,
       automation: wasBusy ? undefined : automation, task
     });
@@ -181,7 +167,7 @@ export class CliSession {
       this.terminal?.flash(`Image attached: ${clipboard.imagePath.split(/[\\/]/).at(-1)}`);
       return;
     }
-    if (!clipboard.text) throw new Error('The clipboard has no image or text. Copy an image, then use Ctrl+V, Alt+V or /paste. Terminal paste shortcuts may only paste text.');
+    if (!clipboard.text) throw new Error('The clipboard has no image or text. Copy an image, then use Ctrl+V or Alt+V. Terminal paste shortcuts may only paste text.');
     this.terminal?.editor.insert(await this.attachImages(clipboard.text));
   }
 
@@ -213,14 +199,14 @@ export class CliSession {
         effort = selected;
       }
     }
-    if (id === 'default') this.selection = { model: null, reasoning: null };
+    let selection: ModelSelection;
+    if (id === 'default') selection = { model: null, reasoning: null };
     else {
       if (!option) throw new Error(`Unknown model ${id ?? ''}. Use /model to choose from your account.`);
       if (effort && !option.efforts.includes(effort)) throw new Error(`${option.label} offers ${option.efforts.join(', ') || 'no reasoning levels'}.`);
-      this.selection = modelSelection(option, effort ?? this.selection.reasoning);
+      selection = modelSelection(option, effort ?? this.selection.reasoning);
     }
-    if (this.id) await this.client.invoke('sessions:update', this.id, this.selection);
-    await this.client.invoke('config:update', { ui: { defaultModel: this.selection.model, defaultReasoning: this.selection.reasoning } });
+    this.selection = await this.client.invoke('chat:selectModel', this.id, selection);
     await this.client.refresh();
   }
 
@@ -250,7 +236,6 @@ export class CliSession {
 
   async stop(): Promise<void> {
     if (!this.id) return;
-    for (const input of this.state.inputs.filter((item) => item.sessionId === this.id && item.state === 'queued')) await this.client.invoke('inputs:cancel', input.id);
     await this.client.invoke('chat:stop', this.id);
   }
 
@@ -264,6 +249,6 @@ export class CliSession {
     const models = await this.models();
     const model = findModel(models, this.selection.model ?? this.state.models.defaultModel);
     if (!model) throw new Error('This model is unavailable on your account. Choose a model with /model.');
-    if (this.selection.reasoning && !model.efforts.includes(this.selection.reasoning)) throw new Error(`${model.label} does not offer ${this.selection.reasoning} reasoning. Use /effort.`);
+    if (this.selection.reasoning && !model.efforts.includes(this.selection.reasoning)) throw new Error(`${model.label} does not offer ${this.selection.reasoning} reasoning. Use /model.`);
   }
 }

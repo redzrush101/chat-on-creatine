@@ -2,7 +2,7 @@ import { memo, useContext, useMemo } from 'react';
 import { Check, CircleAlert, CircleDot, Copy, Download, Info, Paperclip, PencilLine, TriangleAlert } from 'lucide-react';
 import type { Citation, SessionEvent, WorkerState } from '@shared/types';
 import { resolveMarkers, stripMarkers } from '../../lib/citations';
-import { renderMarkdown } from '../../lib/markdown';
+import { streamingMarkdown } from '../../lib/markdown';
 import { useAppState } from '../../lib/store';
 import { basename, cx, formatAgo } from '../../lib/format';
 import { useCopy } from '../../lib/hooks';
@@ -155,7 +155,8 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
 
 function AssistantText({ id, text, citations, streaming, final }: { id: string; text: string; citations: Citation[] | undefined; streaming: boolean; final: boolean }) {
   const sources = useContext(SourcesContext);
-  const html = useMemo(() => renderMarkdown(resolveMarkers(text, citations, sources)), [text, citations, sources]);
+  const render = useMemo(streamingMarkdown, []);
+  const html = useMemo(() => render(resolveMarkers(text, citations, sources), streaming), [text, citations, sources, streaming, render]);
   return (
     <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')} data-event-id={id}>
       <div className="md" dangerouslySetInnerHTML={{ __html: html }} />

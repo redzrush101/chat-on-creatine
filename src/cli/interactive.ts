@@ -1,9 +1,10 @@
 import { COMMANDS, COMMAND_PATTERN, runCommand } from './commands';
-import { ACCENT, DIM, color, safeText, screenColumns, tilde } from './format';
+import { ACCENT, DIM, color, safeText, screenColumns, setTerminalTheme, tilde } from './format';
 import { nested, toolHeadline, userRows } from './render';
 import type { CliSession } from './session';
 import { Transcript } from './transcript';
 import { completeFile } from './completion';
+import { turnActivity } from '@shared/turn-activity';
 
 export async function interactive(session: CliSession): Promise<void> {
   const terminal = session.terminal!;
@@ -28,6 +29,7 @@ export async function interactive(session: CliSession): Promise<void> {
     session.transcript = new Transcript((text) => terminal.print(text), terminal.colored);
   };
   const update = () => {
+    setTerminalTheme(session.state.config.ui.theme);
     const meta = session.meta;
     if (meta) session.selection = { model: meta.model, reasoning: meta.reasoning };
     const model = session.state.models.models.find((item) => item.id === session.selection.model || item.slugs?.includes(session.selection.model ?? ''));
@@ -53,7 +55,8 @@ export async function interactive(session: CliSession): Promise<void> {
     const working = !!shellId || session.busy;
     busySince = working || active.length ? busySince ?? Date.now() : null;
     const waiting = `Waiting for ${active.length} background agent${active.length === 1 ? '' : 's'} to finish`;
-    terminal.busy = working ? { verb: shellId ? 'Running shell command' : session.transcript.activity(), since: session.transcript.since ?? busySince! }
+    const activity = meta ? turnActivity(meta, session.state.live[meta.id], [...session.transcript.events.values()]) : null;
+    terminal.busy = working ? { verb: shellId ? 'Running shell command' : activity?.label.replace(/…$/, '') ?? session.transcript.activity(), since: session.transcript.since ?? busySince! }
       : active.length ? { verb: waiting, since: busySince! } : null;
     terminal.draw();
   };
@@ -113,10 +116,10 @@ export async function interactive(session: CliSession): Promise<void> {
     }
   };
   terminal.onSubmit = (text) => {
-    if (text === '/exit' || text === '/quit') { done(); return; }
+    if (text === '/exit') { done(); return; }
     pendingInput = pendingInput.then(async () => {
       if (!text && !session.attachments.length) return;
-      if (COMMAND_PATTERN.test(text) && text !== '/clear') echo(text);
+      if (COMMAND_PATTERN.test(text)) echo(text);
       await (text.startsWith('!') ? shell(text.slice(text.startsWith('!!') ? 2 : 1), !text.startsWith('!!')) : runCommand(text, session, { newChat: reset, exit: done }));
     }).catch((reason: unknown) => {
       if (!text.startsWith('!')) terminal.editor.set([text, terminal.editor.text].filter(Boolean).join('\n'));

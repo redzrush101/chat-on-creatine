@@ -1,13 +1,16 @@
 import type { InputItem, SessionEvent } from '@shared/types';
 import { describeTool } from '@shared/tool-labels';
 import { DIM, color, indent, screenColumns } from './format';
-import { markdown, settled } from './markdown';
+import { markdown } from './markdown';
+import { settled } from '@shared/markdown-stream';
 import { safeText } from './format';
 import { cited, duration, eventRows, formatEvent, type RenderOptions } from './render';
+import { EventHistory } from '@shared/event-history';
 
 /** Streams one session into scrollback: finished rows are written once, unfinished ones stay live. */
 export class Transcript {
-  readonly events = new Map<string, SessionEvent>();
+  private readonly history = new EventHistory();
+  readonly events = this.history.events;
   private readonly printed = new Set<string>();
   private readonly active = new Map<string, SessionEvent>();
   /**
@@ -28,7 +31,8 @@ export class Transcript {
 
   consume(events: SessionEvent[]): void {
     for (const event of events) {
-      this.events.set(event.id, event);
+      this.history.merge([event]);
+      if (this.events.get(event.id) !== event) continue;
       this.version++;
       if (event.kind === 'assistant') {
         if (event.streaming && this.printed.has(event.id)) continue;

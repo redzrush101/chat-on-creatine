@@ -1,4 +1,5 @@
 import type { SessionEvent, SessionLive, SessionMeta } from '@shared/types';
+import { describeTool } from './tool-labels';
 
 export interface TurnActivity {
   label: string;
@@ -8,7 +9,9 @@ export interface TurnActivity {
 
 export function turnActivity(session: SessionMeta, live: SessionLive | undefined, events: SessionEvent[] | null): TurnActivity | null {
   if (live && live.turn !== 'idle') {
-    const label = live.turn === 'sending' ? 'Sending…' : live.turn === 'compacting' ? 'Compacting…' : 'Working…';
+    const active = events?.findLast((event) => event.kind === 'tool' && event.status === 'running' || (event.kind === 'assistant' || event.kind === 'reasoning') && event.streaming);
+    const step = active?.kind === 'tool' ? describeTool(active).active : active?.kind === 'reasoning' ? 'Thinking' : active?.kind === 'assistant' ? 'Responding' : 'Working';
+    const label = live.turn === 'sending' ? 'Sending…' : live.turn === 'compacting' ? 'Compacting…' : `${step}…`;
     return { label, active: true };
   }
   if (session.goal.mode !== 'off') {

@@ -16,12 +16,13 @@ it('passes a running command ID directly from exec_command to write_stdin over M
   const config = defaultConfig();
   config.roots = [{ id: 'test', path: root, label: 'Test' }];
   const processes = new ProcessManager();
+  let callerCwd: string | null = null;
   const server = new McpHttpServer({
     getConfig: () => config,
     tools: [execCommandTool, writeStdinTool],
     services: { paths: new RootGuard(() => config), processes, setPlan: () => {}, agents: null, finish: null },
     tokens: { core: generateToken(), desktop: generateToken(), plugins: generateToken() },
-    resolveCaller: async () => null,
+    resolveCaller: async () => callerCwd ? { sessionId: 'chat', conversationId: 'conversation', cwd: callerCwd, kind: 'chat' } : null,
     steering: () => []
   });
   const client = new Client({ name: 'test', version: '1' });
@@ -51,6 +52,10 @@ it('passes a running command ID directly from exec_command to write_stdin over M
     expect(patched.isError, JSON.stringify(patched.content)).toBe(false);
     expect(patched.structuredContent).toMatchObject({ exit_code: 0, output: expect.stringContaining('Success. Updated') });
     expect(await readFile(join(root, 'from-shell.txt'), 'utf8')).toBe('PATCH_OK\n');
+    callerCwd = os.tmpdir();
+    const outside = await client.callTool({ name: 'exec_command', arguments: { cmd: 'echo should-not-run' } });
+    expect(outside.isError).toBe(true);
+    expect(JSON.stringify(outside.content)).toContain('outside the approved folders');
   } finally {
     await client.close();
     await server.stop();

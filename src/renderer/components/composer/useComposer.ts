@@ -5,6 +5,8 @@ import { reportError, notify } from '../common/Toasts';
 import type { ModelSelection } from '@shared/types';
 import type { ComposerProps } from './types';
 import { useComposerDraft } from './draft';
+import { sessionBusy } from '@shared/session-state';
+import { findModel, modelSelection } from '@shared/model-selection';
 
 export const MODES: { value: AutomationMode; label: string; hint: string }[] = [
   { value: 'off', label: 'Normal', hint: 'One answer per message' },
@@ -30,8 +32,7 @@ export function useComposer({
   const [sending, setSending] = useState(false);
   const [clipboardPaste, setClipboardPaste] = useState<Promise<string[]> | null>(null);
 
-  const live = sessionId ? app.live[sessionId] : undefined;
-  const busy = live !== undefined && live.turn !== 'idle';
+  const busy = sessionBusy(app, sessionId);
   const canStop = busy || activity?.active === true;
   const mode: AutomationMode = session ? session.goal.mode : newChat.mode;
   const browserBlocked = app.browser.signedIn === false || !app.browser.ready;
@@ -86,6 +87,7 @@ export function useComposer({
         text: body,
         attachments: files,
         delivery: session && busy ? delivery : 'now',
+        ...(!session && taskCwd ? { cwd: taskCwd } : {}),
         automation,
         ...(!session ? { projectId: newChat.projectId, model: newChat.model.model, reasoning: newChat.model.reasoning } : {})
       });
@@ -125,6 +127,20 @@ export function useComposer({
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return;
+    if (event.ctrlKey && event.key.toLowerCase() === 'p' || event.shiftKey && event.key === 'Tab') {
+      event.preventDefault();
+      if (busy) { notify('Stop the current turn before changing models.', 'info'); return; }
+      const current = findModel(app.models.models, modelValue.model ?? app.models.defaultModel);
+      if (event.key === 'Tab') {
+        const efforts = current?.efforts ?? [];
+        const next = efforts[(efforts.findIndex((level) => level === modelValue.reasoning) + 1) % efforts.length];
+        if (current && next) modelChange(modelSelection(current, next));
+      } else {
+        const next = app.models.models[(app.models.models.findIndex((model) => model === current) + 1) % app.models.models.length];
+        if (next) modelChange(modelSelection(next, modelValue.reasoning));
+      }
+      return;
+    }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       // While a turn runs, Enter queues for after it; Ctrl/Cmd+Enter steers into the current turn.
@@ -137,8 +153,7 @@ export function useComposer({
 
   const modelValue: ModelSelection = session ? { model: session.model, reasoning: session.reasoning } : newChat.model;
   const modelChange = (value: ModelSelection) => {
-    if (session) invoke('sessions:update', session.id, { model: value.model, reasoning: value.reasoning }).catch(reportError);
-    else onNewChatChange({ model: value });
+    void invoke('chat:selectModel', sessionId, value).then((model) => { if (!session) onNewChatChange({ model }); }).catch(reportError);
   };
 
   const placeholder = busy

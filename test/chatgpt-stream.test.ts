@@ -219,6 +219,17 @@ describe('ConversationStreamParser', () => {
     expect(result.completed).toBe(0);
     expect(result.latest.get('m2')!.text).toBe('hello');
   });
+
+  it('ignores pointer operations that could mutate object prototypes', () => {
+    const { latest } = run(sse([
+      { data: json({ o: 'add', v: { message: assistantMessage, conversation_id: CONV } }) },
+      { data: json({ p: '/message/__proto__/creatineInjected', o: 'replace', v: true }) },
+      { data: json({ p: '/message/constructor/prototype/creatineInjected', o: 'replace', v: true }) },
+      { data: json({ p: '/message/content/parts/0', o: 'append', v: 'Safe response' }) }
+    ]));
+    expect(Reflect.get({}, 'creatineInjected')).toBeUndefined();
+    expect(latest.get('m3')?.text).toBe('Safe response');
+  });
 });
 
 describe('conversationToMessages', () => {

@@ -3,6 +3,7 @@ import hljs from 'highlight.js/lib/common';
 import katex from 'katex';
 import { Marked, type TokenizerAndRendererExtension } from 'marked';
 import { escapeHtml } from './format';
+import { settled } from '@shared/markdown-stream';
 
 function math(text: string, displayMode: boolean): string {
   return katex.renderToString(text, { displayMode, throwOnError: false, strict: 'ignore' });
@@ -76,4 +77,22 @@ DOMPurify.addHook('afterSanitizeAttributes', (node) => {
 export function renderMarkdown(source: string): string {
   const html = markdown.parse(source, { async: false });
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, mathMl: true, svg: true } });
+}
+
+/** Reuse completed blocks while streaming; a final render resolves cross-block references. */
+export function streamingMarkdown(): (source: string, streaming: boolean) => string {
+  let committed = '';
+  let html = '';
+  return (source, streaming) => {
+    if (!streaming) return renderMarkdown(source);
+    if (!source.startsWith(committed)) { committed = ''; html = ''; }
+    const pending = source.slice(committed.length);
+    const end = settled(pending);
+    if (end) {
+      const block = pending.slice(0, end);
+      html += renderMarkdown(block);
+      committed += block;
+    }
+    return html + renderMarkdown(source.slice(committed.length));
+  };
 }

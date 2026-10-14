@@ -1,8 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { parseArguments } from './arguments';
-
-export interface PromptTemplate { name: string; description: string; argumentHint: string; body: string; path: string }
+import { parseArguments } from '@shared/arguments';
+import type { PromptTemplate } from '@shared/types';
 
 /** Project templates override personal templates; reserved commands always keep their meaning. */
 export async function loadTemplates(directories: string[], reserved: string[]): Promise<PromptTemplate[]> {

@@ -7,7 +7,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmationMs = 0) {
+function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmationMs = 0, remount = false) {
   const state = { open: false, modelsVisible: false, selected: 'Current', effort: 1 };
   let confirmedEffort: number | null = state.effort;
   let transitioning = false;
@@ -17,6 +17,7 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmat
     id: '', innerText: text, textContent: text, isConnected: true,
     getClientRects: () => [1], closest: () => hidden() ? {} : null,
     getAttribute: (key: string) => attrs()[key] ?? null,
+    hasAttribute: (key: string) => key in attrs(),
     click: vi.fn(click), focus: () => {},
     dispatchEvent: (event: KeyboardEvent) => {
       if (event.key === 'Escape') state.open = false;
@@ -29,7 +30,15 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmat
   }, () => false,
     () => { state.open = !state.open; });
   trigger.id = 'picker';
-  const toggle = node('Effort', () => ({}), () => false, () => { state.modelsVisible = !state.modelsVisible; });
+  let currentTrigger = trigger;
+  trigger.click = vi.fn(() => {
+    state.open = !state.open;
+    if (remount && currentTrigger === trigger) {
+      trigger.isConnected = false;
+      currentTrigger = { ...trigger, id: 'hydrated-picker', isConnected: true };
+    }
+  });
+  const toggle = node('Effort', () => ({}), () => state.modelsVisible, () => { if (!state.modelsVisible) state.modelsVisible = true; });
   const model = node('Legacy', () => ({ 'aria-checked': String(state.selected === 'Legacy') }),
     () => !state.modelsVisible, () => {
       state.selected = 'Legacy';
@@ -51,13 +60,13 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmat
   };
   const slider = node('', () => ({ 'aria-valuenow': String(state.effort), 'aria-valuemin': '0', 'aria-valuemax': '2' }),
     () => false, () => {});
-  const menu = { ...node('', () => ({ 'aria-labelledby': trigger.id }), () => !state.open, () => {}),
+  const menu = { ...node('', () => ({ 'aria-labelledby': currentTrigger.id }), () => !state.open, () => {}),
     querySelectorAll: () => [toggle, control, model],
     querySelector: (selector: string) => selector.includes('view-toggle') ? toggle
       : selector.includes('reasoning-slider') ? control : slider
   };
   vi.stubGlobal('document', {
-    querySelectorAll: (selector: string) => selector.includes('data-codex-intelligence-trigger') && mounted ? [trigger]
+    querySelectorAll: (selector: string) => selector.includes('data-codex-intelligence-trigger') && mounted ? [currentTrigger]
       : selector === '[role="menu"]' && state.open ? [menu] : []
   });
   vi.stubGlobal('KeyboardEvent', class extends Event {
@@ -71,6 +80,15 @@ function picker(ignoreSlider = false, transitionMs = 0, triggerMs = 0, confirmat
 }
 
 describe('native model picker', () => {
+  it('follows the current control when hydration replaces the trigger after opening', async () => {
+    const { state } = picker(false, 0, 0, 0, true);
+    const selecting = selectModel('Legacy', 'high', 2);
+    await vi.runAllTimersAsync();
+    await expect(selecting).resolves.toBe(true);
+    expect(state.effort).toBe(2);
+    expect(state.open).toBe(false);
+  });
+
   it.each([['none', 0], ['medium', 1], ['high', 2]] as const)(
     'opens the inert model list and confirms %s before closing', async (effort, index) => {
       const { state, model, toggle } = picker();
@@ -86,8 +104,9 @@ describe('native model picker', () => {
   it('refuses a slider that ignores the requested change', async () => {
     const { state } = picker(true);
     const selecting = selectModel('Legacy', 'high', 2);
+    const assertion = expect(selecting).rejects.toThrow('confirm the next reasoning level');
     await vi.runAllTimersAsync();
-    await expect(selecting).resolves.toBe(false);
+    await assertion;
     expect(state.effort).toBe(1);
     expect(state.open).toBe(false);
   });
@@ -113,6 +132,25 @@ describe('native model picker', () => {
     const selecting = selectModel('Legacy', 'medium', 1);
     await vi.runAllTimersAsync();
     await expect(selecting).resolves.toBe(true);
+    expect(state.open).toBe(false);
+  });
+
+  it('leaves an already selected family intact and changes only its reasoning control', async () => {
+    const { state, model } = picker();
+    state.selected = 'Legacy';
+    const selecting = selectModel('Legacy', 'high', 2);
+    await vi.runAllTimersAsync();
+    await expect(selecting).resolves.toBe(true);
+    expect(model.click).not.toHaveBeenCalled();
+    expect(state.effort).toBe(2);
+  });
+
+  it('waits for a slow native confirmation without reopening or resetting the selected family', async () => {
+    const { state, model } = picker(false, 0, 0, 5000);
+    const selecting = selectModel('Legacy', 'medium', 1);
+    await vi.runAllTimersAsync();
+    await expect(selecting).resolves.toBe(true);
+    expect(model.click).toHaveBeenCalledOnce();
     expect(state.open).toBe(false);
   });
 });

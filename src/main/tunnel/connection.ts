@@ -69,6 +69,7 @@ export class ConnectionManager {
   private generation = 0;
   private running = false;
   private wiring: string | null = null;
+  private toolLocations: Promise<{ tunnelClient: string | null; cloudflared: string | null }> | null = null;
 
   constructor(private readonly deps: ConnectionDeps) {
     for (const id of SURFACE_IDS) {
@@ -145,7 +146,11 @@ export class ConnectionManager {
   }
 
   /** The tunnel executables this install can find, for the setup screen. */
-  async tools(): Promise<{ tunnelClient: string | null; cloudflared: string | null }> {
+  tools(): Promise<{ tunnelClient: string | null; cloudflared: string | null }> {
+    return this.toolLocations ??= this.locateTools();
+  }
+
+  private async locateTools(): Promise<{ tunnelClient: string | null; cloudflared: string | null }> {
     const { connection } = this.deps.getConfig();
     const dirs = { binDir: this.deps.binDir, resourcesBinDir: this.deps.resourcesBinDir };
     const [tunnelClient, cloudflared] = await Promise.all([
@@ -162,6 +167,7 @@ export class ConnectionManager {
   }
 
   private onConfigChange(next: Config): void {
+    this.toolLocations = null;
     if (!this.running || this.wiring === null || wiringOf(next) === this.wiring) return;
     log.info('connection settings changed; reconnecting');
     this.generation += 1;

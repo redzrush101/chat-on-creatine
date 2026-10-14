@@ -29,6 +29,8 @@ export class SessionStore {
   private readonly metas = new Map<string, SessionMeta>();
   private readonly histories = new Map<string, History>();
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly recordTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly pendingRecords = new Map<string, Map<string, SessionEvent>>();
   private readonly deletions = new Set<Promise<void>>();
   private readonly emitter = new Emitter<{
     meta: MetaChange;
@@ -107,6 +109,9 @@ export class SessionStore {
     this.histories.delete(id);
     clearTimeout(this.saveTimers.get(id));
     this.saveTimers.delete(id);
+    clearTimeout(this.recordTimers.get(id));
+    this.recordTimers.delete(id);
+    this.pendingRecords.delete(id);
     this.emitter.emit('meta', { deleted: id });
     const deletion = flushWrites().then(() => rm(join(this.dir, id), { recursive: true, force: true }));
     this.deletions.add(deletion);
@@ -142,9 +147,11 @@ export class SessionStore {
     if (!meta || !history || events.length === 0) return;
     for (const event of events) history.events.set(event.id, event);
     if (this.recording()) {
-      void appendText(this.eventsFile(id), events.map((event) => `${JSON.stringify(event)}\n`).join(''))
-        .catch((error: unknown) => this.log.error(`could not record session ${id}`, error));
-      history.lines += events.length;
+      let pending = this.pendingRecords.get(id);
+      if (!pending) this.pendingRecords.set(id, (pending = new Map()));
+      for (const event of events) pending.set(event.id, event);
+      if (events.some((event) => !('streaming' in event) || !event.streaming)) this.record(id);
+      else if (!this.recordTimers.has(id)) this.recordTimers.set(id, setTimeout(() => this.record(id), SAVE_DELAY_MS));
     }
     meta.updatedAt = Date.now();
     this.scheduleSave(id);
@@ -163,6 +170,7 @@ export class SessionStore {
 
   /** Writes all pending meta changes now and waits for every queued write. */
   async flush(): Promise<void> {
+    for (const id of [...this.pendingRecords.keys()]) this.record(id);
     for (const id of [...this.saveTimers.keys()]) {
       clearTimeout(this.saveTimers.get(id));
       this.save(id);
@@ -219,11 +227,23 @@ export class SessionStore {
   }
 
   private scheduleSave(id: string): void {
-    clearTimeout(this.saveTimers.get(id));
+    if (this.saveTimers.has(id)) return;
     this.saveTimers.set(
       id,
       setTimeout(() => this.save(id), SAVE_DELAY_MS)
     );
+  }
+
+  private record(id: string): void {
+    clearTimeout(this.recordTimers.get(id));
+    this.recordTimers.delete(id);
+    const pending = this.pendingRecords.get(id);
+    this.pendingRecords.delete(id);
+    const history = this.histories.get(id);
+    if (!pending?.size || !history) return;
+    void appendText(this.eventsFile(id), [...pending.values()].map((event) => `${JSON.stringify(event)}\n`).join(''))
+      .catch((error: unknown) => this.log.error(`could not record session ${id}`, error));
+    history.lines += pending.size;
   }
 
   private save(id: string): void {

@@ -75,7 +75,7 @@ describe('model selection before delivery', () => {
     const session = store.create({ kind: 'chat' });
     const item = outbox.enqueue({ sessionId: session.id, text: 'message', attachments: [], delivery: 'now', source: 'app' });
     await vi.waitFor(() => expect(outbox.get(item.id)?.state).toBe('sent'));
-    expect(command.mock.calls[0]?.[1]).toEqual({ type: 'select-model', model: '', effort: null, catalog });
+    expect(command.mock.calls.find((call) => call[1].type === 'select-model')?.[1]).toEqual({ type: 'select-model', model: '', effort: null, catalog });
   });
 
   it('applies changed model and effort on an existing conversation before sending', async () => {
@@ -87,7 +87,7 @@ describe('model selection before delivery', () => {
     store.update(session.id, { model: 'legacy-thinking', reasoning: 'high' });
     const second = outbox.enqueue({ sessionId: session.id, text: 'second', attachments: [], delivery: 'now', source: 'app' });
     await vi.waitFor(() => expect(outbox.get(second.id)?.state).toBe('sent'));
-    expect(command.mock.calls.map((call) => call[1])).toEqual([
+    expect(command.mock.calls.map((call) => call[1]).filter((cmd) => cmd.type !== 'ready')).toEqual([
       { type: 'select-model', model: 'thinking', effort: 'medium', catalog }, { type: 'send', text: 'first', files: [] },
       { type: 'select-model', model: 'legacy-thinking', effort: 'high', catalog }, { type: 'send', text: 'second', files: [] }
     ]);
@@ -106,12 +106,24 @@ describe('model selection before delivery', () => {
     await vi.waitFor(() => expect(host.openTab).toHaveBeenCalledTimes(2));
   });
 
+  it('does not adopt a preloaded error page and confirms composer readiness before reuse', async () => {
+    const { command, host } = setup();
+    command.mockImplementation(async (tab, cmd) => cmd.type === 'ready' && tab === 'tab0' ? { ok: false, error: 'Composer did not load' } : { ok: true });
+    host.closeTab = vi.fn(async () => {});
+    router.start();
+    await vi.waitFor(() => expect(host.closeTab).toHaveBeenCalledWith('tab0'));
+    const session = store.create({ kind: 'chat' });
+    await router.ensureTab(session, true);
+    expect(vi.mocked(host.openTab).mock.calls).toHaveLength(3);
+    expect(command.mock.calls.some(([tab, cmd]) => tab === 'tab0' && cmd.type === 'select-model')).toBe(false);
+  });
+
   it('keeps the input as a readable failure and never sends when selection fails', async () => {
     const { command } = setup({ ok: false, error: 'Could not confirm the thinking level.' });
     const session = store.create({ kind: 'chat', model: 'thinking', reasoning: 'high' });
     const item = outbox.enqueue({ sessionId: session.id, text: 'message', attachments: [], delivery: 'now', source: 'app' });
     await vi.waitFor(() => expect(outbox.get(item.id)).toMatchObject({ state: 'failed', error: 'Could not confirm the thinking level.' }));
-    expect(command.mock.calls.map((call) => call[1].type)).toEqual(['select-model']);
+    expect(command.mock.calls.map((call) => call[1].type).filter((type) => type !== 'ready')).toEqual(['select-model']);
     expect(router.turnOf(session.id)).toBe('idle');
   });
 });

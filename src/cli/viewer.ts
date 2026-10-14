@@ -19,7 +19,7 @@ export class Viewer {
     this.offset = this.follow ? this.end : Math.min(this.offset, this.end);
     const visible = rows.slice(this.offset, this.offset + body);
     const position = rows.length ? `${this.offset + 1}–${this.offset + visible.length} of ${rows.length}` : 'empty';
-    const head = `${color(`1;${ACCENT}`, ' Transcript', this.colored)}${color(DIM, clip(` · ctrl+o or esc to return · ↑↓ pgup pgdn g G to scroll · ${position}`, columns - 11), this.colored)}`;
+    const head = `${color(ACCENT, color(1, ' Transcript', this.colored), this.colored)}${color(DIM, clip(` · ctrl+o or esc to return · ↑↓ pgup pgdn g G to scroll · ${position}`, columns - 11), this.colored)}`;
     const lines = [head, ...visible];
     while (lines.length < height) lines.push('');
     return `\x1b[H${lines.map((line) => `${line}\x1b[K`).join('\n')}\x1b[J`;

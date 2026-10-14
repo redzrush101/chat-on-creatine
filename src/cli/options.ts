@@ -153,8 +153,8 @@ add <name> --url <http(s) URL>, remove|enable|disable|restart <name>.
 Put global options such as --user-data before mcp. Interactive controls: Enter sends;
 Ctrl+J or Alt+Enter adds a line; Tab completes; Esc stops; Ctrl+C stops or exits.
 @file includes text; @file:10-30 selects lines; @"file with spaces" quotes a path.
-Ctrl+G opens VISUAL/EDITOR; Ctrl+V or Alt+V pastes images; /paste also works.
-Ctrl+P cycles models; Shift+Tab cycles reasoning. /reload loads prompt templates.
+Ctrl+G opens VISUAL/EDITOR; Ctrl+V or Alt+V pastes images; Ctrl+L clears the screen.
+Ctrl+P cycles models; Shift+Tab cycles reasoning. /context reload loads prompt templates.
 Use /help for sessions, models, plans, agents, skills, permissions and setup.
 The CLI shares login, history, approved folders and settings with the GUI.
 `;

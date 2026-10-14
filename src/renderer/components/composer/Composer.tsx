@@ -9,6 +9,7 @@ import { DropdownLabel, ModelPicker } from './ModelPicker';
 import { PendingInputs } from './PendingInputs';
 import { RepoBar } from './RepoBar';
 import { CodingActions } from './CodingActions';
+import { PromptPicker } from './PromptPicker';
 import { MODES, useComposer } from './useComposer';
 import type { ComposerProps } from './types';
 
@@ -74,6 +75,7 @@ export function Composer(props: ComposerProps) {
           <Plus size={16} />
         </button>
         <CodingActions disabled={workflowDisabled || !taskCwd} onRun={runTask} />
+        <PromptPicker cwd={taskCwd} skills={app.skills} onChoose={(prompt) => { setText(prompt); field.current?.focus(); }} />
         <Menu
           label="Mode"
           entries={MODES.map((item) => ({ label: `${item.label} — ${item.hint}`, checked: item.value === mode, onSelect: () => setMode(item.value) }))}
@@ -99,7 +101,7 @@ export function Composer(props: ComposerProps) {
           </button>
         )}
         <span className="composer-spacer" />
-        <ModelPicker value={modelValue} catalog={app.models} onChange={modelChange} />
+        <ModelPicker value={modelValue} catalog={app.models} onChange={modelChange} disabled={busy} />
         {session && <ContextMeter sessionId={session.id} tokens={session.contextTokens} advisory={app.config.context.advisoryTokens} />}
       </div>
     </div>

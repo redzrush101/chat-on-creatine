@@ -72,7 +72,7 @@ function isText(buffer) {
 }
 
 function checkTree() {
-  const files = git('ls-files', '-z').split('\0').filter(Boolean);
+  const files = git('ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean);
   const problems = [];
   for (const path of files) {
     if (path === 'package-lock.json') {

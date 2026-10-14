@@ -22,7 +22,7 @@ const SHORTCUTS = [
   ['esc to interrupt', 'ctrl+o for transcript', 'tab to complete'],
   ['ctrl+j for newline', '↑↓ for history', 'ctrl+v or alt+v to paste'],
   ['ctrl+g for editor', 'ctrl+p next model', 'shift+tab reasoning'],
-  ['ctrl+c to clear or exit']
+  ['ctrl+c to clear or exit', 'ctrl+l to clear screen']
 ];
 
 /** Character-wraps the draft so the cursor maps onto the same rows; continuation rows are indented. */
@@ -423,6 +423,7 @@ export class Terminal {
       if (action === 'interrupt' || action === 'exit') this.onInterrupt(action === 'exit');
       if (action === 'stop') this.onStop();
       if (action === 'expand') { this.openViewer(); return; }
+      if (action === 'clear') { this.clearScreen(); return; }
       if (action === 'complete') this.onComplete();
       if (action === 'external') { void this.editDraft().catch((error: unknown) => this.onError(error)); return; }
       if (action === 'model') this.onModel();

@@ -25,6 +25,7 @@ function setup(args: string[] = []) {
   const invoke = vi.fn(async (channel: string, ...args: unknown[]) => {
     if (channel === 'projects:add') return { id: 'project' };
     if (channel === 'sessions:events') return [];
+    if (channel === 'chat:templates') return [];
     if (channel === 'config:update') { Object.assign(config, args[0]); return config; }
     if (channel === 'chat:send') {
       if (fail) throw new Error('Remote send failed');
@@ -39,7 +40,7 @@ function setup(args: string[] = []) {
   return { session, state, invoke, fail: () => { fail = true; } };
 }
 
-it('expands templates and file context through the same send boundary in print and interactive modes', async () => {
+it('delegates raw templates, file references and shell context to the shared send boundary', async () => {
   const { session, invoke } = setup();
   await writeFile(join(dir, 'source.ts'), 'first\nsecond\nthird');
   session.templates = [{ name: 'audit', description: '', argumentHint: '', body: 'Review @"source.ts":2. Focus on $1', path: '' }];
@@ -48,12 +49,10 @@ it('expands templates and file context through the same send boundary in print a
   await session.send('/audit correctness', 'after-turn');
   const call = invoke.mock.calls.find((call) => call[0] === 'chat:send')!;
   expect(call[1]).toMatchObject({ title: 'Review task', cwd: dir, delivery: 'after-turn', projectId: 'project' });
-  const request = call[1] as { text: string };
-  expect(request.text).toContain('Focus on correctness');
-  expect(request.text).toContain('2: second');
-  expect(request.text).not.toContain('1: first');
-  expect(request.text).toContain('$ npm test');
-  expect(request.text).toContain('one test failed');
+  const request = call[1] as { text: string; shellContext: string };
+  expect(request.text).toBe('/audit correctness');
+  expect(request.shellContext).toContain('$ npm test');
+  expect(request.shellContext).toContain('one test failed');
   expect(session.shellContext).toBe('');
   expect(session.id).toBe('chat');
 });
@@ -70,6 +69,25 @@ it('retains pending context and attachments when a send fails, and rejects overs
   invoke.mockClear();
   await expect(session.send('x'.repeat(80_001))).rejects.toThrow('too large');
   expect(invoke).not.toHaveBeenCalled();
+});
+
+it('lists chats through /resume and lists templates through /context without reserving redundant commands', async () => {
+  const { session, state } = setup();
+  const store = new SessionStore(join(dir, 'history'), { recording: () => true });
+  store.load();
+  store.create({ kind: 'chat', title: 'Shared task', cwd: dir });
+  state.sessions = store.list();
+  const print = vi.fn();
+  const terminal = { print, colored: false } as unknown as Terminal;
+  const interactive = new CliSession(session.client, session.options, terminal, new Transcript(() => {}, false));
+  const hooks = { newChat: () => {}, exit: () => {} };
+  await runCommand('/resume --list Shared', interactive, hooks);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining('Shared task'));
+  await runCommand('/context templates', interactive, hooks);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining('No templates'));
+  await expect(runCommand('/templates', interactive, hooks)).rejects.toThrow('Unknown command');
+  await expect(runCommand('/quit', interactive, hooks)).rejects.toThrow('Unknown command');
+  await store.flush();
 });
 
 it('sends a pasted image path and its prompt together through the actual CLI send boundary', async () => {

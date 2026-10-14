@@ -372,34 +372,45 @@
 
 .hljs-keyword,
 .hljs-selector-tag,
-.hljs-literal,
-.hljs-section,
-.hljs-link,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--code-inline);
+}
+
 .hljs-built_in,
-.hljs-builtin-name {
+.hljs-builtin-name,
+.hljs-type,
+.hljs-attribute,
+.hljs-attr,
+.hljs-property {
+  color: var(--accent);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-link {
   color: var(--link);
 }
 
 .hljs-string,
-.hljs-title,
-.hljs-name,
-.hljs-type,
-.hljs-attribute,
-.hljs-symbol,
-.hljs-bullet,
+.hljs-regexp,
 .hljs-addition {
   color: var(--success);
 }
 
 .hljs-number,
-.hljs-params,
-.hljs-meta,
-.hljs-variable,
-.hljs-template-variable {
+.hljs-literal {
   color: var(--warning);
 }
 
+.hljs-name,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--danger);
+}
+
 .hljs-comment,
+.hljs-meta,
 .hljs-quote {
   color: var(--text-faint);
   font-style: italic;

@@ -148,7 +148,7 @@ function lookup(root: unknown, tokens: string[]): unknown {
     if (Array.isArray(node)) {
       node = node[Number(token)];
     } else if (isObj(node)) {
-      node = node[token];
+      node = Object.hasOwn(node, token) ? node[token] : undefined;
     } else {
       return undefined;
     }
@@ -162,6 +162,7 @@ function lookup(root: unknown, tokens: string[]): unknown {
  */
 function applyOp(root: unknown, path: string, op: string, value: unknown): unknown {
   const tokens = pointerTokens(path);
+  if (tokens.some((token) => token === '__proto__' || token === 'constructor' || token === 'prototype')) return root;
   if (tokens.length === 0) {
     switch (op) {
       case 'add':
@@ -227,7 +228,7 @@ function applyOp(root: unknown, path: string, op: string, value: unknown): unkno
         const cut = target.slice(0, value);
         if (list) list[index] = cut;
         else (parent as Obj)[key] = cut;
-      } else if (Array.isArray(target) && typeof value === 'number') {
+      } else if (Array.isArray(target) && typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
         target.length = Math.min(target.length, value);
       }
       break;

@@ -50,6 +50,8 @@ const KEYS: Record<string, { keyCode: string; modifiers: string[] }> = {
   'Control+o': { keyCode: 'O', modifiers: ['control'] },
   'Control+v': { keyCode: 'V', modifiers: ['control'] },
   'Control+j': { keyCode: 'J', modifiers: ['control'] },
+  'Control+p': { keyCode: 'P', modifiers: ['control'] },
+  'Shift+Tab': { keyCode: 'Tab', modifiers: ['shift'] },
   'Control+a': { keyCode: 'A', modifiers: ['control'] },
   Backspace: { keyCode: 'Backspace', modifiers: [] }
 };

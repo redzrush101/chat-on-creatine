@@ -25,14 +25,14 @@ function queueWrite(path: string, write: () => Promise<void>): Promise<void> {
 export function writeFileAtomic(path: string, data: string): Promise<void> {
   return queueWrite(path, async () => {
     const temp = `${path}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temp, data, 'utf8');
+    await writeFile(temp, data, { encoding: 'utf8', mode: 0o600 });
     await rename(temp, path);
   });
 }
 
 /** Appends in the same queue as atomic replacements, so log compaction cannot race an append. */
 export function appendText(path: string, data: string): Promise<void> {
-  return queueWrite(path, () => appendFile(path, data, 'utf8'));
+  return queueWrite(path, () => appendFile(path, data, { encoding: 'utf8', mode: 0o600 }));
 }
 
 export function writeJson(path: string, value: unknown): Promise<void> {

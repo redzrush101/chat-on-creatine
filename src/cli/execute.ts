@@ -3,13 +3,15 @@ import type { SessionEvent } from '@shared/types';
 import { safeText, screenColumns } from './format';
 import { formatEvent } from './render';
 import type { CliSession } from './session';
+import { EventHistory } from '@shared/event-history';
 
 export async function execute(session: CliSession): Promise<void> {
   const client = session.client;
   const json = (value: unknown) => process.stdout.write(`${JSON.stringify(value)}\n`);
   const before = new Set(session.id ? (await client.invoke('sessions:events', session.id)).map((event) => event.id) : []);
   const printed = new Set<string>();
-  const events = new Map<string, SessionEvent>();
+  const history = new EventHistory();
+  const events = history.events;
   let inputId: string | null = null;
   let resolveDone: () => void = () => {};
   let rejectDone: (error: Error) => void = () => {};
@@ -28,7 +30,8 @@ export async function execute(session: CliSession): Promise<void> {
   const consume = (batch: SessionEvent[]) => {
     for (const event of batch) {
       if (before.has(event.id)) continue;
-      events.set(event.id, event);
+      history.merge([event]);
+      if (events.get(event.id) !== event) continue;
       if (session.options.json) json({ type: 'event', sessionId: session.id, event });
       else if (!printed.has(event.id) && (event.kind === 'tool' && event.status !== 'running' || event.kind === 'notice')) {
         process.stderr.write(formatEvent(event, { colored: false, columns: screenColumns() }) ?? ''); printed.add(event.id);

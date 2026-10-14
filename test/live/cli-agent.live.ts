@@ -39,7 +39,7 @@ it('uses prompt templates, file ranges, shell context, an external editor and se
   try {
     await type(`VISUAL=${quote(`${quote(process.execPath)} ${quote(editor)}`)} ${quote(process.execPath)} ${quote(join(ROOT, 'scripts', 'creatine.mjs'))} --user-data ${quote(profile)} -C ${quote(live.workspace)} --name 'CLI context task'\r`);
     await wait('welcome', /Welcome to Chat on Creatine/);
-    await type('/templates\r');
+    await type('/context templates\r');
     await wait('template command', /Check CLI context/);
     await type('!printf SHELL_CONTEXT_OK\r');
     await wait('pending context', /shell context pending/);
@@ -70,7 +70,7 @@ it('uses prompt templates, file ranges, shell context, an external editor and se
     }
     await type('/name Named from CLI\r');
     await live.api.waitFor((state) => state.sessions.some((session) => session.id === id && session.title === 'Named from CLI'), 10_000);
-    await type('/sessions Named from CLI\r');
+    await type('/resume --list Named from CLI\r');
     await wait('session list', new RegExp(`${id.slice(0, 8)} · Named from CLI`));
     await type('/new\r');
     await wait('new chat', /New chat\./);
@@ -78,7 +78,7 @@ it('uses prompt templates, file ranges, shell context, an external editor and se
     await wait('resumed session', new RegExp(`Resumed ${id}`));
     await type('Reply with just RESUME_OK.\r');
     expect(answer(await live.until('resumed answer', live.idle(id, 3), id)).trim()).toBe('RESUME_OK');
-    await type('/new\r/search EXTERNAL_EDITOR_OK\r');
+    await type('/new\r/resume --search EXTERNAL_EDITOR_OK\r');
     await wait('message search', /Search chat messages/);
     await type('\rReply with just SEARCH_RESUME_OK.\r');
     expect(answer(await live.until('search resumed answer', live.idle(id, 4), id)).trim()).toBe('SEARCH_RESUME_OK');
