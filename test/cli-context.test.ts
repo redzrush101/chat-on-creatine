@@ -1,4 +1,4 @@
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
@@ -10,7 +10,7 @@ import { Editor } from '../src/cli/editor';
 import type { Terminal } from '../src/cli/terminal';
 
 let dir = '';
-beforeEach(async () => { dir = await mkdtemp(join(tmpdir(), 'creatine-context-')); });
+beforeEach(async () => { dir = await realpath(await mkdtemp(join(tmpdir(), 'creatine-context-'))); });
 afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
 
 it('includes quoted files and line ranges once while preserving prose and literal @ mentions', async () => {

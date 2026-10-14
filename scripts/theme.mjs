@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 const file = fileURLToPath(new URL('../src/renderer/styles/tokens.css', import.meta.url));
 const palette = JSON.parse(readFileSync(new URL('../src/shared/palette.json', import.meta.url), 'utf8'));
-const current = readFileSync(file, 'utf8');
+const current = readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
 const marker = '/* Palette generated from src/shared/palette.json by scripts/theme.mjs. */';
 if (!current.includes(marker)) throw new Error('Keep the shared palette marker in tokens.css so generation preserves its layout tokens.');
 const prefix = current.slice(0, current.indexOf(marker));
