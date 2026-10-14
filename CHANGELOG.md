@@ -2,15 +2,35 @@
 
 ## Unreleased
 
+## [0.6.0] - 2026-10-14
+
+- Share prompt templates, file context, model changes, activity and streamed event history
+  between the CLI and GUI; add the GUI prompt picker and model/reasoning shortcuts.
+- Consolidate 45 built-in slash commands into 27 entry points. Move session search to
+  `/resume`, template controls to `/context`, worker inspection to `/tasks`, and diagnostics
+  to `/status`; use Ctrl+L to clear the terminal.
+- Introduce the shared Current palette for both themes, terminal output and code highlighting.
+- Preserve native ChatGPT fetch responses while observing their streams, confirm preloaded
+  composer and model readiness, release the observer when ChatGPT cancels its stream, and
+  reduce the latency of streamed frontend updates.
+- Coalesce recording writes, cache executable discovery, preserve Unicode output and stream
+  updates during history loading, and cancel queued messages consistently when stopping.
+- Guard default command directories, block prototype-mutating stream pointers, write private
+  state with owner-only permissions and check newly added files against repository rules.
+- Refresh desktop and CLI screenshots and dark recordings from a real shared coding workflow.
+- Keep contributor documentation in the existing guides and prohibit standalone test/audit reports.
+- Add shared code review and project-instruction workflows, final-answer file output, resume
+  commands, additional working folders and CLI management of external MCP servers.
+
 - Include `@file` excerpts and line ranges, attach inline images/PDFs, and complete quoted paths.
 - Load reusable Markdown prompt commands from personal and project prompt directories, with
-  arguments, defaults, completion and `/reload`.
+  arguments, defaults, completion and `/context reload`.
 - Include `!command` output with the next message; keep `!!command` local and inspect pending
   shell output with `/context`.
 - Edit drafts in an external editor with Ctrl+G, cycle models and reasoning with shortcuts,
   search and name sessions, and recall recorded prompts after resuming.
 - Keep failed drafts, edit queued messages and retry failed inputs without duplicating them.
-- Read native Wayland clipboard images through `wl-paste`; add Alt+V and `/paste`, show attachment
+- Read native Wayland clipboard images through `wl-paste`; add Alt+V, show attachment
   names, and include `wl-clipboard` in the Nix shell.
 - Keep narrow-terminal footer and activity rows within the available width so redraws do not
   leave growing blank gaps between the transcript and prompt.
