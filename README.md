@@ -3,42 +3,40 @@
 [![CI](https://github.com/redzrush101/chat-on-creatine/actions/workflows/ci.yml/badge.svg)](https://github.com/redzrush101/chat-on-creatine/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/redzrush101/chat-on-creatine)](https://github.com/redzrush101/chat-on-creatine/releases/latest)
 
-Chat on Creatine lets ChatGPT read and edit files, run commands, plan work and delegate tasks
-to other chats. Use the desktop app or the terminal with your ChatGPT account. Both share your
-login, projects, conversations and tools.
+Chat on Creatine is a desktop app and coding CLI that lets ChatGPT work directly with your projects. It can read and edit files, run commands, review changes and handle longer coding tasks using your existing ChatGPT account.
+
+The desktop app and CLI share the same chats, projects, models and permissions, so you can switch between them without starting over.
 
 ## Desktop
 
-Follow the conversation, inspect file changes and manage background tasks in one workspace.
-This real workflow fixes a cart subtotal bug, adds regression tests and runs the test suite.
+Use the desktop app when you want the full workspace: chat, diffs, attachments, task controls and project tools in one place.
 
 | Dark | Light |
 | --- | --- |
-| ![A cart subtotal fix and its diff in the dark desktop workspace](docs/screenshots/chat-dark.png) | ![The same tested fix in the light desktop workspace](docs/screenshots/chat-light.png) |
+| ![Chat on Creatine desktop in dark mode](docs/screenshots/chat-dark.png) | ![Chat on Creatine desktop in light mode](docs/screenshots/chat-light.png) |
 
-![Fixing cart subtotals in the dark desktop workspace](docs/screenshots/gui.gif)
+![Chat on Creatine desktop workflow](docs/screenshots/gui.gif)
 
 ## Terminal
 
-Work from your project directory with streaming replies, file diffs and command output.
-
-Continue the same chat from the terminal: add a fractional-price regression and verify it.
+The CLI gives you the same project-aware ChatGPT workflow without leaving your terminal. Replies stream as they are generated, file changes are shown as diffs and command output stays alongside the conversation.
 
 | Dark | Light |
 | --- | --- |
-| ![The coding CLI adds and verifies a regression test in dark mode](docs/screenshots/cli-dark.png) | ![The same coding workflow in the light CLI](docs/screenshots/cli-light.png) |
+| ![Chat on Creatine CLI in dark mode](docs/screenshots/cli-dark.png) | ![Chat on Creatine CLI in light mode](docs/screenshots/cli-light.png) |
 
-![Adding a cart regression test in the dark coding CLI](docs/screenshots/cli.gif)
+![Chat on Creatine CLI workflow](docs/screenshots/cli.gif)
 
 ## Download
 
-Get the Windows, macOS or Linux installer from the
-[latest release](https://github.com/redzrush101/chat-on-creatine/releases/latest).
-[Installation notes](docs/release-install.md) cover each platform.
+Download the Windows, macOS or Linux build from the [latest release](https://github.com/redzrush101/chat-on-creatine/releases/latest).
+
+See the [installation notes](docs/release-install.md) for platform-specific details.
 
 ## Setup
 
-1. Install a release, or build from source with Node 24 (on NixOS, run `nix develop` first):
+1. Install a release, or build from source with Node 24. On NixOS, run `nix develop` first.
+
    ```sh
    npm ci
    npm run rebuild-native
@@ -46,14 +44,13 @@ Get the Windows, macOS or Linux installer from the
    npm run build
    npm start
    ```
-2. **Settings → Setup**: approve a project folder.
-3. **Connection**: create a tunnel in <https://platform.openai.com/settings/organization/tunnels> and a restricted API key
-   with *Tunnels: Read + Use*; enter both and press **Connect**.
-4. In ChatGPT: **Plugins → Add → Create MCP App → Tunnel**, pick the tunnel, *No authentication*, name it exactly
-   **Chat on Creatine Core**.
-5. Sign in to ChatGPT in the app's browser, pick a model and send a task.
 
-## Coding CLI
+2. Open **Settings → Setup** and choose the project folders Chat on Creatine may access.
+3. Create a tunnel at <https://platform.openai.com/settings/organization/tunnels> and a restricted API key with **Tunnels: Read + Use**. Add both under **Connection** in the app.
+4. In ChatGPT, go to **Plugins → Add → Create MCP App → Tunnel**, select the tunnel, choose **No authentication**, and name it **Chat on Creatine Core**.
+5. Sign in to ChatGPT from the app and start a chat.
+
+## CLI
 
 After building from source:
 
@@ -63,57 +60,37 @@ After building from source:
 ./scripts/creatine login
 ```
 
-The CLI starts Electron in the background when needed. `login` opens the ChatGPT login page;
-signing in from either interface signs you in to both.
+The current directory is used as the working folder by default. Use `-C` to choose another project, or `--yolo` to allow unrestricted tools.
 
-Use `/help` for commands, `/model` to choose a model, `/gui` to open the desktop app and
-`/exit` to quit. Slash commands suggest completions as you type; Tab completes the name and
-`?` lists the shortcuts. Replies render Markdown with tables and highlighted code. Ctrl+O opens
-the full transcript with every tool's arguments and output. Esc stops a running task.
+Useful commands:
 
-Your current directory is the working folder; `-C` selects another one. Add `--yolo` for
-unrestricted tools. That setting is shared with the desktop app; `/permissions` changes it.
+```text
+/help                 Show commands
+/model                Choose a model
+/permissions          Change tool permissions
+/review               Review the current project
+/init                 Create project instructions
+/gui                   Open the desktop app
+/exit                  Quit
+```
 
-Include source directly with `@src/main.ts` or `@src/main.ts:10-40`; quote paths as
-`@"notes with spaces.md"`. Images and PDFs become attachments. `!npm test` runs locally and
-includes its output with your next message; `!!npm test` keeps it local. `/context` shows
-pending shell output and `/context clear` discards it.
+Attach files directly in a prompt with `@path/to/file` or a line range such as `@src/main.ts:10-40`. Quote paths containing spaces: `@"notes with spaces.md"`. Images and PDFs can be attached normally.
 
-Ctrl+G opens your draft in `$VISUAL` or `$EDITOR`. Ctrl+P cycles account models and Shift+Tab
-cycles reasoning levels. Paste clipboard images with Ctrl+V or Alt+V; on Linux
-Wayland the CLI reads the native clipboard through `wl-paste` when available (included in
-`nix develop`). Terminal paste shortcuts such as Ctrl+Shift+V generally send only text.
+Run a local command with `!`, for example `!npm test`, to include its output with your next message. Use `!!npm test` when you want the command to stay local.
 
-Add reusable prompt commands as Markdown files in `.creatine/prompts/`, then `/context reload`.
-Use `/context templates` to inspect them, `/name` to label a chat, `/resume --list <query>` to find it,
-and `/resume --search <text>` to search past messages. `creatine -r` opens the session picker;
-`creatine -c` continues the latest chat in the current folder. See [CLI workflows](docs/cli.md)
-for templates, session controls and recovery.
+Chats are shared between the desktop app and CLI. Use `creatine -c` to continue the latest chat for the current project or `creatine -r` to open the session picker.
 
-The GUI accepts the same `@file` syntax and prompt commands through **Prompts and skills**.
-Both interfaces use the shared Current palette and the same model defaults, queue and Stop behavior.
-
-Use `creatine review --base main` or `/review` for a code review, `/init` to create project
-instructions, and `creatine exec -o answer.md "..."` to save a final answer. The GUI offers the
-same review scopes and instruction task under **Coding workflows** beside attachments, plus
-**Save answer** on completed replies. Manage shared external servers with `creatine mcp` or
-**Settings → Plugins**.
+For the complete CLI reference, templates and recovery options, see [CLI workflows](docs/cli.md).
 
 ## Development
 
 ```sh
-npm run dev         # electron-vite with HMR
-npm run verify      # repository rules, typecheck, tests, build
-npm run test:live   # the real app against your signed-in ChatGPT account
-npm run dist        # installers for this platform into release/ (after npm run tunnel-client)
+npm run dev         # start the app with HMR
+npm run verify      # run repository checks, typecheck, tests and build
+npm run test:live   # run live tests against your signed-in ChatGPT account
+npm run dist        # build installers into release/
 ```
 
-Read [AGENTS.md](AGENTS.md) before changing code, and [CONTRIBUTING.md](CONTRIBUTING.md) for
-pull requests and releases.
+Read [AGENTS.md](AGENTS.md) before making code changes and [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request or preparing a release.
 
-Code map: `src/cli` terminal frontend · `src/shared` contracts · `src/main/app/api.ts` shared frontend handlers ·
-`src/main/mcp` server + tools · `src/main/chatgpt` browser + router ·
-`src/page` in-page driver · `src/main/sessions` history/outbox/recorder · `src/main/{agents,automation}` workers,
-Goal/Loop, Compact & Resume · `src/main/tunnel` connection · `src/renderer` React UI · `test/live` live tests.
-
-Use it within OpenAI's terms; it automates your own ChatGPT session and is not affiliated with OpenAI.
+Chat on Creatine automates your own ChatGPT session. Use it within OpenAI's terms. This project is not affiliated with OpenAI.
