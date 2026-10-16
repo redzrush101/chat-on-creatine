@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { defaultConfig, type Config, type PluginServerConfig, type SecretKey } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { PluginManager } from '../src/main/plugins/manager';
@@ -87,16 +87,17 @@ function makeConfig(plugins: PluginServerConfig[]): Config {
 
 function createManager(initial: PluginServerConfig[]) {
   const state = { config: makeConfig(initial) };
+  const changed = vi.fn();
   const manager = new PluginManager({
     getConfig: () => state.config,
     getSecret: (key: SecretKey) => (key === 'plugin:alpha:env:PLUGIN_TOKEN' ? SECRET : null),
-    onChange: () => undefined
+    onChange: changed
   });
   const setPlugins = (plugins: PluginServerConfig[]) => {
     state.config = makeConfig(plugins);
     manager.reconcile();
   };
-  return { manager, setPlugins, state };
+  return { manager, setPlugins, state, changed };
 }
 
 async function waitFor(check: () => boolean, label: string): Promise<void> {
@@ -149,11 +150,16 @@ describe('PluginManager', () => {
   });
 
   it('hides disabled tools from the surface and status', async () => {
-    const { manager, setPlugins, state } = createManager([stdioServer('alpha')]);
+    const { manager, setPlugins, state, changed } = createManager([stdioServer('alpha')]);
     manager.start();
     try {
       await waitFor(() => manager.status()[0]?.state === 'running', 'alpha to run');
       const echo = manager.tools().find((tool) => tool.name === 'echo') as ToolSpec;
+      changed.mockClear();
+      state.config = { ...state.config, ui: { ...state.config.ui, theme: 'light' } };
+      manager.reconcile();
+      expect(changed).not.toHaveBeenCalled();
+      expect(manager.tools().map((tool) => tool.name)).toContain('echo');
       setPlugins([stdioServer('alpha', { disabledTools: ['echo'] })]);
 
       expect(manager.tools().map((tool) => tool.name)).toEqual(['crash']);

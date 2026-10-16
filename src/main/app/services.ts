@@ -228,8 +228,8 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   config.onChange((next, previous) => {
     hooks.changed();
     void plugins.reconcile();
-    if (JSON.stringify([next.capabilities, next.readOnly, next.yolo, next.agents.enabled, next.automation.finishTool]) !==
-      JSON.stringify([previous.capabilities, previous.readOnly, previous.yolo, previous.agents.enabled, previous.automation.finishTool])) server.toolsChanged();
+    if (JSON.stringify([next.capabilities, next.readOnly, next.yolo, next.agents.enabled, next.automation.finishTool, next.plugins]) !==
+      JSON.stringify([previous.capabilities, previous.readOnly, previous.yolo, previous.agents.enabled, previous.automation.finishTool, previous.plugins])) server.toolsChanged();
     syncControlApi();
   });
   void plugins.start();

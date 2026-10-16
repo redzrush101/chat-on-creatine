@@ -68,16 +68,18 @@ export class PluginManager {
   reconcile(): void {
     const wanted = this.deps.getConfig().plugins.filter((server) => server.enabled);
     const wantedIds = new Set(wanted.map((server) => server.id));
+    let changed = false;
     for (const id of [...this.entries.keys()]) {
-      if (!wantedIds.has(id)) void this.close(id);
+      if (!wantedIds.has(id)) { void this.close(id); changed = true; }
     }
     for (const server of wanted) {
       const fingerprint = this.fingerprint(server);
       if (this.entries.get(server.id)?.fingerprint === fingerprint) continue;
       void this.close(server.id);
       this.launch(server, fingerprint);
+      changed = true;
     }
-    this.changed();
+    if (changed) this.changed();
   }
 
   restart(id: string): void {
