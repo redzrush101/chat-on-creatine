@@ -1,6 +1,7 @@
 import type { ExecRequest, ExecResult, WriteStdinRequest } from '@shared/exec';
 export type { ExecRequest, ExecResult, WriteStdinRequest } from '@shared/exec';
 import type { z } from 'zod';
+import type { StandardSchemaWithJSON } from '@modelcontextprotocol/server';
 import type { Config } from '@shared/config';
 import type { PlanItem, SurfaceId, ToolOutputPart } from '@shared/types';
 
@@ -117,7 +118,7 @@ export interface ToolSpec<Shape extends z.ZodRawShape = z.ZodRawShape> {
   input: Shape;
   /** Advertised verbatim instead of a schema derived from `input` (external MCP tools). */
   jsonSchema?: Record<string, unknown>;
-  outputSchema?: z.ZodObject;
+  outputSchema?: StandardSchemaWithJSON;
   annotations?: ToolAnnotations;
   /** Whether the tool is advertised under this config. Handlers still re-check permissions. */
   exposed(config: Config): boolean;

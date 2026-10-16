@@ -1,6 +1,6 @@
 import { errorMessage } from '@shared/errors';
 import { createHash } from 'node:crypto';
-import { Client, StreamableHTTPClientTransport, type Transport, type CallToolResult, type Tool } from '@modelcontextprotocol/client';
+import { Client, StreamableHTTPClientTransport, type Transport, type CallToolResult, type Resource, type ResourceTemplateType, type Tool } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import type { Config, PluginServerConfig, SecretKey } from '@shared/config';
 import type { PluginStatus } from '@shared/types';
@@ -8,6 +8,8 @@ import { createLogger } from '../core/log';
 import { childEnv } from '../exec/env';
 import { ToolError, type ToolContent, type ToolContext, type ToolResult, type ToolSpec } from '../mcp/tool';
 import { exposedNames } from './exposure';
+import { fromJsonSchema, type JsonSchemaType } from '@modelcontextprotocol/server';
+import { version } from '../../../package.json';
 
 const log = createLogger('plugins');
 
@@ -49,6 +51,7 @@ interface Entry {
  */
 export class PluginManager {
   private readonly entries = new Map<string, Entry>();
+  private cachedTools: { config: Config; specs: ToolSpec[] } | null = null;
 
   constructor(private readonly deps: PluginManagerDeps) {}
 
@@ -58,7 +61,7 @@ export class PluginManager {
 
   async stop(): Promise<void> {
     await Promise.all([...this.entries.keys()].map((id) => this.close(id)));
-    this.deps.onChange();
+    this.changed();
   }
 
   /** Brings connections in line with the current config. Call after every config change. */
@@ -74,7 +77,7 @@ export class PluginManager {
       void this.close(server.id);
       this.launch(server, fingerprint);
     }
-    this.deps.onChange();
+    this.changed();
   }
 
   restart(id: string): void {
@@ -82,7 +85,7 @@ export class PluginManager {
     if (!server?.enabled) return;
     void this.close(id);
     this.launch(server, this.fingerprint(server));
-    this.deps.onChange();
+    this.changed();
   }
 
   status(): PluginStatus[] {
@@ -105,14 +108,52 @@ export class PluginManager {
   /** Live ToolSpecs for the Plugins surface: running servers, enabled tools, collision-free names. */
   tools(): ToolSpec[] {
     const config = this.deps.getConfig();
+    if (this.cachedTools?.config === config) return this.cachedTools.specs;
     const live = [...this.entries.values()].filter((entry) => entry.state === 'running');
     const exposed = (entry: Entry) => entry.tools.filter((tool) => this.isExposed(entry.id, tool.name, config));
     const names = exposedNames(
       live.map((entry) => ({ id: entry.id, name: entry.config.name, toolNames: exposed(entry).map((tool) => tool.name) }))
     );
-    return live.flatMap((entry) =>
+    const specs = live.flatMap((entry) =>
       exposed(entry).map((tool) => this.spec(entry.id, tool, names.get(entry.id)!.get(tool.name)!))
     );
+    this.cachedTools = { config, specs };
+    return specs;
+  }
+
+  async resources(kind: 'resources' | 'templates', server: string | undefined, signal: AbortSignal): Promise<Array<{ server: string; resources?: Resource[]; resourceTemplates?: ResourceTemplateType[]; error?: string }>> {
+    const configured = this.deps.getConfig().plugins.filter((entry) => entry.enabled && (!server || entry.id === server || entry.name === server));
+    if (server && configured.length !== 1) throw new ToolError('NOT_FOUND', 'Choose one enabled MCP server by its name or ID.');
+    return Promise.all(configured.map(async (config) => {
+      try {
+        signal.throwIfAborted();
+        const client = this.resourceClient(config.id);
+        if (!client.getServerCapabilities()?.resources) return { server: config.name };
+        const options = { signal, timeout: TOOL_TIMEOUT_MS };
+        const result = kind === 'resources' ? await client.listResources(undefined, options) : await client.listResourceTemplates(undefined, options);
+        return { server: config.name, ...result };
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return { server: config.name, error: errorMessage(error) };
+      }
+    }));
+  }
+
+  async readResource(server: string, uri: string, signal: AbortSignal) {
+    const matches = this.deps.getConfig().plugins.filter((entry) => entry.enabled && (entry.id === server || entry.name === server));
+    if (matches.length !== 1) throw new ToolError('NOT_FOUND', 'Choose one enabled MCP server by its name or ID.');
+    return this.resourceClient(matches[0]!.id).readResource({ uri }, { signal, timeout: TOOL_TIMEOUT_MS });
+  }
+
+  private resourceClient(id: string): Client {
+    const entry = this.entries.get(id);
+    if (!entry?.client || entry.state !== 'running') throw new ToolError('FAILED', 'This MCP server is offline. Reconnect it in Settings → Plugins or /mcp restart.');
+    return entry.client;
+  }
+
+  private changed(): void {
+    this.cachedTools = null;
+    this.deps.onChange();
   }
 
   private launch(server: PluginServerConfig, fingerprint: string): void {
@@ -133,7 +174,21 @@ export class PluginManager {
 
   private async open(entry: Entry): Promise<void> {
     // Plugin catalogs can paginate beyond the client's default 64-page limit.
-    const client = new Client({ name: 'chat-on-creatine', version: '0.1.0' }, { listMaxPages: 0 });
+    const client = new Client({ name: 'chat-on-creatine', version }, {
+      listMaxPages: 0,
+      versionNegotiation: entry.config.transport === 'http' ? { mode: 'auto' } : undefined,
+      listChanged: { tools: { debounceMs: 50, onChanged: (error, tools) => {
+        if (entry.client !== client) return;
+        if (error) {
+          entry.detail = `Could not refresh tools: ${errorMessage(error)}`;
+          log.warn(`${entry.config.name}: ${entry.detail}`);
+        } else if (tools) {
+          entry.tools = tools;
+          entry.detail = '';
+        }
+        this.changed();
+      } } }
+    });
     entry.state = 'starting';
     entry.client = client;
     client.onclose = () => this.lost(entry, client);
@@ -156,7 +211,7 @@ export class PluginManager {
       this.failed(entry, errorMessage(error));
       return;
     }
-    this.deps.onChange();
+    this.changed();
   }
 
   /** The connection dropped on its own (crash, closed stream). */
@@ -184,7 +239,7 @@ export class PluginManager {
         void this.open(entry);
       }, delay);
     }
-    this.deps.onChange();
+    this.changed();
   }
 
   /** Removes the entry first, so a late close event cannot schedule a reconnect. */
@@ -221,6 +276,7 @@ export class PluginManager {
       description: tool.description ?? '',
       input: {},
       jsonSchema: tool.inputSchema as Record<string, unknown>,
+      outputSchema: tool.outputSchema ? fromJsonSchema(tool.outputSchema as JsonSchemaType) : undefined,
       annotations: {
         readOnlyHint: tool.annotations?.readOnlyHint,
         destructiveHint: tool.annotations?.destructiveHint,

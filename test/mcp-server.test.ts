@@ -10,6 +10,7 @@ import { defineTool, textResult, ToolError, type Caller, type ToolServices, type
 const tokens: Record<SurfaceId, string> = { core: generateToken(), desktop: generateToken(), plugins: generateToken() };
 const seenRequestIds: Array<string | null> = [];
 const steeringQueue: string[] = ['stop after the next step'];
+let exposeHidden = false;
 
 const echo = defineTool({
   name: 'echo',
@@ -50,7 +51,7 @@ const hidden = defineTool({
   title: 'Hidden',
   description: 'Not exposed.',
   input: {},
-  exposed: () => false,
+  exposed: () => exposeHidden,
   run: async () => textResult('should not run')
 });
 
@@ -107,6 +108,40 @@ describe('McpHttpServer', () => {
     expect((await desktop.listTools()).tools.map((tool) => tool.name).sort()).toEqual(['browse', 'exec', 'wait']);
     await core.close();
     await desktop.close();
+  });
+
+  it('refreshes client catalogs through modern subscriptions when exposure changes', async () => {
+    const changes: string[][] = [];
+    const client = new Client({ name: 'catalog-test', version: '1.0.0' }, { versionNegotiation: { mode: { pin: '2026-07-28' } }, listChanged: { tools: { debounceMs: 0,
+      onChanged: (error, tools) => { if (error) throw error; if (tools) changes.push(tools.map((tool) => tool.name)); }
+    } } });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(server.localUrl('core')!)));
+      await client.listTools();
+      exposeHidden = true;
+      server.toolsChanged();
+      for (const deadline = Date.now() + 5000; !changes.some((names) => names.includes('hidden')); await new Promise((resolve) => setTimeout(resolve, 10))) {
+        if (Date.now() > deadline) throw new Error('The client did not receive the changed catalog');
+      }
+      expect(changes.at(-1)).toContain('hidden');
+    } finally {
+      exposeHidden = false;
+      await client.close();
+    }
+  });
+
+  it('closes active subscriptions and serves fresh requests after a reconnect', async () => {
+    const client = new Client({ name: 'reconnect-test', version: '1.0.0' }, {
+      versionNegotiation: { mode: { pin: '2026-07-28' } }, listChanged: { tools: { onChanged: () => {} } }
+    });
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(server.localUrl('core')!)));
+      await server.stop();
+      await client.close();
+      await server.start(0);
+      await client.connect(new StreamableHTTPClientTransport(new URL(server.localUrl('core')!)));
+      expect((await client.listTools()).tools.map((tool) => tool.name)).toContain('echo');
+    } finally { await client.close(); }
   });
 
   it('attributes calls by the x-request-id join key and appends steering', async () => {

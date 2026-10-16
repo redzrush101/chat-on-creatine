@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { McpServer, createMcpHandler, fromJsonSchema, type CallToolResult, type JsonSchemaType } from '@modelcontextprotocol/server';
 import { localhostOriginValidation, toNodeHandler } from '@modelcontextprotocol/node';
 import { z } from 'zod';
+import { version } from '../../../package.json';
 import type { Config } from '@shared/config';
 import type { SurfaceId } from '@shared/types';
 import { createLogger } from '../core/log';
@@ -24,7 +25,6 @@ interface Attribution {
 }
 
 const log = createLogger('mcp');
-const SERVER_VERSION = '0.1.0';
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 /** Tool text returned to the model in one result; a larger output is cut and marked. */
 const MAX_TEXT_CHARS = 200_000;
@@ -115,10 +115,16 @@ export class McpHttpServer {
    * One SDK handler per surface. It serves both protocol eras: 2026-07-28 (what ChatGPT speaks)
    * and the stateless 2025 fallback. Each request gets a fresh McpServer from live config.
    */
-  private readonly handlers = Object.fromEntries(
-    SURFACE_IDS.map((surface) => [
-      surface,
-      toNodeHandler(
+  private protocolHandlers: Record<SurfaceId, ReturnType<typeof createMcpHandler>> | null = null;
+  private handlers: Record<SurfaceId, ReturnType<typeof toNodeHandler>> | null = null;
+
+  constructor(private readonly options: McpHttpServerOptions) {}
+
+  async start(port: number): Promise<{ port: number }> {
+    if (this.server) throw new Error('MCP server already started');
+    this.protocolHandlers = Object.fromEntries(
+      SURFACE_IDS.map((surface) => [
+        surface,
         createMcpHandler(
           (ctx) =>
             this.buildServer(
@@ -127,16 +133,13 @@ export class McpHttpServer {
               ctx.requestInfo?.signal ?? new AbortController().signal
             ),
           { maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.warn(`${surface}: ${error.message}`) }
-        ),
-        { maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.error(`${surface} handler failed`, error) }
-      )
-    ])
-  ) as Record<SurfaceId, ReturnType<typeof toNodeHandler>>;
+        )
+      ])
+    ) as Record<SurfaceId, ReturnType<typeof createMcpHandler>>;
+    this.handlers = Object.fromEntries(SURFACE_IDS.map((surface) => [surface, toNodeHandler(this.protocolHandlers![surface], {
+      maxRequestBodySize: MAX_BODY_BYTES, onerror: (error) => log.error(`${surface} handler failed`, error)
+    })])) as Record<SurfaceId, ReturnType<typeof toNodeHandler>>;
 
-  constructor(private readonly options: McpHttpServerOptions) {}
-
-  async start(port: number): Promise<{ port: number }> {
-    if (this.server) throw new Error('MCP server already started');
     const server = http.createServer((req, res) => {
       void this.handle(req, res).catch((error: unknown) => {
         log.error('request failed', error);
@@ -158,6 +161,7 @@ export class McpHttpServer {
 
   async stop(): Promise<void> {
     await this.codeMode.dispose();
+    if (this.protocolHandlers) await Promise.all(Object.values(this.protocolHandlers).map((handler) => handler.close()));
     const server = this.server;
     if (!server) return;
     this.server = null;
@@ -166,6 +170,8 @@ export class McpHttpServer {
       server.close(() => resolve());
       server.closeIdleConnections();
     });
+    this.protocolHandlers = null;
+    this.handlers = null;
   }
 
   localUrl(surface: SurfaceId): string | null {
@@ -178,10 +184,15 @@ export class McpHttpServer {
     return tools.length + (tools.includes(this.waitTools[surface]) ? 1 : 0);
   }
 
+  /** Publish through the request handler so open MCP subscription streams see catalog changes. */
+  toolsChanged(): void {
+    for (const surface of SURFACE_IDS) this.protocolHandlers?.[surface].notify.toolsChanged();
+  }
+
   private toolsFor(surface: SurfaceId, config: Config): ToolSpec[] {
     const { tools } = this.options;
     const all = typeof tools === 'function' ? tools() : tools;
-    const exposed = all.filter((tool) => tool.surface === surface && tool.exposed(config));
+    const exposed = all.filter((tool) => tool.surface === surface && tool.exposed(config)).sort((a, b) => a.name.localeCompare(b.name));
     return canAddCodeMode(exposed) ? [...exposed, this.waitTools[surface]] : exposed;
   }
 
@@ -235,7 +246,7 @@ export class McpHttpServer {
         `${surface} ${method} → HTTP ${res.statusCode} (protocol ${req.headers['mcp-protocol-version'] ?? '-'}, accept ${req.headers.accept ?? '-'}, content-type ${req.headers['content-type'] ?? '-'})`
       );
     });
-    await this.handlers[surface](req, res);
+    await this.handlers![surface](req, res);
   }
 
   private buildServer(surface: SurfaceId, requestId: string | null, signal: AbortSignal): McpServer {
@@ -244,7 +255,7 @@ export class McpHttpServer {
     const codeMode = exposed.includes(this.waitTools[surface]);
     const tools = codeMode ? [...exposed, codeModeTool(surface, exposed, this.codeMode)] : exposed;
     const server = new McpServer(
-      { name: SURFACES[surface].serverName, version: SERVER_VERSION },
+      { name: SURFACES[surface].serverName, version },
       { instructions: serverInstructions(surface, config, codeMode) }
     );
     for (const tool of tools) {
@@ -279,7 +290,7 @@ export class McpHttpServer {
     // Steering is appended once, to the outer call; nested results stay clean.
     const steering = caller ? options.steering(caller) : [];
     const content = [
-      ...boundContent(result.content),
+      ...result.content,
       ...steering.map((text): ToolContent => ({ type: 'text', text }))
     ];
     return this.toCallResult({ ...result, content });
@@ -348,6 +359,7 @@ export class McpHttpServer {
       if (!(error instanceof ToolError)) log.error(`${tool.name} failed`, error);
       result = error instanceof ToolError ? toolErrorResult(error) : unexpectedResult(error);
     }
+    if (!attribution.nested) result = { ...result, content: boundContent(result.content) };
     options.hooks?.onCallEnd?.(call, result);
     return result;
   }

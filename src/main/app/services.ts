@@ -22,6 +22,7 @@ import { browserTools, setAgentBrowser } from '../mcp/tools/browser';
 import { AgentBrowser } from '../browser-tools/agent-browser';
 import { sessionFinishTool } from '../mcp/tools/session-finish';
 import { updatePlanTool } from '../mcp/tools/update-plan';
+import { resourceTools } from '../mcp/tools/resources';
 import { ToolError } from '../mcp/tool';
 import { ControlApi } from '../control-api';
 import { recentLogs, createLogger } from '../core/log';
@@ -168,10 +169,10 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
 
   let connection: ConnectionManager | null = null;
   const activity = new ToolActivity({ store, outbox, router, connection: () => connection });
-  const plugins = new PluginManager({ getConfig, getSecret: (key) => secrets.get(key), onChange: hooks.changed });
+  const plugins = new PluginManager({ getConfig, getSecret: (key) => secrets.get(key), onChange: () => { hooks.changed(); server.toolsChanged(); } });
   const agentBrowser = new AgentBrowser();
   setAgentBrowser(agentBrowser);
-  const coreTools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool, ...browserTools];
+  const coreTools = [...CORE_TOOLS, updatePlanTool, agentsTool, sessionFinishTool, ...browserTools, ...resourceTools(plugins)];
   const server = new McpHttpServer({
     getConfig,
     tools: () => [...coreTools, ...plugins.tools()],
@@ -223,9 +224,11 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
     logs: (limit) => recentLogs(limit)
   });
   const syncControlApi = () => void Promise.resolve(controlApi.sync()).catch((error: unknown) => log.error('control API', error));
-  config.onChange(() => {
+  config.onChange((next, previous) => {
     hooks.changed();
     void plugins.reconcile();
+    if (JSON.stringify([next.capabilities, next.readOnly, next.yolo, next.agents.enabled, next.automation.finishTool]) !==
+      JSON.stringify([previous.capabilities, previous.readOnly, previous.yolo, previous.agents.enabled, previous.automation.finishTool])) server.toolsChanged();
     syncControlApi();
   });
   void plugins.start();
