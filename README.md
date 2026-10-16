@@ -67,6 +67,8 @@ Useful commands:
 ```text
 /help                 Show commands
 /model                Choose a model
+/settings             Search and change shared settings
+/usage                Inspect context and tool usage
 /permissions          Change tool permissions
 /review               Review the current project
 /init                 Create project instructions
@@ -80,7 +82,10 @@ Run a local command with `!`, for example `!npm test`, to include its output wit
 
 Chats are shared between the desktop app and CLI. Use `creatine -c` to continue the latest chat for the current project or `creatine -r` to open the session picker.
 
-For the complete CLI reference, templates and recovery options, see [CLI workflows](docs/cli.md).
+Settings include conversation density, width, text size, motion and expanded tool details.
+The context meter and **Settings → Usage** show estimated messages, replies and tool context;
+`/usage` shows the same breakdown in the terminal. Use `/settings ui.theme light` to change a
+preference from either interface, or `/settings reset ui.theme` to restore its default.
 
 ## Development
 

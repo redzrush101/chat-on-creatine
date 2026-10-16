@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## [0.7.0] - 2026-10-16
+
+- Reduce the initial desktop JavaScript from 2.07 MB to 304 KB by loading chat, settings,
+  syntax highlighting and work panels when needed and minifying production renderer code.
+  Load the CLI runtime after argument handling so help and version start without it.
+- Update only changed terminal rows, speed up ASCII width and wrapping, cache completed
+  transcript rows and preserve completed Markdown DOM blocks while replies stream.
+  Skip layout and painting for offscreen conversation rows and share concurrent Git status reads.
+- Relay stream updates once per event-loop turn instead of stacking two frame delays.
+  Preserve terminal scrollback, Unicode cursor positions and unpinned conversation positions.
+- Add searchable shared `/settings`, `/usage`, desktop Usage settings, conversation density
+  and width, reduced motion and expanded tool details. Remove the nonfunctional language selector.
+- Show context used and remaining with a messages/replies/tools breakdown. Count live text
+  and opening instructions incrementally, exclude nested code-mode calls from model context,
+  and reject late context snapshots after the conversation moves on.
+- Refresh MCP catalogs through list-change notifications, negotiate modern HTTP servers,
+  preserve output schemas and make colliding tool names stable and unique. Close subscriptions
+  on disconnect and rebuild their handlers on reconnect.
+- Add Codex-named `list_mcp_resources`, `list_mcp_resource_templates` and `read_mcp_resource`
+  tools backed by configured MCP servers, with cancellation and paginated discovery.
+- Share folder resolution and token formatting across frontends, reject invalid preference
+  edits without resetting existing values, and refresh the real desktop/CLI screenshots and GIFs.
+
 ## [0.6.0] - 2026-10-14
 
 - Share prompt templates, file context, model changes, activity and streamed event history
