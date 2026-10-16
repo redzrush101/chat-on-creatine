@@ -9,6 +9,7 @@ import { EventHistory } from '@shared/event-history';
 
 /** Streams one session into scrollback: finished rows are written once, unfinished ones stay live. */
 export class Transcript {
+  expanded = false;
   private readonly history = new EventHistory();
   readonly events = this.history.events;
   private readonly printed = new Set<string>();
@@ -22,10 +23,11 @@ export class Transcript {
   private turnStart: number | null = null;
   private version = 0;
   private details: { key: string; rows: string[] } | null = null;
+  private readonly detailRows = new Map<string, { event: SessionEvent; columns: number; rows: string[] }>();
 
   constructor(private readonly write: (text: string) => void, private readonly colored: boolean) {}
 
-  private options(expanded = false, columns = screenColumns()): RenderOptions {
+  private options(expanded = this.expanded, columns = screenColumns()): RenderOptions {
     return { colored: this.colored, columns, expanded };
   }
 
@@ -102,8 +104,12 @@ export class Transcript {
     if (this.details?.key !== key) {
       const options = this.options(true, columns);
       this.details = { key, rows: [...this.events.values()].flatMap((event) => {
+        const cached = this.detailRows.get(event.id);
+        if (cached?.event === event && cached.columns === columns) return cached.rows;
         const rows = eventRows(event, options);
-        return rows.length ? ['', ...rows] : [];
+        const result = rows.length ? ['', ...rows] : [];
+        this.detailRows.set(event.id, { event, columns, rows: result });
+        return result;
       }) };
     }
     return this.details.rows;
@@ -130,7 +136,7 @@ export class Transcript {
       if (!event.streaming) this.write(formatEvent(event, this.options())!);
       return;
     }
-    const end = event.streaming ? Math.max(committed.length, settled(text)) : text.length;
+    const end = event.streaming ? committed.length + settled(text.slice(committed.length)) : text.length;
     const chunk = cited(text.slice(committed.length, end), event.citations);
     if (!chunk.trim()) return;
     const columns = screenColumns();

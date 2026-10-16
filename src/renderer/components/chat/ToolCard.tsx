@@ -5,6 +5,7 @@ import type { SessionEvent, ToolOutputPart, WebSource } from '@shared/types';
 import { basename, cx, formatDuration } from '../../lib/format';
 import { useCopy } from '../../lib/hooks';
 import { describeTool, diffRows, type DiffRow } from '@shared/tool-labels';
+import { DiffBadge } from './DiffBadge';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 
@@ -151,14 +152,6 @@ function SourceList({ sources }: { sources: WebSource[] }) {
   );
 }
 
-export function DiffBadge({ added, removed }: { added: number; removed: number }) {
-  return (
-    <span className="diff-badge" aria-label={`${added} lines added, ${removed} removed`}>
-      <span className="diff-add">+{added}</span>
-      <span className="diff-del">-{removed}</span>
-    </span>
-  );
-}
 
 /** A file diff with line numbers, like the Claude app's edit cards. */
 export function DiffCard({ path, diff }: { path: string; diff: string }) {

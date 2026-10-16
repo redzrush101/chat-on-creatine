@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js/lib/common';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { Marked, type TokenizerAndRendererExtension } from 'marked';
 import { escapeHtml } from './format';
 import { settled } from '@shared/markdown-stream';
@@ -80,19 +81,19 @@ export function renderMarkdown(source: string): string {
 }
 
 /** Reuse completed blocks while streaming; a final render resolves cross-block references. */
-export function streamingMarkdown(): (source: string, streaming: boolean) => string {
+export function streamingMarkdown(): (source: string, streaming: boolean) => string[] {
   let committed = '';
-  let html = '';
+  let blocks: string[] = [];
   return (source, streaming) => {
-    if (!streaming) return renderMarkdown(source);
-    if (!source.startsWith(committed)) { committed = ''; html = ''; }
+    if (!streaming) return [renderMarkdown(source)];
+    if (!source.startsWith(committed)) { committed = ''; blocks = []; }
     const pending = source.slice(committed.length);
     const end = settled(pending);
     if (end) {
       const block = pending.slice(0, end);
-      html += renderMarkdown(block);
+      blocks.push(renderMarkdown(block));
       committed += block;
     }
-    return html + renderMarkdown(source.slice(committed.length));
+    return [...blocks, renderMarkdown(source.slice(committed.length))];
   };
 }

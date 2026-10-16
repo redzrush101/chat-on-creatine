@@ -158,6 +158,20 @@ describe('turn end', () => {
     return session;
   }
 
+  it('does not replace fresh context with a late snapshot from the previous conversation', async () => {
+    const { command } = setup();
+    const session = await generating();
+    let finish: (result: PageResult) => void = () => {};
+    command.mockImplementation(async (_tab, cmd) => cmd.type === 'conversation'
+      ? new Promise((resolve) => { finish = resolve; }) : { ok: true });
+    page.page('tab0', { type: 'message', streamId: 's1', message: answer });
+    store.append(session.id, [{ kind: 'handoff', id: 'handoff', at: 2, fromConversationId: 'conversation', toConversationId: null, brief: '' }]);
+    store.update(session.id, { conversationId: null });
+    finish({ ok: true, value: [{ ...answer, text: 'old context'.repeat(1000) }] });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(store.get(session.id)?.contextTokens).toBe(0);
+  });
+
   it('does not end a turn as stopped when the stop control was missing', async () => {
     const { ends } = setup();
     const session = await generating();

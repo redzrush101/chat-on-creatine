@@ -1,6 +1,8 @@
 import type { ReasoningEffort } from './config';
 import type { ModelOption, ModelSelection } from './types';
 
+export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'pro'] as const;
+
 const EFFORT_LABEL: Record<ReasoningEffort, string> = {
   none: 'None',
   minimal: 'Minimal',

@@ -3,9 +3,11 @@ import { ChevronDown, ChevronRight, LoaderCircle } from 'lucide-react';
 import type { SessionEvent } from '@shared/types';
 import { cx, eventTime, formatDuration } from '../../lib/format';
 import { useNow } from '../../lib/hooks';
-import { DiffBadge, DiffCard, ToolRow } from './ToolCard';
+import { DiffCard, ToolRow } from './ToolCard';
+import { DiffBadge } from './DiffBadge';
 import type { TimelineBlock } from './timeline-model';
 import { describeTool, diffTotals, summarizeTools } from '@shared/tool-labels';
+import { useAppState } from '../../lib/store';
 
 type ToolEvent = Extract<SessionEvent, { kind: 'tool' }>;
 type ReasoningEvent = Extract<SessionEvent, { kind: 'reasoning' }>;
@@ -15,8 +17,9 @@ type ReasoningEvent = Extract<SessionEvent, { kind: 'reasoning' }>;
  * of steps. A single edit opens straight into its diff. Thinking-only runs read "Thought for 12s".
  */
 export const WorkGroup = memo(function WorkGroup({ block }: { block: Extract<TimelineBlock, { type: 'work' }> }) {
+  const expandTools = useAppState((state) => state?.config.ui.expandTools ?? false);
   const [toggled, setToggled] = useState<boolean | null>(null);
-  const open = toggled ?? block.running;
+  const open = toggled ?? (block.running || expandTools);
   const now = useNow(block.running);
   const tools = block.events.filter((event): event is ToolEvent => event.kind === 'tool');
   const totals = diffTotals(tools);

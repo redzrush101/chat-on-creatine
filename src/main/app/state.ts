@@ -5,12 +5,11 @@ import type { Services } from './services';
 import { createLogger } from '../core/log';
 
 const STATE_COALESCE_MS = 50;
-const EVENTS_COALESCE_MS = 16;
 
 /** Assembles AppState from the services and pushes it (and history upserts) to the renderer. */
 export class StateHub {
   private stateTimer: NodeJS.Timeout | null = null;
-  private eventsTimer: NodeJS.Timeout | null = null;
+  private eventsTimer: NodeJS.Immediate | null = null;
   private stateChanged = false;
   private readonly pendingEvents = new Map<string, Map<string, SessionEvent>>();
 
@@ -73,11 +72,11 @@ export class StateHub {
     if (!pending) this.pendingEvents.set(sessionId, (pending = new Map()));
     for (const event of events) pending.set(event.id, event);
     if (this.eventsTimer) return;
-    this.eventsTimer = setTimeout(() => {
+    this.eventsTimer = setImmediate(() => {
       this.eventsTimer = null;
       const batches = [...this.pendingEvents];
       this.pendingEvents.clear();
       for (const [id, batch] of batches) this.send('session:events', { sessionId: id, events: [...batch.values()] });
-    }, EVENTS_COALESCE_MS);
+    });
   }
 }

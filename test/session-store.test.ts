@@ -28,6 +28,31 @@ function openStore(recording = true): SessionStore {
 }
 
 describe('SessionStore', () => {
+  it('updates context incrementally through streaming, reconciliation, compaction and reload', async () => {
+    const store = openStore();
+    const meta = store.create({ kind: 'chat' });
+    const reply: SessionEvent = { kind: 'assistant', id: 'reply', at: 1, messageId: 'm', text: 'x'.repeat(400), channel: 'final', model: null, streaming: true };
+    store.append(meta.id, [reply]);
+    expect(meta.contextTokens).toBe(100);
+    store.append(meta.id, [{ ...reply, text: 'x'.repeat(800) }]);
+    expect(meta.contextTokens).toBe(200);
+    store.update(meta.id, { contextTokens: 300, contextUsage: { input: 0, output: 800, toolCalls: 0, toolResults: 0, other: 400 } });
+    store.append(meta.id, [{ ...reply, text: 'x'.repeat(1200), streaming: false }]);
+    expect(store.get(meta.id)?.contextTokens).toBe(400);
+    await store.flush();
+    const reopened = openStore();
+    reopened.append(meta.id, [{ ...reply, text: 'x'.repeat(1600), streaming: false }]);
+    expect(reopened.get(meta.id)?.contextTokens).toBe(500);
+    reopened.append(meta.id, [{ kind: 'handoff', id: 'handoff', at: 2, fromConversationId: 'old', toConversationId: 'new', brief: '' }]);
+    reopened.append(meta.id, [{ ...reply, text: 'late snapshot', streaming: false }]);
+    expect(reopened.get(meta.id)?.contextTokens).toBe(0);
+    reopened.append(meta.id, [{ ...reply, id: 'fresh', text: 'x'.repeat(80) }]);
+    expect(reopened.get(meta.id)?.contextTokens).toBe(20);
+    for (let length = 81; length <= 84; length++) reopened.append(meta.id, [{ ...reply, id: 'fresh', text: 'x'.repeat(length) }]);
+    expect(reopened.get(meta.id)?.contextTokens).toBe(21);
+    await reopened.flush();
+  });
+
   it('upserts events by id, keeps first position, and reloads collapsed from disk', async () => {
     const store = openStore();
     const meta = store.create({ kind: 'chat' });

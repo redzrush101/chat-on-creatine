@@ -53,6 +53,7 @@ it('reviews uncommitted code from the CLI, saves its final answer and resumes th
 
 it('starts a base review from the GUI workflow picker and copies its final answer', async () => {
   const live = run();
+  const turns = outcomes(await live.events(reviewId)).length;
   await exec('git', ['add', 'total.cjs'], { cwd: live.workspace });
   await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-qm', 'Introduce regression'], { cwd: live.workspace });
   await live.open(reviewId);
@@ -64,7 +65,7 @@ it('starts a base review from the GUI workflow picker and copies its final answe
   await live.ui.type('main');
   await live.shot('gui-review-picker');
   await live.ui.click('.coding-task-form button[type="submit"]');
-  const events = await live.until('GUI base review', live.idle(reviewId, 3), reviewId);
+  const events = await live.until('GUI base review', live.idle(reviewId, turns + 1), reviewId);
   expect(answer(events)).toMatch(/total\.cjs/);
   expect(await readFile(join(live.workspace, 'total.cjs'), 'utf8')).toBe(bug);
   expect(await live.ui.on('textarea[aria-label="Message"]', 'element.value')).toBe('Preserve this draft');
@@ -100,15 +101,16 @@ it('starts a base review from the GUI workflow picker and copies its final answe
 
 it('creates AGENTS.md from the GUI and preserves an existing file on a second initialization', async () => {
   const live = run();
+  const turns = outcomes(await live.events(reviewId)).length;
   await live.ui.click('button[aria-label="Coding workflows"]');
   await live.ui.on('select[aria-label="Coding task"]', '(() => { element.value = "init"; element.dispatchEvent(new Event("change", { bubbles: true })); })()');
   await live.ui.click('.coding-task-form button[type="submit"]');
-  await live.until('GUI project instructions', live.idle(reviewId, 4), reviewId);
+  await live.until('GUI project instructions', live.idle(reviewId, turns + 1), reviewId);
   const file = join(live.workspace, 'AGENTS.md');
   const original = await readFile(file, 'utf8');
   expect(original).toMatch(/total|npm test|node total\.test\.cjs/);
   const initialized = await live.api.invoke('chat:send', { sessionId: reviewId, text: '', task: { kind: 'init' }, attachments: [], delivery: 'now' });
-  const events = await live.until('existing instructions preservation', live.idle(initialized.sessionId, 5), initialized.sessionId);
+  const events = await live.until('existing instructions preservation', live.idle(initialized.sessionId, turns + 2), initialized.sessionId);
   expect(await readFile(file, 'utf8')).toBe(original);
   expect(outcomes(events).at(-1)).toBe('done');
   await live.timeline(reviewId, 'gui-init');

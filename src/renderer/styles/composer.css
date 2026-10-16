@@ -199,13 +199,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  gap: var(--space-1);
   height: 26px;
-  padding: 0;
+  padding: 0 var(--space-1);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-faint);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .context-meter:hover,
@@ -239,6 +241,41 @@
 .context-title {
   font-size: var(--text-sm);
   font-weight: 600;
+}
+
+.context-remaining {
+  float: right;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.context-progress {
+  width: 100%;
+  height: var(--space-2);
+  margin-top: var(--space-3);
+  accent-color: var(--accent);
+}
+
+.context-breakdown {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.context-breakdown > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.context-breakdown dt {
+  color: var(--text-muted);
+}
+
+.context-breakdown dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .coding-task-form {

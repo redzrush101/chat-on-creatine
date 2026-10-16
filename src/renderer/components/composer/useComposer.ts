@@ -7,6 +7,7 @@ import type { ComposerProps } from './types';
 import { useComposerDraft } from './draft';
 import { sessionBusy } from '@shared/session-state';
 import { findModel, modelSelection } from '@shared/model-selection';
+import { COMMAND_PATTERN } from '@shared/commands';
 
 export const MODES: { value: AutomationMode; label: string; hint: string }[] = [
   { value: 'off', label: 'Normal', hint: 'One answer per message' },
@@ -22,12 +23,13 @@ export function useComposer({
   onNewChatChange,
   onCreated,
   onSubmitted,
+  onOpenSettings,
   focusNonce,
   prefill,
   rootDir
 }: ComposerProps) {
   const sessionId = session?.id ?? null;
-  const { text, setText, field } = useComposerDraft(sessionId, focusNonce, prefill);
+  const { text, setText, field, clearSent } = useComposerDraft(sessionId, focusNonce, prefill);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   const [clipboardPaste, setClipboardPaste] = useState<Promise<string[]> | null>(null);
@@ -71,6 +73,24 @@ export function useComposer({
 
   const submit = async (delivery: InputDelivery) => {
     const body = text.trim();
+    const local = COMMAND_PATTERN.exec(body);
+    if (local && (local[1] === 'settings' || local[1] === 'usage')) {
+      try {
+        let section: string | null = null;
+        if (local[1] === 'usage') {
+          if (local[2]) throw new Error('Usage: /usage');
+          section = 'usage';
+        } else {
+          const { settingEdit } = await import('@shared/settings');
+          const edit = settingEdit(app.config, local[2] ?? '');
+          if (edit) { await invoke('config:update', edit.patch); notify(`Updated ${edit.key}`, 'success'); }
+          else section = 'appearance';
+        }
+        clearSent(text);
+        if (section) onOpenSettings(section);
+      } catch (error) { reportError(error); }
+      return;
+    }
     if (!canSend || (browserBlocked && !busy)) return;
     if (mode !== 'off' && !busy && !body) {
       notify('Write the objective first, then send.', 'info');
@@ -91,7 +111,7 @@ export function useComposer({
         automation,
         ...(!session ? { projectId: newChat.projectId, model: newChat.model.model, reasoning: newChat.model.reasoning } : {})
       });
-      setText((current) => current === text ? '' : current);
+      clearSent(text);
       setAttachments((current) => current.filter((path) => !files.includes(path)));
       if (session) onSubmitted();
       else onCreated(result.sessionId);

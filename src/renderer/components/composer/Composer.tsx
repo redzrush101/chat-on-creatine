@@ -102,7 +102,7 @@ export function Composer(props: ComposerProps) {
         )}
         <span className="composer-spacer" />
         <ModelPicker value={modelValue} catalog={app.models} onChange={modelChange} disabled={busy} />
-        {session && <ContextMeter sessionId={session.id} tokens={session.contextTokens} advisory={app.config.context.advisoryTokens} />}
+        {session && <ContextMeter sessionId={session.id} tokens={session.contextTokens} advisory={app.config.context.advisoryTokens} usage={session.contextUsage} busy={busy} />}
       </div>
     </div>
   );

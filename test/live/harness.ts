@@ -171,6 +171,7 @@ export class Live {
   async open(sessionId: string): Promise<void> {
     const title = (await this.api.refresh()).sessions.find((session) => session.id === sessionId)?.title ?? '';
     await this.ui.click('.session-row-main', title);
+    await this.ui.on(`.chat[data-session-id="${sessionId}"]`, 'element.getAttribute("aria-label")');
   }
 
   /** A PNG of the window or one element, captured by Electron (CDP screenshots stall under Xvfb). */
@@ -236,7 +237,7 @@ export class Live {
   async close(): Promise<void> {
     this.api.close();
     const exited = new Promise((done) => this.app.once('exit', done));
-    await this.inspector.evaluate("process.mainModule.require('electron').app.quit()").catch((error: unknown) => this.log('quit failed', String(error)));
+    await this.inspector.evaluate("setImmediate(() => process.mainModule.require('electron').app.quit()); true").catch((error: unknown) => this.log('quit failed', String(error)));
     this.inspector.close();
     if (await Promise.race([exited.then(() => true), sleep(20_000).then(() => false)]) === false) this.app.kill();
     const logs = join(this.profile, 'logs');
@@ -252,7 +253,7 @@ export class Live {
 export function useLive(name: string, config?: Record<string, unknown>): () => Live {
   let live: Live | undefined;
   beforeAll(async () => { live = await Live.launch(name, config); await live.ready(); });
-  afterEach(async ({ task }) => { if (task.result?.state === 'fail') await live?.failed(task.name); });
+  afterEach(async ({ task }) => { if (task.result?.state === 'fail') { live?.log('test failure', task.result.errors?.map((error) => error.message)); await live?.failed(task.name); } });
   afterAll(async () => { await live?.close(); });
   return () => live!;
 }

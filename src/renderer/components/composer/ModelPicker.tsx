@@ -1,5 +1,4 @@
 import { ChevronDown, RotateCw } from 'lucide-react';
-import { REASONING_EFFORTS } from '@shared/config';
 import type { ModelCatalog, ModelSelection } from '@shared/types';
 import { effortLabel, findModel, modelSelection } from '@shared/model-selection';
 import { invoke } from '../../lib/bridge';
@@ -78,7 +77,7 @@ export function ModelPicker({ value, catalog, onChange, disabled }: ModelPickerP
               <MenuList onClose={close} entries={[
                 { kind: 'label', label: 'Reasoning' },
                 { label: 'Default', checked: reasoning === null, onSelect: () => onChange({ ...value, reasoning: null }) },
-                ...REASONING_EFFORTS.filter((effort) => efforts.includes(effort)).map((effort) => ({
+                ...efforts.map((effort) => ({
                   label: effortLabel(option, effort), checked: reasoning === effort,
                   onSelect: () => { if (option) onChange(modelSelection(option, effort)); }
                 }))

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
-import { ArrowLeft, Code2, FileText, FolderOpen, Globe, History, Info, Palette, Plug, Puzzle, Rocket, Search, Sparkles, Users, X } from 'lucide-react';
+import { Activity, ArrowLeft, Code2, FileText, FolderOpen, Globe, History, Info, Palette, Plug, Puzzle, Rocket, Search, Sparkles, Users, X } from 'lucide-react';
 import type { AppState } from '@shared/types';
 import { useAppState } from '../lib/store';
 import { Button, ReportContext } from './controls';
@@ -16,6 +16,7 @@ import { PluginsSection } from './sections/PluginsSection';
 import { AppearanceSection } from './sections/AppearanceSection';
 import { DeveloperSection } from './sections/DeveloperSection';
 import { AboutSection } from './sections/AboutSection';
+import { UsageSection } from './sections/UsageSection';
 import './settings.css';
 
 type SectionId =
@@ -25,6 +26,7 @@ type SectionId =
   | 'chatgpt'
   | 'agents'
   | 'context'
+  | 'usage'
   | 'instructions'
   | 'skills'
   | 'plugins'
@@ -37,7 +39,7 @@ interface SectionDef {
   label: string;
   icon: typeof Rocket;
   keywords: string;
-  render(props: { state: AppState }): JSX.Element;
+  render(props: { state: AppState; sessionId: string | null }): JSX.Element;
 }
 
 const SECTIONS: readonly SectionDef[] = [
@@ -47,10 +49,11 @@ const SECTIONS: readonly SectionDef[] = [
   { id: 'chatgpt', label: 'ChatGPT', icon: Globe, keywords: 'browser model reasoning sign in window', render: (p) => <ChatGptSection {...p} /> },
   { id: 'agents', label: 'Agents', icon: Users, keywords: 'workers automation goal loop api helper steps', render: (p) => <AgentsSection {...p} /> },
   { id: 'context', label: 'Context & history', icon: History, keywords: 'recording retention compact handoff tokens history', render: (p) => <ContextSection {...p} /> },
+  { id: 'usage', label: 'Usage', icon: Activity, keywords: 'account context tokens turns tools quota', render: (p) => <UsageSection {...p} /> },
   { id: 'instructions', label: 'Instructions', icon: FileText, keywords: 'standing AGENTS.md prompt', render: (p) => <InstructionsSection {...p} /> },
   { id: 'skills', label: 'Skills', icon: Sparkles, keywords: 'import skill SKILL.md', render: (p) => <SkillsSection {...p} /> },
   { id: 'plugins', label: 'Plugins', icon: Puzzle, keywords: 'mcp server tools stdio http', render: (p) => <PluginsSection {...p} /> },
-  { id: 'appearance', label: 'Appearance', icon: Palette, keywords: 'theme language font scale tray', render: (p) => <AppearanceSection {...p} /> },
+  { id: 'appearance', label: 'Appearance', icon: Palette, keywords: 'theme font scale tray density width motion tools', render: (p) => <AppearanceSection {...p} /> },
   { id: 'developer', label: 'Developer', icon: Code2, keywords: 'control api logs debug actions', render: (p) => <DeveloperSection {...p} /> },
   { id: 'about', label: 'About', icon: Info, keywords: 'version platform', render: (p) => <AboutSection {...p} /> }
 ];
@@ -59,7 +62,7 @@ function toSection(value: string | undefined): SectionId {
   return SECTIONS.find((section) => section.id === value)?.id ?? 'setup';
 }
 
-export function SettingsView({ onClose, section }: { onClose(): void; section?: string }): JSX.Element {
+export function SettingsView({ onClose, section, sessionId }: { onClose(): void; section?: string; sessionId: string | null }): JSX.Element {
   const state = useAppState();
   const [active, setActive] = useState<SectionId>(() => toSection(section));
   const [query, setQuery] = useState('');
@@ -140,7 +143,7 @@ export function SettingsView({ onClose, section }: { onClose(): void; section?: 
             </div>
           )}
           <div className="st-content">
-            {state ? current.render({ state }) : <p className="st-muted">Loading settings…</p>}
+            {state ? current.render({ state, sessionId }) : <p className="st-muted">Loading settings…</p>}
           </div>
         </main>
       </div>

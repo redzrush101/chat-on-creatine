@@ -1,12 +1,14 @@
 import { invoke } from '../../lib/bridge';
-import { cx, formatTokens } from '../../lib/format';
+import { cx } from '../../lib/format';
+import { contextPercent, type ContextUsage as Usage } from '@shared/context';
+import { ContextUsage } from './ContextUsage';
 import { reportError } from '../common/Toasts';
 import { Popover } from '../common/Popover';
 
 /** Context use as a small ring beside the model, like the Claude app; it opens Compact & resume. */
-export function ContextMeter({ sessionId, tokens, advisory }: { sessionId: string; tokens: number; advisory: number }) {
+export function ContextMeter({ sessionId, tokens, advisory, usage, busy }: { sessionId: string; tokens: number; advisory: number; usage?: Usage; busy: boolean }) {
   const ratio = advisory > 0 ? tokens / advisory : 0;
-  const percent = Math.min(100, Math.round(ratio * 100));
+  const { used: percent, remaining } = contextPercent(tokens, advisory);
   const radius = 6;
   const circumference = 2 * Math.PI * radius;
   return (
@@ -19,8 +21,8 @@ export function ContextMeter({ sessionId, tokens, advisory }: { sessionId: strin
           type="button"
           className={cx('context-meter', ratio >= 0.8 && 'is-high', ratio >= 1 && 'is-over')}
           aria-expanded={open}
-          aria-label={`Context about ${percent}% of the advisory limit`}
-          title={`Context: about ${percent}% used`}
+          aria-label={`Context about ${percent}% used, ${remaining}% left against your threshold`}
+          title={`Context: about ${percent}% used · ${remaining}% left`}
           onClick={toggle}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -33,15 +35,13 @@ export function ContextMeter({ sessionId, tokens, advisory }: { sessionId: strin
               strokeDasharray={`${(Math.min(ratio, 1) * circumference).toFixed(2)} ${circumference.toFixed(2)}`}
             />
           </svg>
+          <span>{percent}%</span>
         </button>
       )}
     >
       {(close) => (
         <div className="context-panel">
-          <p className="context-title">Context · {percent}%</p>
-          <p className="context-figure">
-            About {formatTokens(tokens)} of {formatTokens(advisory)} tokens (estimate)
-          </p>
+          <ContextUsage tokens={tokens} advisory={advisory} usage={usage} />
           <p className="context-hint">
             {ratio >= 1
               ? 'This chat is long. Compact to continue in a fresh ChatGPT chat with a handoff brief.'
@@ -50,6 +50,8 @@ export function ContextMeter({ sessionId, tokens, advisory }: { sessionId: strin
           <button
             type="button"
             className="btn btn-primary"
+            disabled={busy}
+            title={busy ? 'Wait for the current work to finish before compacting' : undefined}
             onClick={() => {
               close();
               invoke('chat:compact', sessionId).catch(reportError);

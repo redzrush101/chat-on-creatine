@@ -13,6 +13,8 @@ it('preserves incoming stream updates while initial history loads and retains th
   history.load([{ id: 'user', kind: 'user', at: 0, text: 'Prompt', attachments: [], inputId: null, source: 'app' }, answer('The', true)]);
   expect(history.read()?.map((event) => event.id)).toEqual(['user', 'answer', 'notice']);
   expect(history.read()?.[1]).toBe(final);
-  history.merge([answer('Delayed partial', true)]);
+  const snapshot = history.read();
+  expect(history.merge([answer('Delayed partial', true)])).toBe(false);
+  expect(history.read()).toBe(snapshot);
   expect(history.read()?.[1]).toBe(final);
 });

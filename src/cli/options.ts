@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
-import { REASONING_EFFORTS, type ReasoningEffort } from '@shared/config';
+import type { ReasoningEffort } from '@shared/config';
+import { REASONING_EFFORTS } from '@shared/model-selection';
 import type { ReviewTarget } from '@shared/types';
 
 export interface CliOptions {

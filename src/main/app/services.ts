@@ -3,6 +3,7 @@ import os from 'node:os';
 import { join } from 'node:path';
 import { safeStorage } from 'electron';
 import type { Config, SecretKey } from '@shared/config';
+import { chatFolder } from '@shared/folders';
 import type { SessionMeta, SurfaceId } from '@shared/types';
 import { AgentController } from '../agents/controller';
 import { Automation } from '../automation/automation';
@@ -118,7 +119,7 @@ export function createServices(paths: AppPaths, preloadDir: string, resourcesBin
   const compacting = new Set<string>();
 
   const sessionCwd = (session: SessionMeta): string | null => {
-    const candidate = session.cwd ?? (session.projectId ? projects.get(session.projectId)?.path ?? null : null);
+    const candidate = chatFolder({ projects: projects.list(), config: getConfig() }, session);
     if (candidate && existsSync(candidate)) return candidate;
     // YOLO mode needs no approved folder; a chat without one works in the home folder.
     return getConfig().roots[0]?.path ?? (getConfig().yolo ? os.homedir() : null);

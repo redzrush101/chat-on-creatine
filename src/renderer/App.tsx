@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from './lib/bridge';
 import { Toaster, reportError } from './components/common/Toasts';
 import { Resizer } from './components/common/Resizer';
 import { Sidebar } from './components/sidebar/Sidebar';
-import { ChatView } from './components/chat/ChatView';
 import { Home } from './components/home/Home';
 import type { ModelSelection } from '@shared/types';
 import type { NewChatDraft } from './components/composer/types';
-import { SettingsView } from './settings/SettingsView';
 import { isPanelTab, WorkPanel, type PanelTab } from './workpanel/WorkPanel';
-import { chatFolder } from './lib/folders';
+import { chatFolder } from '@shared/folders';
 import { useAppState } from './lib/store';
 import { useResize, useStoredState, useSystemDark, useViewportWidth } from './lib/hooks';
 import { cx } from './lib/format';
+
+const ChatView = lazy(() => import('./components/chat/ChatView').then((module) => ({ default: module.ChatView })));
+const SettingsView = lazy(() => import('./settings/SettingsView').then((module) => ({ default: module.SettingsView })));
 
 const DEFAULT_SIDEBAR_WIDTH = 272;
 const DEFAULT_PANEL_WIDTH = 420;
@@ -77,6 +78,15 @@ export function App() {
   useEffect(() => {
     document.documentElement.style.setProperty('--font-scale', String(fontScale));
   }, [fontScale]);
+
+  const density = app?.config.ui.density ?? 'comfortable';
+  const chatWidth = app?.config.ui.chatWidth ?? 768;
+  const reducedMotion = app?.config.ui.reducedMotion ?? false;
+  useEffect(() => {
+    document.documentElement.dataset.density = density;
+    document.documentElement.dataset.reducedMotion = String(reducedMotion);
+    document.documentElement.style.setProperty('--content-max', `${chatWidth}px`);
+  }, [density, chatWidth, reducedMotion]);
 
   const setWorkPanel = (open: boolean) => {
     invoke('config:update', { ui: { workPanelOpen: open } }).catch(reportError);
@@ -243,8 +253,9 @@ export function App() {
       )}
 
       <main className="main">
+        <Suspense fallback={<div className="splash" role="status">Loading…</div>}>
         {settings ? (
-          <SettingsView onClose={() => setSettings(null)} section={settings.section} />
+          <SettingsView onClose={() => setSettings(null)} section={settings.section} sessionId={session?.id ?? null} />
         ) : session ? (
           <ChatView
             key={session.id}
@@ -274,6 +285,7 @@ export function App() {
             onOpenSettings={(section) => setSettings({ section })}
           />
         )}
+        </Suspense>
       </main>
 
       {panelVisible && panelFloats && <button type="button" className="panel-scrim" aria-label="Close panel" onClick={() => showPanel(false)} />}

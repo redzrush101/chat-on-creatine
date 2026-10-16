@@ -18,13 +18,15 @@ void invoke('app:state').then((state) => {
 });
 
 /** The latest app state pushed by main, or null until the first snapshot arrives. */
-export function useAppState(): AppState | null {
+export function useAppState(): AppState | null;
+export function useAppState<T>(select: (state: AppState | null) => T): T;
+export function useAppState<T>(select?: (state: AppState | null) => T): T | AppState | null {
   return useSyncExternalStore(
     (listener) => {
       appListeners.add(listener);
       return () => appListeners.delete(listener);
     },
-    () => appState
+    () => select ? select(appState) : appState
   );
 }
 
@@ -34,7 +36,7 @@ const historyListeners = new Map<string, Set<() => void>>();
 function upsert(sessionId: string, incoming: SessionEvent[]): void {
   const current = histories.get(sessionId);
   if (!current) return; // not loaded; it will be fetched whole when opened
-  current.merge(incoming);
+  if (!current.merge(incoming)) return;
   for (const listener of historyListeners.get(sessionId) ?? []) listener();
 }
 
@@ -55,10 +57,18 @@ export function useSessionEvents(sessionId: string | null): SessionEvent[] | nul
       void invoke('sessions:events', sessionId).then((events) => {
         history.load(events);
         for (const listener of historyListeners.get(sessionId) ?? []) listener();
-      }).catch(reportError);
+      }).catch((error: unknown) => { if (histories.get(sessionId) === history) histories.delete(sessionId); reportError(error); });
+    }
+    const current = histories.get(sessionId);
+    if (current) { histories.delete(sessionId); histories.set(sessionId, current); }
+    // Keep recent visits warm without retaining every large transcript opened in this window.
+    for (const id of histories.keys()) {
+      if (histories.size <= 8) break;
+      if (!historyListeners.get(id)?.size) histories.delete(id);
     }
     return () => {
       listeners.delete(listener);
+      if (!listeners.size) historyListeners.delete(sessionId);
     };
   }, [sessionId]);
   return sessionId ? (histories.get(sessionId)?.read() ?? null) : null;

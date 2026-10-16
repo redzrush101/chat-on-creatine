@@ -186,7 +186,7 @@ export class Recorder {
     const args = message.text.length > ARGS_LIMIT ? message.text.slice(0, ARGS_LIMIT) : (parsed ?? message.text);
     const previous = this.store.event(sessionId, id);
     if (previous?.kind === 'tool') {
-      this.store.append(sessionId, [{ ...previous, name, args }]);
+      this.store.append(sessionId, [{ ...previous, name, args, argsChars: message.text.length }]);
       return;
     }
     this.store.append(sessionId, [
@@ -197,6 +197,7 @@ export class Recorder {
         surface: 'chatgpt',
         name,
         args,
+        argsChars: message.text.length,
         status: 'running',
         output: [],
         endedAt: null

@@ -10,6 +10,7 @@ import { Transcript } from './transcript';
 import { safeText } from './format';
 import { extractImagePaths } from '../main/app/image-paths';
 import { sessionBusy } from '@shared/session-state';
+import { chatFolder } from '@shared/folders';
 import { isInside } from '@shared/paths';
 
 export class CliSession {
@@ -97,7 +98,7 @@ export class CliSession {
   }
 
   sessionCwd(session: SessionMeta): string | null {
-    return session.cwd ?? this.state.projects.find((project) => project.id === session.projectId)?.path ?? null;
+    return chatFolder(this.state, session);
   }
 
   async resume(meta: SessionMeta): Promise<void> {

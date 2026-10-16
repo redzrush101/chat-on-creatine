@@ -9,7 +9,7 @@ import type { Caller } from '../mcp/tool';
 import type { Outbox } from '../sessions/outbox';
 import type { Recorder } from '../sessions/recorder';
 import type { SessionStore } from '../sessions/store';
-import { contextTokens } from '../sessions/tokens';
+import { contextUsage, usageTokens } from '@shared/context';
 import type { ChatHost } from './host';
 import { CallerAttribution } from './attribution';
 import { TurnFollowUps } from './follow-ups';
@@ -343,15 +343,18 @@ export class ChatRouter {
    */
   private async reconcile(session: SessionMeta): Promise<void> {
     const turnId = this.currentTurnIds.get(session.id);
+    const conversationId = session.conversationId;
     const tabId = this.sessionTab.get(session.id);
     const result = tabId && session.conversationId
       ? await this.deps.host.command(tabId, { type: 'conversation', conversationId: session.conversationId }, 20_000)
       : null;
+    if (this.deps.store.get(session.id)?.conversationId !== conversationId || this.turnOf(session.id) !== 'idle' || this.currentTurnIds.get(session.id) !== turnId) return;
     const transcript = result?.ok && Array.isArray(result.value) ? (result.value as ChatMessage[]) : null;
     for (const message of transcript ?? []) {
       if (turnId && message.turnId === turnId && message.role !== 'user') this.deps.recorder.handle(session.id, { type: 'message', streamId: null, message });
     }
-    this.deps.store.update(session.id, { contextTokens: contextTokens(this.deps.store.events(session.id), transcript) });
+    const usage = contextUsage(this.deps.store.events(session.id), transcript);
+    this.deps.store.update(session.id, { contextTokens: usageTokens(usage), contextUsage: usage });
   }
 
   private async pump(sessionId: string): Promise<void> {
@@ -399,6 +402,11 @@ export class ChatRouter {
       this.record(session.id, [
         { kind: 'user', id: eventId, at: Date.now(), text: item.text, inputId: item.id, attachments: item.attachments, source: item.source === 'app' || item.source === 'control-api' ? 'app' : item.source }
       ]);
+      if (opening) {
+        const usage = { ...(this.deps.store.get(session.id)?.contextUsage ?? contextUsage(this.deps.store.events(session.id))) };
+        usage.other += opening.length + 2;
+        this.deps.store.update(session.id, { contextTokens: usageTokens(usage), contextUsage: usage });
+      }
       const value = result.value as { conversationId?: string | null } | undefined;
       if (value?.conversationId && !session.conversationId) this.deps.store.update(session.id, { conversationId: value.conversationId });
       if (this.turnOf(session.id) === 'sending') this.patchLive(session.id, { turn: 'generating' });

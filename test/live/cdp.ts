@@ -8,6 +8,12 @@ export class Cdp {
   private readonly pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
 
   private constructor(private readonly socket: WebSocket) {
+    const disconnected = (error: Error) => {
+      for (const waiter of this.pending.values()) waiter.reject(error);
+      this.pending.clear();
+    };
+    socket.on('error', disconnected);
+    socket.on('close', () => disconnected(new Error('The inspected process disconnected.')));
     socket.on('message', (data) => {
       const message = JSON.parse(data.toString()) as { id?: number; result?: unknown; error?: { message: string } };
       const waiter = message.id === undefined ? undefined : this.pending.get(message.id);
@@ -27,6 +33,7 @@ export class Cdp {
   send<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
+      if (this.socket.readyState !== WebSocket.OPEN) { reject(new Error('The inspected process is not connected.')); return; }
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject });
       this.socket.send(JSON.stringify({ id, method, params }));
     });

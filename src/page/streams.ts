@@ -1,7 +1,7 @@
 import { ConversationStreamParser } from '@shared/chatgpt-stream';
 import { isFinalAnswer, type ChatMessage, type PageEvent, type SendValue } from '@shared/page-protocol';
 
-const MESSAGE_INTERVAL_MS = 32;
+const MESSAGE_INTERVAL_MS = 16;
 
 export interface TapMessage {
   channel: string;

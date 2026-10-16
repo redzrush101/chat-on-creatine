@@ -11,6 +11,59 @@ const run = useLive('performance');
 type Sample = { at: number; length: number };
 type Tap = { at: number; kind: string; chunk?: string };
 
+it('measures long history scrolling, draft input and stable streaming blocks', async () => {
+  const live = run();
+  const meta = await live.main((services) => {
+    const meta = services.store.create({ kind: 'chat', title: 'Long history performance', cwd: services.config.get().roots[0]!.path });
+    const events: SessionEvent[] = Array.from({ length: 400 }, (_, index) => index % 2 === 0
+      ? { kind: 'user', id: `perf:${index}`, at: index, inputId: null, text: `Review iteration ${index / 2 + 1}`, attachments: [], source: 'app' }
+      : { kind: 'assistant', id: `perf:${index}`, at: index, messageId: `m:${index}`, channel: 'final', model: null, streaming: false,
+        text: `### Iteration ${Math.ceil(index / 2)}\n\n${'The workspace keeps the conversation, tools and project changes together.\n\n'.repeat(8)}\n\`\`\`ts\nconst checked = true;\n\`\`\`` });
+    services.store.append(meta.id, events);
+    return meta;
+  }, undefined);
+  const started = Date.now();
+  await live.open(meta.id);
+  await live.ui.on('.msg-assistant:last-child, .msg-assistant', 'element.textContent');
+  const openedMs = Date.now() - started;
+  const scroll = await live.ui.evaluate<{ p95FrameMs: number; maxFrameMs: number }>(`new Promise((resolve) => {
+    const node = document.querySelector('.timeline');
+    const frames = [];
+    let previous = performance.now();
+    const tick = (now) => {
+      frames.push(now - previous); previous = now;
+      node.scrollTop = node.scrollHeight * (1 - frames.length / 60);
+      if (frames.length < 60) requestAnimationFrame(tick);
+      else { frames.sort((a, b) => a - b); resolve({ p95FrameMs: frames[56], maxFrameMs: frames.at(-1) }); }
+    };
+    requestAnimationFrame(tick);
+  })`);
+  await live.ui.focus('textarea[aria-label="Message"]');
+  const inputAt = Date.now();
+  await live.ui.type('A responsive draft');
+  expect(await live.ui.on<string>('textarea[aria-label="Message"]', 'element.value')).toBe('A responsive draft');
+  const inputMs = Date.now() - inputAt;
+  const event: SessionEvent = { kind: 'assistant', id: 'perf:stream', at: 401, messageId: 'stream', channel: 'final', model: null,
+    streaming: true, text: 'A completed paragraph.\n\nA growing paragraph' };
+  await live.main((services, arg) => services.store.append(arg.id, [arg.event]), { id: meta.id, event });
+  await live.ui.on('[data-event-id="perf:stream"]', 'Reflect.set(window, "creatineRetainedParagraph", element.querySelector(".md p"))');
+  await live.ui.evaluate('document.querySelector(".timeline").scrollTop = 1000');
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  const before = await live.ui.evaluate<number>('document.querySelector(".timeline").scrollTop');
+  for (let i = 0; i < 12; i++) {
+    await live.main((services, arg) => services.store.append(arg.id, [arg.event]), { id: meta.id, event: { ...event, text: event.text + ' more words'.repeat(i + 1) } });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  const after = await live.ui.evaluate<{ top: number; retainedBlocks: boolean }>('({ top: document.querySelector(".timeline").scrollTop, retainedBlocks: document.contains(Reflect.get(window, "creatineRetainedParagraph")) })');
+  const navigation = await live.ui.evaluate('performance.getEntriesByType("navigation").map(({ domContentLoadedEventEnd, loadEventEnd }) => ({ domContentLoadedEventEnd, loadEventEnd }))');
+  const result = { openedMs, inputMs, ...scroll, scrollDriftPx: Math.abs(after.top - before), retainedBlocks: after.retainedBlocks, navigation };
+  live.log('ui benchmark', result);
+  await writeFile(join(live.dir, 'performance-ui.json'), JSON.stringify(result, null, 2));
+  expect(result.scrollDriftPx).toBeLessThan(5);
+  expect(result.retainedBlocks).toBe(true);
+  await live.api.invoke('sessions:delete', meta.id);
+});
+
 it('compares ChatGPT stream arrival with backend, GUI and CLI delivery on the same turns', async () => {
   const live = run();
   const profile = await live.main((services) => services.paths.userData, undefined);

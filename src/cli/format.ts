@@ -9,10 +9,14 @@ export function safeText(text: string): string {
 }
 
 const segments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-export function graphemes(text: string): string[] { return Array.from(segments.segment(text), (entry) => entry.segment); }
+export function graphemes(text: string): string[] {
+  return /^[\x00-\x7f]*$/.test(text) ? Array.from(text) : Array.from(segments.segment(text), (entry) => entry.segment);
+}
 
 export function width(text: string): number {
-  return graphemes(stripVTControlCharacters(text)).reduce((total, part) => {
+  const plain = stripVTControlCharacters(text);
+  if (/^[\x20-\x7e]*$/.test(plain)) return plain.length;
+  return graphemes(plain).reduce((total, part) => {
     const point = part.codePointAt(0) ?? 0;
     if (/^\p{Mark}+$/u.test(part)) return total;
     return total + (/\p{Extended_Pictographic}/u.test(part) || point >= 0x1100 && (
@@ -24,9 +28,12 @@ export function width(text: string): number {
 
 export function clip(text: string, columns: number): string {
   let result = '';
+  let cells = 0;
   for (const part of graphemes(safeText(text))) {
-    if (width(result + part) > columns) break;
+    const size = width(part);
+    if (cells + size > columns) break;
     result += part;
+    cells += size;
   }
   return result;
 }

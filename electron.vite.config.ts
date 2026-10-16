@@ -28,6 +28,7 @@ export default defineConfig({
     plugins: [react()],
     resolve: { alias: shared },
     build: {
+      minify: 'esbuild',
       // The renderer CSP only allows same-origin fonts; never inline them as data: URLs.
       assetsInlineLimit: (file: string) => (/\.(woff2?|ttf|otf)$/i.test(file) ? false : undefined),
       rollupOptions: { input: { index: resolve(__dirname, 'src/renderer/index.html') } }

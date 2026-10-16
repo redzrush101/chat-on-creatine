@@ -22,11 +22,7 @@ export function formatClock(ms: number): string {
   return hours ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
 }
 
-export function formatTokens(count: number): string {
-  if (count < 1000) return String(count);
-  if (count < 1_000_000) return `${(count / 1000).toFixed(count < 10_000 ? 1 : 0)}k`;
-  return `${(count / 1_000_000).toFixed(1)}M`;
-}
+export { formatTokens } from '@shared/format';
 
 const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 

@@ -111,7 +111,9 @@ export const Timeline = memo(function Timeline({ sessionId, events, busy, follow
             {events === null && <p className="timeline-status">Loading conversation…</p>}
             {events !== null && events.length === 0 && <p className="timeline-status">No messages yet.</p>}
             {blocks.map((block) =>
-              block.type === 'event' ? <EventRow key={block.event.id} event={block.event} actions={actions} /> : <WorkGroup key={block.id} block={block} />
+              <div className="timeline-block" key={block.type === 'event' ? block.event.id : block.id}>
+                {block.type === 'event' ? <EventRow event={block.event} actions={actions} /> : <WorkGroup block={block} />}
+              </div>
             )}
           </div>
         </SourcesContext.Provider>

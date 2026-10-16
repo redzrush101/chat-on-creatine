@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SessionEvent, SessionMeta } from '@shared/types';
+import { CHARS_PER_TOKEN, CONTEXT_PARTS, contextUsage, eventContextUsage, usageTokens } from '@shared/context';
 import { appendText, flushWrites, writeFileAtomic, writeJson } from '../core/durable';
 import { Emitter } from '../core/emitter';
 import { createLogger } from '../core/log';
@@ -14,6 +15,7 @@ interface History {
   events: Map<string, SessionEvent>;
   /** Lines in events.jsonl, including superseded ones. */
   lines: number;
+  contextIds: Set<string>;
 }
 
 const SAVE_DELAY_MS = 250;
@@ -87,7 +89,7 @@ export class SessionStore {
       id: randomUUID()
     };
     this.metas.set(meta.id, meta);
-    this.histories.set(meta.id, { events: new Map(), lines: 0 });
+    this.histories.set(meta.id, { events: new Map(), lines: 0, contextIds: new Set() });
     this.scheduleSave(meta.id);
     this.emitter.emit('meta', meta);
     return meta;
@@ -145,7 +147,23 @@ export class SessionStore {
     const meta = this.metas.get(id);
     const history = this.history(id);
     if (!meta || !history || events.length === 0) return;
-    for (const event of events) history.events.set(event.id, event);
+    let usage = { ...(meta.contextUsage ?? contextUsage([...history.events.values()])) };
+    if (!meta.contextUsage) usage.other += Math.max(0, (meta.contextTokens - usageTokens(usage)) * CHARS_PER_TOKEN);
+    for (const event of events) {
+      const previous = history.events.get(event.id);
+      if (event.kind === 'handoff' && !previous) {
+        usage = eventContextUsage();
+        history.contextIds.clear();
+      } else if (!previous || history.contextIds.has(event.id)) {
+        const before = eventContextUsage(previous);
+        const after = eventContextUsage(event);
+        for (const key of Object.keys(CONTEXT_PARTS) as (keyof typeof CONTEXT_PARTS)[]) usage[key] = Math.max(0, usage[key] + after[key] - before[key]);
+        history.contextIds.add(event.id);
+      }
+      history.events.set(event.id, event);
+    }
+    meta.contextUsage = usage;
+    meta.contextTokens = usageTokens(usage);
     if (this.recording()) {
       let pending = this.pendingRecords.get(id);
       if (!pending) this.pendingRecords.set(id, (pending = new Map()));
@@ -213,7 +231,8 @@ export class SessionStore {
       }
     }
 
-    const history: History = { events, lines };
+    const current = [...events.values()];
+    const history: History = { events, lines, contextIds: new Set(current.slice(current.findLastIndex((event) => event.kind === 'handoff') + 1).map((event) => event.id)) };
     this.histories.set(id, history);
     if (this.recording() && lines > 0 && lines - events.size > lines / 2) this.compact(id, history);
     return history;

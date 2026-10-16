@@ -11,6 +11,7 @@ const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 /** Untracked files are counted line by line; beyond these caps the totals stay a lower bound. */
 const MAX_COUNTED_UNTRACKED = 200;
 const MAX_COUNTED_BYTES = 1024 * 1024;
+const pendingStatus = new Map<string, Promise<GitStatus>>();
 
 interface GitRun {
   code: number;
@@ -47,7 +48,16 @@ function runGit(cwd: string, args: string[], maxBytes: number): Promise<GitRun> 
  * `git status` of a folder, which may be a subfolder of its repository: only changes inside it,
  * with paths relative to it. A folder outside any repository reports `isRepo: false`.
  */
-export async function gitStatus(dir: string): Promise<GitStatus> {
+export function gitStatus(dir: string): Promise<GitStatus> {
+  let pending = pendingStatus.get(dir);
+  if (!pending) {
+    pending = loadGitStatus(dir).finally(() => pendingStatus.delete(dir));
+    pendingStatus.set(dir, pending);
+  }
+  return pending;
+}
+
+async function loadGitStatus(dir: string): Promise<GitStatus> {
   const run = await runGit(
     dir,
     ['status', '--porcelain=v1', '-z', '-b', '--untracked-files=all', '--ignore-submodules=dirty', '--', '.'],

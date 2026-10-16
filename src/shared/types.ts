@@ -1,4 +1,5 @@
 import type { Config, ReasoningEffort } from './config';
+import type { ContextUsage } from './context';
 
 export interface Project {
   id: string;
@@ -47,6 +48,7 @@ export interface SessionMeta extends ModelSelection {
   goal: GoalState;
   /** Rough token estimate of the bound conversation (local accounting, not the provider's). */
   contextTokens: number;
+  contextUsage?: ContextUsage;
   /** Blocked chats get no local tool access. */
   blocked: boolean;
 }
@@ -129,11 +131,15 @@ export type SessionEvent =
       name: string;
       /** Arguments as the model sent them (bounded). */
       args: unknown;
+      /** Full argument length before the display copy is shortened. */
+      argsChars?: number;
       status: ToolStatus;
       output: ToolOutputPart[];
       endedAt: number | null;
       /** Characters of the result the model received; `output` is bounded for display. */
       resultChars?: number;
+      /** Code-mode calls stay inside the script; only its outer result reaches the model. */
+      nested?: boolean;
     })
   | (EventBase & { kind: 'plan'; explanation: string | null; items: PlanItem[] })
   | (EventBase & { kind: 'turn'; phase: 'start' | 'end'; outcome: 'done' | 'stopped' | 'error' | 'incomplete' | null; error: string | null })

@@ -131,15 +131,14 @@ const WORKER_STATE: Record<WorkerState, string> = { queued: 'Queued', working: '
 
 /** "Started agent  Verify llm-agents flake  Running": the worker title opens its transcript. */
 function AgentRow({ event, onOpen }: { event: Extract<SessionEvent, { kind: 'agent' }>; onOpen(): void }) {
-  const app = useAppState();
-  const worker = app?.agents.flatMap((run) => run.workers).find((item) => item.sessionId === event.workerSessionId);
+  const worker = useAppState((app) => app?.agents.flatMap((run) => run.workers).find((item) => item.sessionId === event.workerSessionId)?.state);
   return (
     <div className="agent-row">
       <span className="agent-verb">{AGENT_VERB[event.action]}</span>
       <button type="button" className="agent-label" title={event.text || 'Open the agent transcript'} onClick={onOpen}>
         {event.label}
       </button>
-      {worker && <span className={cx('agent-state', `is-${worker.state}`)}>{WORKER_STATE[worker.state]}</span>}
+      {worker && <span className={cx('agent-state', `is-${worker}`)}>{WORKER_STATE[worker]}</span>}
     </div>
   );
 }
@@ -159,7 +158,7 @@ function AssistantText({ id, text, citations, streaming, final }: { id: string; 
   const html = useMemo(() => render(resolveMarkers(text, citations, sources), streaming), [text, citations, sources, streaming, render]);
   return (
     <div className={cx('msg msg-assistant', !final && 'is-commentary', streaming && 'is-streaming')} data-event-id={id}>
-      <div className="md" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="md">{html.map((block, index) => <div className="md-fragment" key={index} dangerouslySetInnerHTML={{ __html: block }} />)}</div>
       {streaming && <span className="caret" aria-hidden="true" />}
       {final && !streaming && text.trim() && (
         <div className="msg-actions is-start">

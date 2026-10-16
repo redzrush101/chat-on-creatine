@@ -49,5 +49,11 @@ export function useComposerDraft(sessionId: string | null, focusNonce: number, p
     node.style.height = `${Math.min(node.scrollHeight, MAX_INPUT_HEIGHT)}px`;
   }, [text]);
 
-  return { text, setText, field };
+  const clearSent = (sent: string) => {
+    if ((field.current?.value ?? readDraft(key)) !== sent) return;
+    writeDraft(key, '');
+    setText('');
+  };
+
+  return { text, setText, field, clearSent };
 }

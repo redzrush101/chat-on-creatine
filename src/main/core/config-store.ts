@@ -1,4 +1,4 @@
-import { parseConfig, type Config, type DeepPartial } from '@shared/config';
+import { configSchema, parseConfig, type Config, type DeepPartial } from '@shared/config';
 import { readJsonSync, writeJson } from './durable';
 import { Emitter } from './emitter';
 
@@ -30,7 +30,7 @@ export class ConfigStore {
 
   update(patch: DeepPartial<Config>): Config {
     const previous = this.current;
-    this.current = parseConfig(merge(previous, patch));
+    this.current = configSchema.parse(merge(previous, patch));
     void writeJson(this.path, this.current);
     this.events.emit('change', { next: this.current, previous });
     return this.current;

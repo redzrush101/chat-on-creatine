@@ -13,6 +13,18 @@ import type { BackendClient } from '../src/cli/connection';
 import type { Terminal } from '../src/cli/terminal';
 import type { AppState } from '../src/shared/types';
 import { editExternal } from '../src/cli/external-editor';
+import { runCli } from '../src/cli/index';
+
+it('removes terminal control sequences from command-line errors before printing them', async () => {
+  const code = process.exitCode;
+  const output = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+  try {
+    await runCli(['--bad\x1b]0;injected\x07\x07flag'], process.cwd());
+    const text = output.mock.calls.map(([chunk]) => String(chunk)).join('');
+    expect(text).toContain('Unknown option');
+    expect(text).not.toMatch(/[\x00-\x08\x1b]/);
+  } finally { output.mockRestore(); process.exitCode = code; }
+});
 
 it('edits Unicode graphemes without splitting emoji, accents or their cursor positions', () => {
   const editor = new Editor();

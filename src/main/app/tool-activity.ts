@@ -5,7 +5,7 @@ import type { CallRecord } from '../mcp/server';
 import type { Caller, ToolResult } from '../mcp/tool';
 import type { Outbox } from '../sessions/outbox';
 import type { SessionStore } from '../sessions/store';
-import { contextTokens, resultChars } from '../sessions/tokens';
+import { resultChars } from '@shared/context';
 import type { ConnectionManager } from '../tunnel/connection';
 
 const log = createLogger('tools');
@@ -59,6 +59,8 @@ export class ToolActivity {
       surface: call.surface,
       name: call.tool,
       args: boundArgs(call.args),
+      argsChars: JSON.stringify(call.args ?? null).length,
+      nested: call.nested,
       status: 'running',
       output: [],
       endedAt: null
@@ -76,6 +78,8 @@ export class ToolActivity {
       surface: call.surface,
       name: call.tool,
       args: boundArgs(call.args),
+      argsChars: JSON.stringify(call.args ?? null).length,
+      nested: call.nested,
       status: result.isError ? 'error' : 'ok',
       output: displayOf(result),
       endedAt: Date.now(),
@@ -83,9 +87,6 @@ export class ToolActivity {
       resultChars: call.nested ? 0 : resultChars(result.content)
     };
     this.record(sessionId, event);
-    // The turn's end recounts the whole conversation; until then the meter grows with each result.
-    const meta = this.deps.store.get(sessionId);
-    if (meta && !call.nested) this.deps.store.update(sessionId, { contextTokens: meta.contextTokens + contextTokens([event]) });
   }
 
   /** Messages queued while the model worked ride along with its next tool result, labelled by sender. */

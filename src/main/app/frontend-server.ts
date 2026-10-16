@@ -51,6 +51,7 @@ export class FrontendServer {
   }
 
   broadcast<E extends MainEvent>(event: E, payload: MainEvents[E]): void {
+    if (!this.clients.size) return;
     const data = JSON.stringify({ type: 'event', event, payload });
     for (const client of this.clients) {
       if (client.bufferedAmount > FRONTEND_MAX_BYTES) client.terminate();

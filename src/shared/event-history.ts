@@ -6,13 +6,17 @@ export class EventHistory {
   private snapshot: SessionEvent[] | null = null;
   private loaded = false;
 
-  merge(incoming: SessionEvent[]): void {
+  merge(incoming: SessionEvent[]): boolean {
+    let changed = false;
     for (const event of incoming) {
       const previous = this.events.get(event.id);
+      if (previous === event) continue;
       if (previous && 'streaming' in previous && !previous.streaming && 'streaming' in event && event.streaming) continue;
       this.events.set(event.id, event);
+      changed = true;
     }
-    this.snapshot = null;
+    if (changed) this.snapshot = null;
+    return changed;
   }
 
   load(snapshot: SessionEvent[]): void {

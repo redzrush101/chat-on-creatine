@@ -5,6 +5,7 @@ import type { CliSession } from './session';
 import { Transcript } from './transcript';
 import { completeFile } from './completion';
 import { turnActivity } from '@shared/turn-activity';
+import { contextPercent } from '@shared/context';
 
 export async function interactive(session: CliSession): Promise<void> {
   const terminal = session.terminal!;
@@ -30,11 +31,13 @@ export async function interactive(session: CliSession): Promise<void> {
   };
   const update = () => {
     setTerminalTheme(session.state.config.ui.theme);
+    terminal.reducedMotion = session.state.config.ui.reducedMotion;
+    session.transcript.expanded = session.state.config.ui.expandTools;
     const meta = session.meta;
     if (meta) session.selection = { model: meta.model, reasoning: meta.reasoning };
     const model = session.state.models.models.find((item) => item.id === session.selection.model || item.slugs?.includes(session.selection.model ?? ''));
-    const remaining = Math.max(0, Math.round(100 * (1 - (meta?.contextTokens ?? 0) / session.state.config.context.advisoryTokens)));
-    terminal.info = `${model?.label ?? session.selection.model ?? 'Account default'}${session.selection.reasoning ? ` ${session.selection.reasoning}` : ''} · ${remaining}% context · ${tilde(session.cwd)}`;
+    const { remaining } = contextPercent(meta?.contextTokens ?? 0, session.state.config.context.advisoryTokens);
+    terminal.info = `${model?.label ?? session.selection.model ?? 'Account default'}${session.selection.reasoning ? ` ${session.selection.reasoning}` : ''} · ${remaining}% context left · ${tilde(session.cwd)}`;
     terminal.hint = shellId ? 'ctrl+c to interrupt the shell' : [
       session.attachments.length ? `${session.attachments.length} attached: ${session.attachments.map((path) => path.split(/[\\/]/).at(-1)).join(', ')}` : '',
       session.shellContext ? 'shell context pending · /context' : ''

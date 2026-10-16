@@ -9,6 +9,7 @@ import { COMMANDS, COMMAND_PATTERN } from '@shared/commands';
 import { parseArguments } from '@shared/arguments';
 import { parseOptions } from './options';
 import { mcpCommand } from './mcp';
+import { settingsCommand, usageText } from './settings';
 
 export { COMMANDS, COMMAND_PATTERN } from '@shared/commands';
 
@@ -91,6 +92,8 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       session.name = argument.slice(0, 120);
       if (session.id) await client.invoke('sessions:update', session.id, { title: session.name });
       print(`Chat name: ${session.name}`); break;
+    case 'settings': { const result = await settingsCommand(session, argument); if (result) print(result); break; }
+    case 'usage': if (argument) throw new Error('Usage: /usage'); print(await usageText(session)); break;
     case 'context':
       if (argument === 'templates') {
         await session.reloadTemplates();
@@ -99,7 +102,7 @@ export async function runCommand(text: string, session: CliSession, hooks: Comma
       if (argument === 'reload') { await session.reloadTemplates(); print(`Loaded ${session.templates.length} prompt templates.`); break; }
       if (argument === 'clear') session.shellContext = '';
       else if (argument) throw new Error('Usage: /context [clear | templates | reload]');
-      print(session.shellContext || 'No pending shell context.'); break;
+      print(`${await usageText(session)}\n\n${session.shellContext || 'No pending shell context.'}`); break;
     case 'model': {
       const [model, effort] = argument.split(/\s+/);
       if (effort && !REASONING_EFFORTS.includes(effort as ReasoningEffort)) throw new Error(`Unknown effort ${effort}.`);

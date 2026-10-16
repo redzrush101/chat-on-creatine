@@ -19,10 +19,15 @@ it('keeps the activity line next to output when long attachment footers redraw i
   try {
     terminal.print('Attached image.png');
     terminal.busy = { verb: 'Working', since: Date.now() };
+    terminal.draw();
+    terminal.hint = `Image attached: clipboard-${'long-filename-'.repeat(8)}.png`;
+    terminal.draw();
+    const start = output.length;
     for (let i = 0; i < 12; i++) {
       terminal.hint = `Image attached: clipboard-${'long-filename-'.repeat(8)}${i}.png`;
       terminal.draw();
     }
+    expect(output.slice(start).join('')).not.toContain('\x1b[J');
     terminal.hint = '? for shortcuts';
     terminal.editor.set('x'.repeat(37));
     terminal.draw();

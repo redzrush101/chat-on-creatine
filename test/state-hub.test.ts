@@ -30,6 +30,6 @@ it('coalesces streamed updates and retains a final answer and turn end in the ne
   const end: SessionEvent = { kind: 'turn', id: 'end', at: 2, phase: 'end', outcome: 'done', error: null };
   hub.events('chat', [answer]);
   hub.events('chat', [final, end]);
-  await vi.advanceTimersByTimeAsync(16);
+  await vi.advanceTimersByTimeAsync(0);
   expect(send).toHaveBeenCalledWith('session:events', { sessionId: 'chat', events: [final, end] });
 });

@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { basename } from '../../lib/format';
 import { useGitStatus } from '../../lib/git-status';
 import { useStoredState } from '../../lib/hooks';
-import { DiffBadge } from '../chat/ToolCard';
+import { DiffBadge } from '../chat/DiffBadge';
 
 /**
  * "nixos-config  main   +42 -21  Review changes  ×" above the composer, like the Claude app's repo bar.

@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { REASONING_EFFORTS } from './model-selection';
+export { REASONING_EFFORTS } from './model-selection';
 
 /** Reasoning levels offered by ChatGPT's picker. `null` everywhere means "account default". */
-export const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'pro'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 export const CAPABILITIES = ['read', 'write', 'create', 'delete', 'move', 'exec', 'search', 'browser'] as const;
@@ -152,8 +153,11 @@ export const configSchema = z.object({
   ui: z
     .object({
       theme: z.enum(['system', 'dark', 'light']).default('dark'),
-      language: z.enum(['en', 'de']).default('en'),
       fontScale: z.number().min(0.8).max(1.4).default(1),
+      density: z.enum(['comfortable', 'compact']).default('comfortable'),
+      chatWidth: z.number().int().min(600).max(1200).default(768),
+      reducedMotion: z.boolean().default(false),
+      expandTools: z.boolean().default(false),
       defaultModel: z.string().nullable().default(null),
       defaultReasoning: z.enum(REASONING_EFFORTS).nullable().default(null),
       sidebarWidth: z.number().int().min(200).max(480).default(272),
@@ -164,8 +168,11 @@ export const configSchema = z.object({
     })
     .default(() => ({
       theme: 'dark' as const,
-      language: 'en' as const,
       fontScale: 1,
+      density: 'comfortable' as const,
+      chatWidth: 768,
+      reducedMotion: false,
+      expandTools: false,
       defaultModel: null,
       defaultReasoning: null,
       sidebarWidth: 272,

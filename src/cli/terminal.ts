@@ -29,10 +29,13 @@ const SHORTCUTS = [
 function wrapDraft(text: string, columns: number): string[] {
   const rows: string[] = [];
   let row = '';
+  let cells = 0;
   for (const part of graphemes(text)) {
-    if (part === '\n') { rows.push(row); row = '  '; continue; }
-    if (width(row + part) > columns) { rows.push(row); row = '  '; }
+    if (part === '\n') { rows.push(row); row = '  '; cells = 2; continue; }
+    const size = width(part);
+    if (cells + size > columns) { rows.push(row); row = '  '; cells = 2; }
     row += part;
+    cells += size;
   }
   rows.push(row);
   return rows;
@@ -48,6 +51,7 @@ export class Terminal {
   hint = '? for shortcuts';
   /** A permission mode worth a badge, such as unrestricted tools. */
   mode = '';
+  reducedMotion = false;
   /** The running turn's gerund and start time, for the spinner line. */
   busy: { verb: string; since: number } | null = null;
   commands: Choice<string>[] = [];
@@ -82,6 +86,7 @@ export class Terminal {
   private readonly ticker: NodeJS.Timeout;
   private frame = 0;
   private rendered = '';
+  private renderedLines: string[] = [];
 
   onSubmit: (text: string) => void = () => {};
   onInterrupt: (exit: boolean) => void = () => {};
@@ -100,7 +105,7 @@ export class Terminal {
     process.stdin.on('data', this.onData);
     process.stdout.on('resize', this.onResize);
     process.stdout.write('\x1b[?2004h');
-    this.ticker = setInterval(() => { if (this.busy && !this.viewer) { this.frame++; this.draw(); } }, 120);
+    this.ticker = setInterval(() => { if (this.busy && !this.viewer) { if (!this.reducedMotion) this.frame++; this.draw(); } }, 120);
   }
 
   print(text: string): void {
@@ -195,13 +200,31 @@ export class Terminal {
     const { lines, cursorRow, cursorCol } = this.layout();
     const frame = `${lines.join('\n')}|${cursorRow}:${cursorCol}`;
     if (!text && this.rows && frame === this.rendered) return;
-    let output = `\x1b[?2026h\x1b[?25l${this.erase()}${text}${lines.join('\n')}\r`;
-    const up = lines.length - 1 - cursorRow;
-    if (up > 0) output += `\x1b[${up}A`;
+    let output = '\x1b[?2026h\x1b[?25l';
+    let row = this.cursorRow;
+    const move = (target: number) => {
+      const delta = target - row;
+      if (delta) output += `\x1b[${Math.abs(delta)}${delta > 0 ? 'B' : 'A'}`;
+      output += '\r';
+      row = target;
+    };
+    // A stable viewport only needs its changed rows (usually the spinner or draft).
+    if (!text && this.rendered && this.rows === lines.length) {
+      for (let index = 0; index < lines.length; index++) {
+        if (lines[index] === this.renderedLines[index]) continue;
+        move(index);
+        output += `\x1b[2K${lines[index]}`;
+      }
+    } else {
+      output += `${this.erase()}${text}${lines.join('\n')}`;
+      row = lines.length - 1;
+    }
+    move(cursorRow);
     if (cursorCol > 0) output += `\x1b[${cursorCol}C`;
     output += `${this.picker ? '' : '\x1b[?25h'}\x1b[?2026l`;
     process.stdout.write(output);
     this.rendered = frame;
+    this.renderedLines = lines;
     this.rows = lines.length;
     this.cursorRow = cursorRow;
   }

@@ -51,7 +51,7 @@ export function ChatView({
   const actions = useMemo<EventActions>(() => ({ onOpenSession, onReuse: (text) => setPrefill({ id: Date.now(), text }) }), [onOpenSession]);
 
   return (
-    <section className="chat" aria-label="Chat">
+    <section className="chat" aria-label="Chat" data-session-id={session.id}>
       <TopBar app={app} session={session} sidebarOpen={sidebarOpen} panel={panel} onToggleSidebar={onToggleSidebar} onPanel={onPanel} onDeleted={onDeleted} />
       <Timeline sessionId={session.id} events={events} busy={busy} followNonce={followNonce} found={found} actions={actions} />
       <Composer
